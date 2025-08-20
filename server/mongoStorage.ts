@@ -278,6 +278,16 @@ export class MongoStorage {
       fitnessGoals: inquiry.interest || "General fitness improvement"
     });
 
+    // Create subscription for the new member
+    const subscription = await this.createSubscription({
+      memberId: memberProfile._id.toString(),
+      membershipTierId: memberData.membershipTierId,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      isActive: true,
+      autoRenew: true
+    });
+
     // Create body assessment if provided
     if (assessmentData && Object.keys(assessmentData).length > 0) {
       await this.createBodyAssessment({
@@ -288,6 +298,22 @@ export class MongoStorage {
 
     // Update inquiry status
     await this.updateInquiryStatus(inquiryId, 'converted');
+
+    // Get membership tier details for email
+    const membershipTier = await this.getMembershipTier(memberData.membershipTierId);
+    
+    // Send welcome email (async - don't wait for it)
+    try {
+      const { emailService } = require('./emailService');
+      await emailService.sendWelcomeEmail(
+        inquiry.email,
+        `${inquiry.firstName} ${inquiry.lastName}`,
+        membershipTier?.name || 'Premium'
+      );
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Don't throw error - conversion should still succeed even if email fails
+    }
 
     return { user: newUser, profile: memberProfile };
   }
@@ -305,6 +331,79 @@ export class MongoStorage {
         }
       }
     );
+  }
+
+  // Check for expiring memberships and send reminder emails
+  async checkAndNotifyExpiringMemberships() {
+    const subscriptions = this.db.collection('subscriptions');
+    const memberProfiles = this.db.collection('memberProfiles');
+    const users = this.db.collection('users');
+    const membershipTiers = this.db.collection('membershipTiers');
+
+    // Find subscriptions expiring in 7 days or 1 day
+    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const oneDayFromNow = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    
+    const expiringSubscriptions = await subscriptions.find({
+      isActive: true,
+      endDate: {
+        $gte: today,
+        $lte: sevenDaysFromNow
+      }
+    }).toArray();
+
+    for (const subscription of expiringSubscriptions) {
+      try {
+        // Get member and user details
+        const memberProfile = await memberProfiles.findOne({ _id: new ObjectId(subscription.memberId) });
+        if (!memberProfile) continue;
+
+        const user = await users.findOne({ _id: new ObjectId(memberProfile.userId) });
+        if (!user) continue;
+
+        const membershipTier = await membershipTiers.findOne({ _id: new ObjectId(subscription.membershipTierId) });
+        if (!membershipTier) continue;
+
+        // Calculate days until expiration
+        const daysUntilExpiration = Math.ceil((new Date(subscription.endDate).getTime() - Date.now()) / (1000 * 3600 * 24));
+        
+        // Only send reminders for 7 days and 1 day before expiration
+        if (daysUntilExpiration === 7 || daysUntilExpiration === 1) {
+          // Check if we've already sent a reminder for this timeframe
+          const reminderKey = `${subscription._id}_${daysUntilExpiration}days`;
+          const existingReminder = await this.db.collection('email_reminders').findOne({ reminderKey });
+          
+          if (!existingReminder) {
+            // Send reminder email
+            const { emailService } = require('./emailService');
+            await emailService.sendMembershipExpirationReminder(
+              user.email,
+              `${user.firstName} ${user.lastName}`,
+              membershipTier.name,
+              daysUntilExpiration
+            );
+
+            // Record that we sent this reminder
+            await this.db.collection('email_reminders').insertOne({
+              reminderKey,
+              subscriptionId: subscription._id.toString(),
+              memberId: subscription.memberId,
+              sentAt: new Date(),
+              reminderType: 'expiration',
+              daysBeforeExpiration: daysUntilExpiration
+            });
+
+            console.log(`Sent expiration reminder to ${user.email} (${daysUntilExpiration} days)`);
+          }
+        }
+      } catch (error) {
+        console.error('Error sending expiration reminder:', error);
+        // Continue with next subscription even if one fails
+      }
+    }
+
+    return { processed: expiringSubscriptions.length };
   }
 
   // Admin methods

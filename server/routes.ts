@@ -39,6 +39,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test email endpoint
+  app.get('/api/test-email', async (req, res) => {
+    try {
+      const { emailService } = await import('./emailService.js');
+      
+      // Test email configuration
+      const testEmail = process.env.GMAIL_USER || process.env.SMTP_USER;
+      if (!testEmail) {
+        return res.status(400).json({ 
+          message: "No email configured in secrets. Please add GMAIL_USER and GMAIL_APP_PASSWORD to secrets." 
+        });
+      }
+
+      // Send test email to yourself
+      await emailService.sendContactConfirmationEmail(
+        testEmail,
+        'Test User',
+        {
+          interest: 'Testing email functionality',
+          location: 'Test Location',
+          message: 'This is a test email to verify SMTP configuration is working correctly.'
+        }
+      );
+
+      res.json({ 
+        message: "Test email sent successfully!",
+        sentTo: testEmail
+      });
+    } catch (error) {
+      console.error("Test email error:", error);
+      res.status(500).json({ 
+        message: "Failed to send test email", 
+        error: error.message,
+        troubleshooting: "Make sure you've added GMAIL_USER and GMAIL_APP_PASSWORD to your secrets"
+      });
+    }
+  });
+
+  app.post('/api/test-email', async (req, res) => {
+    try {
+      const { emailService } = await import('./emailService.js');
+      
+      // Test email configuration
+      const testEmail = process.env.GMAIL_USER || process.env.SMTP_USER;
+      if (!testEmail) {
+        return res.status(400).json({ 
+          message: "No email configured in secrets. Please add GMAIL_USER and GMAIL_APP_PASSWORD to secrets." 
+        });
+      }
+
+      // Send test email to yourself
+      await emailService.sendContactConfirmationEmail(
+        testEmail,
+        'Test User',
+        {
+          interest: 'Testing email functionality',
+          location: 'Test Location',
+          message: 'This is a test email to verify SMTP configuration is working correctly.'
+        }
+      );
+
+      res.json({ 
+        message: "Test email sent successfully!",
+        sentTo: testEmail
+      });
+    } catch (error) {
+      console.error("Test email error:", error);
+      res.status(500).json({ 
+        message: "Failed to send test email", 
+        error: error.message,
+        troubleshooting: "Make sure you've added GMAIL_USER and GMAIL_APP_PASSWORD to your secrets"
+      });
+    }
+  });
+
   // Contact form submission
   app.post('/api/contact', async (req, res) => {
     try {
@@ -65,6 +140,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await mongoStorage.storeContactSubmission(contactSubmission);
       
       console.log('Contact form submitted:', { firstName, lastName, email, location, interest });
+
+      // Send emails (async - don't wait for them to avoid blocking the response)
+      try {
+        const { emailService } = await import('./emailService.js');
+        
+        // Send confirmation email to customer
+        await emailService.sendContactConfirmationEmail(
+          email,
+          `${firstName} ${lastName}`,
+          {
+            interest,
+            location,
+            message
+          }
+        );
+
+        // Send notification email to admin
+        const adminEmail = process.env.ADMIN_EMAIL || 'luphonix.prime@gmail.com';
+        await emailService.sendAdminContactNotification(
+          adminEmail,
+          contactSubmission
+        );
+
+        console.log('Contact form emails sent successfully');
+      } catch (emailError) {
+        console.error('Failed to send contact form emails:', emailError);
+        // Don't throw error - form submission should still succeed even if emails fail
+      }
       
       res.json({ 
         message: "Contact form submitted successfully",
@@ -780,6 +883,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error cancelling inquiry:", error);
       res.status(500).json({ message: error.message || "Failed to cancel inquiry" });
+    }
+  });
+
+  // Check and notify expiring memberships
+  app.post('/api/admin/check-expiring-memberships', async (req, res) => {
+    try {
+      const result = await mongoStorage.checkAndNotifyExpiringMemberships();
+      res.json({ 
+        message: "Expiring memberships check completed",
+        processed: result.processed
+      });
+    } catch (error: any) {
+      console.error("Error checking expiring memberships:", error);
+      res.status(500).json({ message: error.message || "Failed to check expiring memberships" });
     }
   });
 

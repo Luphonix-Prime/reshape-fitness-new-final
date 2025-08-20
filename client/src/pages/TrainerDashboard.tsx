@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -199,59 +198,91 @@ export default function TrainerDashboard() {
     }
   ];
 
-  // Mock inquiries data - in real app this would come from API
-  const inquiries = [
-    {
-      _id: "1",
-      firstName: "John",
-      lastName: "Doe",
-      email: "john@example.com",
-      phone: "555-0123",
-      interest: "Personal Training",
-      location: "Manhattan",
-      message: "Interested in strength training and muscle gain",
-      submittedAt: new Date().toISOString(),
-      status: "new"
+  const [selectedMembershipTier, setSelectedMembershipTier] = useState("");
+
+  // Fetch inquiries from API
+  const { data: inquiries, refetch: refetchInquiries } = useQuery({
+    queryKey: ['/api/trainer/inquiries'],
+    queryFn: () => apiRequest('GET', '/api/trainer/inquiries'),
+  });
+
+  // Fetch membership tiers
+  const { data: membershipTiers } = useQuery({
+    queryKey: ['/api/membership-tiers'],
+    queryFn: () => apiRequest('GET', '/api/membership-tiers'),
+  });
+
+  const convertInquiryMutation = useMutation({
+    mutationFn: ({ inquiryId, memberData }: { inquiryId: string, memberData: any }) => 
+      apiRequest('POST', `/api/trainer/inquiries/${inquiryId}/convert`, { memberData, assessmentData: {} }),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Converted",
+        description: "Inquiry has been converted to member successfully."
+      });
+      setShowConvertModal(false);
+      setSelectedInquiry(null);
+      setSelectedMembershipTier("");
+      refetchInquiries();
     },
-    {
-      _id: "2",
-      firstName: "Jane",
-      lastName: "Smith",
-      email: "jane@example.com",
-      phone: "555-0124",
-      interest: "Group Classes",
-      location: "Beverly Hills",
-      message: "Looking for yoga and flexibility classes",
-      submittedAt: new Date().toISOString(),
-      status: "new"
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to convert inquiry",
+        variant: "destructive"
+      });
     }
-  ];
+  });
+
+  const deleteInquiryMutation = useMutation({
+    mutationFn: (inquiryId: string) => apiRequest('DELETE', `/api/trainer/inquiries/${inquiryId}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Cancelled",
+        description: "Inquiry has been cancelled successfully."
+      });
+      refetchInquiries();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel inquiry",
+        variant: "destructive"
+      });
+    }
+  });
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
+    setSelectedMembershipTier("");
     setShowConvertModal(true);
   };
 
   const handleDeleteInquiry = (inquiryId: string) => {
     if (confirm('Are you sure you want to cancel this inquiry?')) {
-      toast({
-        title: "Inquiry Cancelled",
-        description: "Inquiry has been cancelled successfully."
-      });
+      deleteInquiryMutation.mutate(inquiryId);
     }
   };
 
   const handleSubmitConversion = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedInquiry) return;
+    if (!selectedInquiry || !selectedMembershipTier) {
+      toast({
+        title: "Error",
+        description: "Please select a membership plan",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    toast({
-      title: "Inquiry Converted",
-      description: `${selectedInquiry.firstName} ${selectedInquiry.lastName} has been converted to a member successfully.`
+    const memberData = {
+      membershipTierId: selectedMembershipTier
+    };
+
+    convertInquiryMutation.mutate({
+      inquiryId: selectedInquiry._id,
+      memberData
     });
-
-    setShowConvertModal(false);
-    setSelectedInquiry(null);
   };
 
   const handleScheduleNewSession = () => {
@@ -841,6 +872,32 @@ export default function TrainerDashboard() {
                     </div>
                   </div>
 
+                  {/* Membership Plan Selection */}
+                  <div className="space-y-4 p-4 bg-black rounded-lg">
+                    <h3 className="text-lg font-semibold text-gold">Membership Plan Selection</h3>
+                    <div>
+                      <Label htmlFor="membershipTier">Select Membership Plan</Label>
+                      <Select 
+                        value={selectedMembershipTier} 
+                        onValueChange={setSelectedMembershipTier}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Choose a membership plan" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-700">
+                          {membershipTiers?.map((tier: any) => (
+                            <SelectItem key={tier._id} value={tier._id} className="text-white hover:bg-gray-800">
+                              <div className="flex flex-col">
+                                <span className="font-semibold">{tier.name}</span>
+                                <span className="text-sm text-gray-400">${tier.monthlyPrice}/month</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
                   {/* Complete Body Assessment Form */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold text-gold">Complete Body Assessment</h3>
@@ -1159,8 +1216,8 @@ export default function TrainerDashboard() {
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-gold text-black hover:bg-white">
-                    Convert to Member
+                  <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={convertInquiryMutation.isPending}>
+                    {convertInquiryMutation.isPending ? "Converting..." : "Convert to Member"}
                   </Button>
                 </form>
               </DialogContent>
