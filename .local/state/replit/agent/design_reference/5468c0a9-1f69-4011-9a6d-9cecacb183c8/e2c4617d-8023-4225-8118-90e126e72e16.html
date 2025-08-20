@@ -1,0 +1,498 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RESHAPE FITNESS - Luxury Fitness Redefined</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: '#d4af37',
+                        'dark-gray': '#1a1a1a',
+                        'light-gray': '#f8f8f8'
+                    },
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif']
+                    },
+                    backdropBlur: {
+                        'xs': '2px'
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-black text-white font-inter">
+    
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-black/95 backdrop-blur-xl border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <div class="flex-shrink-0">
+                    <h1 class="text-2xl font-bold tracking-wider text-gold">RESHAPE</h1>
+                </div>
+                
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-8">
+                        <a href="#home" class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">Home</a>
+                        <a href="#about" class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">About</a>
+                        <a href="#services" class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">Services</a>
+                        <a href="#membership" class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">Membership</a>
+                        <a href="#locations" class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">Locations</a>
+                    </div>
+                </div>
+                
+                <div class="hidden md:flex items-center space-x-4">
+                    <button class="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase">Login</button>
+                    <button class="bg-gold text-black px-6 py-2 font-medium text-sm tracking-widest uppercase hover:bg-white transition-colors duration-300">Join Now</button>
+                </div>
+                
+                <div class="md:hidden">
+                    <button class="text-white hover:text-gold">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <!-- Background video simulation with image -->
+        <!-- A dramatic black and white shot of a modern luxury gym interior with atmospheric lighting -->
+        <div class="absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1920&h=1080');">
+            <div class="absolute inset-0 bg-black/60"></div>
+        </div>
+        
+        <div class="relative z-10 text-center max-w-5xl mx-auto px-6">
+            <h1 class="text-6xl md:text-8xl font-light mb-6 leading-tight tracking-wider">
+                IT'S NOT FITNESS.<br>
+                <span class="text-gold font-medium">IT'S LIFE.</span>
+            </h1>
+            <p class="text-xl md:text-2xl mb-12 font-light tracking-wide text-gray-300">
+                Redefine what it means to be fit
+            </p>
+            <button class="bg-gold text-black px-12 py-4 text-lg font-medium tracking-widest uppercase hover:bg-white transition-all duration-500 transform hover:scale-105">
+                Start Your Journey
+            </button>
+        </div>
+        
+        <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
+            <i class="fas fa-chevron-down text-white text-2xl"></i>
+        </div>
+    </section>
+
+    <!-- Philosophy Section -->
+    <section class="py-32 bg-dark-gray">
+        <div class="max-w-6xl mx-auto px-6 lg:px-8 text-center">
+            <h2 class="text-5xl md:text-6xl font-light mb-12 tracking-wider">
+                ELEVATE YOUR <span class="text-gold">POTENTIAL</span>
+            </h2>
+            <p class="text-xl md:text-2xl font-light leading-relaxed text-gray-300 max-w-4xl mx-auto">
+                At Reshape Fitness, we don't just build bodies—we craft experiences. Our philosophy transcends traditional fitness, 
+                creating a sanctuary where luxury meets performance, where every detail is designed to inspire your transformation.
+            </p>
+        </div>
+    </section>
+
+    <!-- Services Grid -->
+    <section id="services" class="py-32 bg-black">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-5xl font-light mb-6 tracking-wider">PREMIUM <span class="text-gold">SERVICES</span></h2>
+                <p class="text-xl text-gray-300 max-w-2xl mx-auto">
+                    Experience unparalleled luxury in every aspect of your fitness journey
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Personal Training -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- Professional fitness trainer working with a client in a luxury gym setting -->
+                    <img src="https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Personal Training" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">PERSONAL TRAINING</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        One-on-one sessions with world-class trainers who understand that excellence is personal.
+                    </p>
+                </div>
+                
+                <!-- Group Classes -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- Group fitness class in a modern studio with professional lighting -->
+                    <img src="https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Group Classes" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">GROUP CLASSES</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        Exclusive classes designed to challenge and inspire, limited to ensure personalized attention.
+                    </p>
+                </div>
+                
+                <!-- Spa & Wellness -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- Luxury spa and wellness center with modern amenities -->
+                    <img src="https://images.unsplash.com/photo-1540555700478-4be289fbecef?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Spa & Wellness" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">SPA & WELLNESS</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        Recovery and rejuvenation services that complement your fitness journey with luxury amenities.
+                    </p>
+                </div>
+                
+                <!-- Nutrition Coaching -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- High-end gym equipment in a pristine fitness facility -->
+                    <img src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Nutrition Coaching" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">NUTRITION COACHING</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        Personalized nutrition plans crafted by experts who understand that fuel is as important as form.
+                    </p>
+                </div>
+                
+                <!-- Premium Equipment -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- State-of-the-art fitness equipment in a luxury gym setting -->
+                    <img src="https://images.unsplash.com/photo-1571902943202-507ec2618e8f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Premium Equipment" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">PREMIUM EQUIPMENT</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        State-of-the-art equipment and technology that sets the standard for luxury fitness experiences.
+                    </p>
+                </div>
+                
+                <!-- Concierge Services -->
+                <div class="group bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <!-- Luxury spa treatment room with serene ambiance -->
+                    <img src="https://images.unsplash.com/photo-1600334129128-685c5582fd35?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Concierge Services" class="w-full h-48 object-cover mb-6 grayscale group-hover:grayscale-0 transition-all duration-500">
+                    <h3 class="text-2xl font-medium mb-4 tracking-wider text-gold">CONCIERGE SERVICES</h3>
+                    <p class="text-gray-300 leading-relaxed">
+                        From towel service to appointment scheduling, every detail is handled with sophistication.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Membership Tiers -->
+    <section id="membership" class="py-32 bg-dark-gray">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-5xl font-light mb-6 tracking-wider">MEMBERSHIP <span class="text-gold">TIERS</span></h2>
+                <p class="text-xl text-gray-300 max-w-2xl mx-auto">
+                    Choose the level of luxury that matches your lifestyle
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                <!-- Access Tier -->
+                <div class="bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">ACCESS</h3>
+                    <div class="mb-8">
+                        <span class="text-5xl font-light">$200</span>
+                        <span class="text-gray-400">/month</span>
+                    </div>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Full gym access</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Group fitness classes</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Locker room amenities</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Basic wellness services</span>
+                        </li>
+                    </ul>
+                    <button class="w-full border border-gold text-gold py-3 tracking-widest uppercase hover:bg-gold hover:text-black transition-all duration-300">
+                        Select Plan
+                    </button>
+                </div>
+                
+                <!-- All Access Tier - Featured -->
+                <div class="bg-gold/10 backdrop-blur-sm border-2 border-gold p-8 hover:bg-gold/20 transition-all duration-500 hover:-translate-y-2 relative">
+                    <div class="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                        <span class="bg-gold text-black px-4 py-1 text-sm font-medium tracking-widest uppercase">Most Popular</span>
+                    </div>
+                    <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">ALL ACCESS</h3>
+                    <div class="mb-8">
+                        <span class="text-5xl font-light">$300</span>
+                        <span class="text-gray-400">/month</span>
+                    </div>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Multiple location access</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Personal training sessions</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Spa services included</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Nutrition consultations</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Guest privileges</span>
+                        </li>
+                    </ul>
+                    <button class="w-full bg-gold text-black py-3 tracking-widest uppercase hover:bg-white transition-all duration-300">
+                        Select Plan
+                    </button>
+                </div>
+                
+                <!-- Executive Tier -->
+                <div class="bg-white/5 backdrop-blur-sm border border-white/10 p-8 hover:bg-white/10 transition-all duration-500 hover:-translate-y-2">
+                    <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">EXECUTIVE</h3>
+                    <div class="mb-8">
+                        <span class="text-5xl font-light">$500</span>
+                        <span class="text-gray-400">/month</span>
+                    </div>
+                    <ul class="space-y-4 mb-8">
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>VIP lounge access</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Unlimited personal training</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Concierge services</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Exclusive events</span>
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check text-gold mr-3"></i>
+                            <span>Priority booking</span>
+                        </li>
+                    </ul>
+                    <button class="w-full border border-gold text-gold py-3 tracking-widest uppercase hover:bg-gold hover:text-black transition-all duration-300">
+                        Select Plan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Locations -->
+    <section id="locations" class="py-32 bg-black">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-5xl font-light mb-6 tracking-wider">LUXURY <span class="text-gold">LOCATIONS</span></h2>
+                <p class="text-xl text-gray-300 max-w-2xl mx-auto">
+                    Premium facilities in the heart of the city's most prestigious neighborhoods
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Manhattan Location -->
+                <div class="group relative overflow-hidden">
+                    <!-- Modern Manhattan cityscape with luxury buildings -->
+                    <img src="https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Manhattan Location" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-700">
+                    <div class="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-all duration-500"></div>
+                    <div class="absolute bottom-8 left-8 right-8">
+                        <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">MANHATTAN</h3>
+                        <p class="text-gray-300">432 Park Avenue, New York, NY</p>
+                        <p class="text-gray-400 text-sm mt-2">Open 24/7 for Executive members</p>
+                    </div>
+                </div>
+                
+                <!-- Beverly Hills Location -->
+                <div class="group relative overflow-hidden">
+                    <!-- Luxury Beverly Hills street with palm trees -->
+                    <img src="https://pixabay.com/get/gcfd082e1755b14f043cab33c6acdb63c19a285f42e202a5d18771c4c53e236a1b0230a0b2a0bed5432bf65ee5105fb63a6b312ffeb8a5f0738accc4443681492_1280.jpg" alt="Beverly Hills Location" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-700">
+                    <div class="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-all duration-500"></div>
+                    <div class="absolute bottom-8 left-8 right-8">
+                        <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">BEVERLY HILLS</h3>
+                        <p class="text-gray-300">9641 Sunset Boulevard, CA</p>
+                        <p class="text-gray-400 text-sm mt-2">Featuring exclusive spa services</p>
+                    </div>
+                </div>
+                
+                <!-- Miami Location -->
+                <div class="group relative overflow-hidden">
+                    <!-- Miami Beach luxury hotel and fitness area -->
+                    <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=800&h=600" alt="Miami Location" class="w-full h-80 object-cover group-hover:scale-110 transition-transform duration-700">
+                    <div class="absolute inset-0 bg-black/60 group-hover:bg-black/40 transition-all duration-500"></div>
+                    <div class="absolute bottom-8 left-8 right-8">
+                        <h3 class="text-2xl font-medium mb-2 tracking-wider text-gold">MIAMI BEACH</h3>
+                        <p class="text-gray-300">1200 Ocean Drive, Miami, FL</p>
+                        <p class="text-gray-400 text-sm mt-2">Oceanfront views and outdoor training</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="py-32 bg-dark-gray">
+        <div class="max-w-6xl mx-auto px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-5xl font-light mb-6 tracking-wider">MEMBER <span class="text-gold">STORIES</span></h2>
+                <p class="text-xl text-gray-300 max-w-2xl mx-auto">
+                    Hear from those who've redefined their limits
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                <div class="text-center">
+                    <!-- Professional headshot of a successful business person -->
+                    <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=300&h=300" alt="Member Testimonial" class="w-24 h-24 rounded-full mx-auto mb-6 object-cover">
+                    <blockquote class="text-xl italic mb-6 text-gray-300">
+                        "Reshape Fitness isn't just a gym—it's a lifestyle transformation. The attention to detail and personalized approach is unmatched."
+                    </blockquote>
+                    <div class="text-gold font-medium tracking-wider">JAMES HENDERSON</div>
+                    <div class="text-gray-400 text-sm">Executive Member</div>
+                </div>
+                
+                <div class="text-center">
+                    <!-- Professional headshot of a confident woman -->
+                    <img src="https://pixabay.com/get/g14c7d60a0edbd4731eba0e971dc1af8fd9741abadef78a1672b76452ac038f7055dbdcd12452186dd800a252747426c9dcbaca37f9213dd072ab3c59beb53232_1280.jpg" alt="Member Testimonial" class="w-24 h-24 rounded-full mx-auto mb-6 object-cover">
+                    <blockquote class="text-xl italic mb-6 text-gray-300">
+                        "The level of luxury and expertise here is extraordinary. My trainer understands exactly what I need to achieve my goals."
+                    </blockquote>
+                    <div class="text-gold font-medium tracking-wider">ALEXANDRA CHEN</div>
+                    <div class="text-gray-400 text-sm">All Access Member</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Call to Action -->
+    <section class="py-32 bg-black relative overflow-hidden">
+        <!-- Sophisticated gym interior with dramatic lighting -->
+        <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('https://images.unsplash.com/photo-1571902943202-507ec2618e8f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1920&h=1080');">
+            <div class="absolute inset-0 bg-black/80"></div>
+        </div>
+        
+        <div class="relative z-10 max-w-4xl mx-auto text-center px-6">
+            <h2 class="text-5xl md:text-6xl font-light mb-8 tracking-wider">
+                READY TO <span class="text-gold">RESHAPE</span><br>YOUR LIFE?
+            </h2>
+            <p class="text-xl mb-12 text-gray-300 max-w-2xl mx-auto">
+                Join the elite few who understand that true fitness is a luxury experience
+            </p>
+            <div class="space-x-6">
+                <button class="bg-gold text-black px-12 py-4 text-lg font-medium tracking-widest uppercase hover:bg-white transition-all duration-500 transform hover:scale-105">
+                    Schedule Tour
+                </button>
+                <button class="border border-white text-white px-12 py-4 text-lg font-medium tracking-widest uppercase hover:bg-white hover:text-black transition-all duration-500">
+                    Learn More
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark-gray py-20">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+                <div>
+                    <h3 class="text-2xl font-bold tracking-wider text-gold mb-6">RESHAPE</h3>
+                    <p class="text-gray-400 leading-relaxed">
+                        Redefining luxury fitness experiences for the discerning individual who demands excellence.
+                    </p>
+                </div>
+                
+                <div>
+                    <h4 class="text-lg font-medium mb-6 tracking-wider">LOCATIONS</h4>
+                    <ul class="space-y-3 text-gray-400">
+                        <li>Manhattan</li>
+                        <li>Beverly Hills</li>
+                        <li>Miami Beach</li>
+                        <li>Chicago</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="text-lg font-medium mb-6 tracking-wider">SERVICES</h4>
+                    <ul class="space-y-3 text-gray-400">
+                        <li>Personal Training</li>
+                        <li>Group Classes</li>
+                        <li>Spa & Wellness</li>
+                        <li>Nutrition Coaching</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="text-lg font-medium mb-6 tracking-wider">CONNECT</h4>
+                    <div class="flex space-x-4 mb-6">
+                        <a href="#" class="text-gray-400 hover:text-gold transition-colors duration-300">
+                            <i class="fab fa-instagram text-2xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-gold transition-colors duration-300">
+                            <i class="fab fa-facebook text-2xl"></i>
+                        </a>
+                        <a href="#" class="text-gray-400 hover:text-gold transition-colors duration-300">
+                            <i class="fab fa-twitter text-2xl"></i>
+                        </a>
+                    </div>
+                    <p class="text-gray-400 text-sm">
+                        1-800-RESHAPE<br>
+                        info@reshape.fitness
+                    </p>
+                </div>
+            </div>
+            
+            <div class="border-t border-white/10 mt-16 pt-8 text-center text-gray-400">
+                <p>&copy; 2024 Reshape Fitness. All rights reserved. Privacy Policy | Terms of Service</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        (function() {
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    const target = document.querySelector(this.getAttribute('href'));
+                    if (target) {
+                        target.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                });
+            });
+
+            // Intersection observer for scroll animations
+            const observerOptions = {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            };
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, observerOptions);
+
+            // Observe all service cards and membership cards
+            document.querySelectorAll('.group').forEach(card => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(60px)';
+                card.style.transition = 'all 0.8s ease-out';
+                observer.observe(card);
+            });
+        })();
+    </script>
+</body>
+</html>

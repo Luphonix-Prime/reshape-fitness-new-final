@@ -1,0 +1,2700 @@
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { Users, Activity, Settings, BarChart, Plus, Edit, Trash2, Phone, Calendar, Target } from "lucide-react";
+import Navigation from "@/components/Navigation";
+
+export default function AdminDashboard() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("members");
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [newAttendance, setNewAttendance] = useState({
+    trainerId: "",
+    status: "present",
+    checkInTime: "",
+    checkOutTime: "",
+    notes: ""
+  });
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showAddTrainerModal, setShowAddTrainerModal] = useState(false);
+  const [editingMember, setEditingMember] = useState<any>(null);
+  const [editingTrainer, setEditingTrainer] = useState<any>(null);
+  const [newMember, setNewMember] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    membershipTierId: "",
+    phone: "",
+    emergencyContact: "",
+    fitnessGoals: ""
+  });
+  const [newTrainer, setNewTrainer] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    specializations: "",
+    hourlyRate: "",
+    experienceYears: "",
+    certifications: "",
+    bio: ""
+  });
+
+  // Body Assessment state
+  const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+  const [editingAssessment, setEditingAssessment] = useState<any>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
+  const [showConvertModal, setShowConvertModal] = useState(false);
+  const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [newAssessment, setNewAssessment] = useState({
+    memberId: "",
+    dateOfBirth: "",
+    age: "",
+    height: "",
+    bloodPressure: "",
+    afterTreadmillBP: "",
+    emergencyContact: "",
+    bodyComposition: {
+      bmi: "",
+      weight: "",
+      muscle: "",
+      fat: "",
+      saturatedFat: "",
+      visceralFat: "",
+      bmr: "",
+      bodyAge: ""
+    },
+    posturalAssessment: {
+      asymmetrical: false,
+      headNeckAlignment: "",
+      shoulderAlignment: "",
+      upperBackAlignment: "",
+      lowerBackAlignment: "",
+      pelvicAlignment: "",
+      hipKneeAlignment: "",
+      ankleAlignment: "",
+      spinalMobility: "",
+      recommendations: {
+        stretching: "",
+        strengthening: ""
+      }
+    },
+    circumferenceMeasurements: {
+      neck: "",
+      shoulders: "",
+      chest: "",
+      upperArm: "",
+      forearms: "",
+      wrist: "",
+      waist: "",
+      hip: "",
+      thighs: "",
+      calf: "",
+      ankle: ""
+    },
+    advice: ""
+  });
+
+  // System settings state
+  const [gymSettings, setGymSettings] = useState({
+    gymName: "RESHAPE FITNESS",
+    address: "123 Fitness Avenue, Luxury District",
+    operatingHours: "5:00 AM - 11:00 PM"
+  });
+
+  const [membershipPricing, setMembershipPricing] = useState({});
+
+  const [settingsLoading, setSettingsLoading] = useState(false);
+
+  // Fetch real data
+  const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
+    queryKey: ['/api/admin/members'],
+  });
+
+  const { data: trainers, isLoading: trainersLoading, refetch: refetchTrainers } = useQuery({
+    queryKey: ['/api/admin/trainers'],
+  });
+
+  const { data: stats, isLoading: statsLoading } = useQuery({
+    queryKey: ['/api/admin/stats'],
+  });
+
+  const { data: membershipTiers } = useQuery({
+    queryKey: ['/api/membership-tiers'],
+  });
+
+  const { data: todayAttendance, refetch: refetchAttendance } = useQuery({
+    queryKey: ['/api/admin/attendance', selectedDate],
+    queryFn: () => apiRequest('GET', `/api/admin/attendance/${selectedDate}`),
+  });
+
+  const { data: attendanceStats } = useQuery({
+    queryKey: ['/api/admin/attendance-stats', new Date().getFullYear()],
+    queryFn: () => apiRequest('GET', `/api/admin/attendance-stats?year=${new Date().getFullYear()}`),
+  });
+
+  const { data: monthlyAttendanceStats } = useQuery({
+    queryKey: ['/api/admin/attendance-stats', new Date().getFullYear(), new Date().getMonth() + 1],
+    queryFn: () => apiRequest('GET', `/api/admin/attendance-stats?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`),
+  });
+
+  const { data: bodyAssessments, refetch: refetchAssessments } = useQuery({
+    queryKey: ['/api/admin/body-assessments'],
+    queryFn: () => apiRequest('GET', '/api/admin/body-assessments'),
+  });
+
+  const { data: inquiries, refetch: refetchInquiries } = useQuery({
+    queryKey: ['/api/admin/inquiries'],
+    queryFn: () => apiRequest('GET', '/api/admin/inquiries'),
+  });
+
+  // Mutations
+  const createMemberMutation = useMutation({
+    mutationFn: (memberData: any) => apiRequest('POST', '/api/admin/create-member', memberData),
+    onSuccess: () => {
+      toast({
+        title: "Member Created",
+        description: "New member has been added successfully."
+      });
+      setShowAddMemberModal(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create member",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const createTrainerMutation = useMutation({
+    mutationFn: (trainerData: any) => apiRequest('POST', '/api/admin/create-trainer', trainerData),
+    onSuccess: () => {
+      toast({
+        title: "Trainer Added",
+        description: "New trainer has been added to the team."
+      });
+      setShowAddTrainerModal(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/trainers'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create trainer",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateMemberMutation = useMutation({
+    mutationFn: ({ id, memberData }: { id: string, memberData: any }) => apiRequest('PUT', `/api/admin/update-member/${id}`, memberData),
+    onSuccess: () => {
+      toast({
+        title: "Member Updated",
+        description: "Member details have been updated successfully."
+      });
+      closeModals();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update member",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const updateTrainerMutation = useMutation({
+    mutationFn: ({ id, trainerData }: { id: string, trainerData: any }) => apiRequest('PUT', `/api/admin/update-trainer/${id}`, trainerData),
+    onSuccess: () => {
+      toast({
+        title: "Trainer Updated",
+        description: "Trainer details have been updated successfully."
+      });
+      closeModals();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/trainers'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update trainer",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // System settings mutations
+  const updateGymSettingsMutation = useMutation({
+    mutationFn: (settings: any) => apiRequest('PUT', '/api/admin/gym-settings', settings),
+    onSuccess: () => {
+      toast({
+        title: "Settings Updated",
+        description: "Gym configuration has been updated successfully."
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update gym settings",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateMembershipPricingMutation = useMutation({
+    mutationFn: (pricing: any) => apiRequest('PUT', '/api/admin/membership-pricing', pricing),
+    onSuccess: () => {
+      toast({
+        title: "Pricing Updated",
+        description: "Membership pricing has been updated successfully."
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update pricing",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const recordAttendanceMutation = useMutation({
+    mutationFn: (attendanceData: any) => apiRequest('POST', '/api/admin/attendance', attendanceData),
+    onSuccess: () => {
+      toast({
+        title: "Attendance Recorded",
+        description: "Trainer attendance has been recorded successfully."
+      });
+      setShowAttendanceModal(false);
+      refetchAttendance();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record attendance",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Body Assessment mutations
+  const createAssessmentMutation = useMutation({
+    mutationFn: (assessmentData: any) => apiRequest('POST', '/api/admin/body-assessments', assessmentData),
+    onSuccess: () => {
+      toast({
+        title: "Assessment Created",
+        description: "Body assessment has been created successfully."
+      });
+      setShowAssessmentModal(false);
+      refetchAssessments();
+      closeAssessmentModal();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create assessment",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const shareAssessmentMutation = useMutation({
+    mutationFn: ({ assessmentId, trainerId }: { assessmentId: string, trainerId: string }) => 
+      apiRequest('POST', `/api/admin/body-assessments/${assessmentId}/share/${trainerId}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Assessment Shared",
+        description: "Assessment has been shared with trainer successfully."
+      });
+      setShowShareModal(false);
+      setSelectedAssessment(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to share assessment",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const convertInquiryMutation = useMutation({
+    mutationFn: ({ inquiryId, memberData, assessmentData }: { inquiryId: string, memberData: any, assessmentData: any }) => 
+      apiRequest('POST', `/api/admin/inquiries/${inquiryId}/convert`, { memberData, assessmentData }),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Converted",
+        description: "Inquiry has been converted to member successfully."
+      });
+      setShowConvertModal(false);
+      setSelectedInquiry(null);
+      refetchInquiries();
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to convert inquiry",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteInquiryMutation = useMutation({
+    mutationFn: (inquiryId: string) => apiRequest('DELETE', `/api/admin/inquiries/${inquiryId}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Cancelled",
+        description: "Inquiry has been cancelled successfully."
+      });
+      refetchInquiries();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel inquiry",
+        variant: "destructive"
+      });
+    }
+  });
+
+
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields
+    if (!newMember.firstName || !newMember.lastName || !newMember.email) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const memberData = {
+      ...newMember,
+      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || "")
+    };
+
+    if (editingMember) {
+      updateMemberMutation.mutate({ id: editingMember.userId, memberData });
+    } else {
+      createMemberMutation.mutate(memberData);
+    }
+  };
+
+  const handleAddTrainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields
+    if (!newTrainer.firstName || !newTrainer.lastName || !newTrainer.email || !newTrainer.specializations) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const specializations = newTrainer.specializations.split(',').map(s => s.trim()).filter(Boolean);
+    const trainerData = {
+      ...newTrainer,
+      specializations,
+      hourlyRate: newTrainer.hourlyRate || "75.00",
+      experienceYears: parseInt(newTrainer.experienceYears) || 2
+    };
+
+    if (editingTrainer) {
+      updateTrainerMutation.mutate({ id: editingTrainer.userId, trainerData });
+    } else {
+      createTrainerMutation.mutate(trainerData);
+    }
+  };
+
+  const handleEditMember = (member: any) => {
+    setEditingMember(member);
+    setNewMember({
+      firstName: member.firstName || "",
+      lastName: member.lastName || "",
+      email: member.email || "",
+      membershipTierId: member.membershipTierId || "",
+      phone: member.phone || "",
+      emergencyContact: member.emergencyContact || "",
+      fitnessGoals: member.fitnessGoals || ""
+    });
+    setShowAddMemberModal(true);
+  };
+
+  const handleEditTrainer = (trainer: any) => {
+    setEditingTrainer(trainer);
+    setNewTrainer({
+      firstName: trainer.firstName || "",
+      lastName: trainer.lastName || "",
+      email: trainer.email || "",
+      specializations: Array.isArray(trainer.specializations) ? trainer.specializations.join(', ') : "",
+      hourlyRate: trainer.hourlyRate || "",
+      experienceYears: trainer.experienceYears?.toString() || "",
+      certifications: trainer.certifications || "",
+      bio: trainer.bio || ""
+    });
+    setShowAddTrainerModal(true);
+  };
+
+  const handleDeleteMember = async (member: any) => {
+    if (confirm(`Are you sure you want to delete member ${member.firstName} ${member.lastName}?`)) {
+      try {
+        const response = await fetch(`/api/admin/delete-member/${member.userId}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          refetchMembers();
+          toast({
+            title: "Success",
+            description: "Member deleted successfully!",
+          });
+        } else {
+          throw new Error('Failed to delete member');
+        }
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to delete member",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleDeleteTrainer = async (trainer: any) => {
+    if (confirm(`Are you sure you want to delete trainer ${trainer.firstName} ${trainer.lastName}?`)) {
+      try {
+        const response = await fetch(`/api/admin/delete-trainer/${trainer.userId}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          refetchTrainers();
+          toast({
+            title: "Success",
+            description: "Trainer deleted successfully!",
+          });
+        } else {
+          throw new Error('Failed to delete trainer');
+        }
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to delete trainer",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const closeModals = () => {
+    setShowAddMemberModal(false);
+    setShowAddTrainerModal(false);
+    setEditingMember(null);
+    setEditingTrainer(null);
+    setNewMember({
+      firstName: "",
+      lastName: "",
+      email: "",
+      membershipTierId: "",
+      phone: "",
+      emergencyContact: "",
+      fitnessGoals: ""
+    });
+    setNewTrainer({
+      firstName: "",
+      lastName: "",
+      email: "",
+      specializations: "",
+      hourlyRate: "",
+      experienceYears: "",
+      certifications: "",
+      bio: ""
+    });
+  };
+
+  // System settings handlers
+  const handleSaveGymConfiguration = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateGymSettingsMutation.mutate(gymSettings);
+  };
+
+  const handleUpdatePricing = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pricingData = Object.keys(membershipPricing).map(tierId => ({
+      tierId,
+      monthlyPrice: membershipPricing[tierId]
+    }));
+    updateMembershipPricingMutation.mutate({ pricing: pricingData });
+  };
+
+  // Initialize membership pricing when tiers are loaded
+  React.useEffect(() => {
+    if (membershipTiers && membershipTiers.length > 0) {
+      const pricing = {};
+      membershipTiers.forEach(tier => {
+        pricing[tier._id] = tier.monthlyPrice;
+      });
+      setMembershipPricing(pricing);
+    }
+  }, [membershipTiers]);
+
+  const handleRecordAttendance = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newAttendance.trainerId || !newAttendance.status) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const attendanceData = {
+      ...newAttendance,
+      date: selectedDate
+    };
+
+    recordAttendanceMutation.mutate(attendanceData);
+  };
+
+  const closeAttendanceModal = () => {
+    setShowAttendanceModal(false);
+    setNewAttendance({
+      trainerId: "",
+      status: "present",
+      checkInTime: "",
+      checkOutTime: "",
+      notes: ""
+    });
+  };
+
+  const handleQuickAttendance = async (trainerId: string, status: string) => {
+    try {
+      const currentTime = new Date().toTimeString().slice(0, 5);
+      const attendanceData = {
+        trainerId,
+        status,
+        date: selectedDate,
+        checkInTime: status === "present" ? currentTime : "",
+        checkOutTime: "",
+        notes: ""
+      };
+
+      await recordAttendanceMutation.mutateAsync(attendanceData);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record attendance",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const getAttendanceStatusBadge = (status: string) => {
+    switch (status) {
+      case "present":
+        return <Badge className="bg-green-600 text-white">Present</Badge>;
+      case "absent":
+        return <Badge className="bg-red-600 text-white">Absent</Badge>;
+      case "late":
+        return <Badge className="bg-yellow-600 text-white">Late</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  // Assessment handlers
+  const handleCreateAssessment = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newAssessment.memberId || !newAssessment.age || !newAssessment.height) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    createAssessmentMutation.mutate(newAssessment);
+  };
+
+  const closeAssessmentModal = () => {
+    setShowAssessmentModal(false);
+    setEditingAssessment(null);
+    setNewAssessment({
+      memberId: "",
+      dateOfBirth: "",
+      age: "",
+      height: "",
+      bloodPressure: "",
+      afterTreadmillBP: "",
+      emergencyContact: "",
+      bodyComposition: {
+        bmi: "",
+        weight: "",
+        muscle: "",
+        fat: "",
+        saturatedFat: "",
+        visceralFat: "",
+        bmr: "",
+        bodyAge: ""
+      },
+      posturalAssessment: {
+        asymmetrical: false,
+        headNeckAlignment: "",
+        shoulderAlignment: "",
+        upperBackAlignment: "",
+        lowerBackAlignment: "",
+        pelvicAlignment: "",
+        hipKneeAlignment: "",
+        ankleAlignment: "",
+        spinalMobility: "",
+        recommendations: {
+          stretching: "",
+          strengthening: ""
+        }
+      },
+      circumferenceMeasurements: {
+        neck: "",
+        shoulders: "",
+        chest: "",
+        upperArm: "",
+        forearms: "",
+        wrist: "",
+        waist: "",
+        hip: "",
+        thighs: "",
+        calf: "",
+        ankle: ""
+      },
+      advice: ""
+    });
+  };
+
+  const handleShareAssessment = (assessment: any) => {
+    setSelectedAssessment(assessment);
+    setShowShareModal(true);
+  };
+
+  const handleConvertInquiry = (inquiry: any) => {
+    setSelectedInquiry(inquiry);
+    setShowConvertModal(true);
+  };
+
+  const handleDeleteInquiry = (inquiryId: string) => {
+    if (confirm('Are you sure you want to cancel this inquiry?')) {
+      deleteInquiryMutation.mutate(inquiryId);
+    }
+  };
+
+  const handleSubmitConversion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedInquiry) return;
+
+    const memberData = {
+      membershipTierId: membershipTiers?.[0]?._id || ""
+    };
+
+    convertInquiryMutation.mutate({
+      inquiryId: selectedInquiry._id,
+      memberData,
+      assessmentData: newAssessment
+    });
+  };
+
+  const exportToExcel = () => {
+    if (!Array.isArray(bodyAssessments) || bodyAssessments.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No assessments available to export",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Create CSV content
+    const headers = [
+      "Member Name", "Date of Birth", "Age", "Height", "Blood Pressure", "Emergency Contact",
+      "BMI", "Weight", "Muscle", "Fat", "Saturated Fat", "Visceral Fat", "BMR", "Body Age",
+      "Head/Neck Alignment", "Shoulder Alignment", "Upper Back", "Lower Back", "Pelvic", "Hip/Knee", "Ankle",
+      "Spinal Mobility", "Stretching Recommendations", "Strengthening Recommendations",
+      "Neck", "Shoulders", "Chest", "Upper Arm", "Forearms", "Wrist", "Waist", "Hip", "Thighs", "Calf", "Ankle",
+      "Advice", "Created Date"
+    ];
+
+    const csvContent = [
+      headers.join(","),
+      ...bodyAssessments.map((assessment: any) => [
+        assessment.memberName || "",
+        assessment.dateOfBirth || "",
+        assessment.age || "",
+        assessment.height || "",
+        assessment.bloodPressure || "",
+        assessment.emergencyContact || "",
+        assessment.bodyComposition?.bmi || "",
+        assessment.bodyComposition?.weight || "",
+        assessment.bodyComposition?.muscle || "",
+        assessment.bodyComposition?.fat || "",
+        assessment.bodyComposition?.saturatedFat || "",
+        assessment.bodyComposition?.visceralFat || "",
+        assessment.bodyComposition?.bmr || "",
+        assessment.bodyComposition?.bodyAge || "",
+        assessment.posturalAssessment?.headNeckAlignment || "",
+        assessment.posturalAssessment?.shoulderAlignment || "",
+        assessment.posturalAssessment?.upperBackAlignment || "",
+        assessment.posturalAssessment?.lowerBackAlignment || "",
+        assessment.posturalAssessment?.pelvicAlignment || "",
+        assessment.posturalAssessment?.hipKneeAlignment || "",
+        assessment.posturalAssessment?.ankleAlignment || "",
+        assessment.posturalAssessment?.spinalMobility || "",
+        assessment.posturalAssessment?.recommendations?.stretching || "",
+        assessment.posturalAssessment?.recommendations?.strengthening || "",
+        assessment.circumferenceMeasurements?.neck || "",
+        assessment.circumferenceMeasurements?.shoulders || "",
+        assessment.circumferenceMeasurements?.chest || "",
+        assessment.circumferenceMeasurements?.upperArm || "",
+        assessment.circumferenceMeasurements?.forearms || "",
+        assessment.circumferenceMeasurements?.wrist || "",
+        assessment.circumferenceMeasurements?.waist || "",
+        assessment.circumferenceMeasurements?.hip || "",
+        assessment.circumferenceMeasurements?.thighs || "",
+        assessment.circumferenceMeasurements?.calf || "",
+        assessment.circumferenceMeasurements?.ankle || "",
+        `"${assessment.advice || ""}"`,
+        new Date(assessment.createdAt).toLocaleDateString()
+      ].join(","))
+    ].join("\n");
+
+    // Download CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `body_assessments_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+      title: "Export Successful",
+      description: "Body assessments exported to CSV file"
+    });
+  };
+
+
+  if (membersLoading || trainersLoading || statsLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      <Navigation />
+
+      <div className="container mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-wider text-gold mb-2">ADMIN DASHBOARD</h1>
+          <p className="text-gray-400">Manage your fitness center operations</p>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-gray-900 border-gray-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Total Members</p>
+                  <p className="text-2xl font-bold text-gold">{stats?.totalMembers || 0}</p>
+                </div>
+                <Users className="h-8 w-8 text-gold" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-900 border-gray-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Total Trainers</p>
+                  <p className="text-2xl font-bold text-green-400">{stats?.totalTrainers || 0}</p>
+                </div>
+                <Activity className="h-8 w-8 text-green-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-900 border-gray-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Monthly Revenue</p>
+                  <p className="text-2xl font-bold text-blue-400">${stats?.monthlyRevenue?.toLocaleString() || 0}</p>
+                </div>
+                <BarChart className="h-8 w-8 text-blue-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gray-900 border-gray-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Training Sessions</p>
+                  <p className="text-2xl font-bold text-purple-400">{stats?.totalSessions || 0}</p>
+                </div>
+                <Settings className="h-8 w-8 text-purple-400" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-6 bg-gray-900 border-gray-800">
+            <TabsTrigger value="members" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Users className="h-4 w-4 mr-2" />
+              MANAGE MEMBERS
+            </TabsTrigger>
+            <TabsTrigger value="inquiries" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Phone className="h-4 w-4 mr-2" />
+              INQUIRIES
+            </TabsTrigger>
+            <TabsTrigger value="assessments" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Target className="h-4 w-4 mr-2" />
+              BODY ASSESSMENTS
+            </TabsTrigger>
+            <TabsTrigger value="attendance" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Calendar className="h-4 w-4 mr-2" />
+              ATTENDANCE
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <BarChart className="h-4 w-4 mr-2" />
+              VIEW REPORTS
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Settings className="h-4 w-4 mr-2" />
+              SYSTEM SETTINGS
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="members" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">Member Management</h2>
+              <div className="space-x-4">
+                <Dialog open={showAddMemberModal} onOpenChange={(open) => {
+                  if (!open) closeModals();
+                }}>
+                  <DialogTrigger asChild>
+                    <Button
+                      className="bg-gold text-black hover:bg-white"
+                      onClick={() => setShowAddMemberModal(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Member
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="text-gold">
+                        {editingMember ? 'Edit Member' : 'Add New Member'}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleAddMember} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="firstName">First Name</Label>
+                          <Input
+                            name="firstName"
+                            className="bg-black border-gray-700 text-white"
+                            required
+                            value={newMember.firstName}
+                            onChange={(e) => setNewMember({...newMember, firstName: e.target.value})}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="lastName">Last Name</Label>
+                          <Input
+                            name="lastName"
+                            className="bg-black border-gray-700 text-white"
+                            required
+                            value={newMember.lastName}
+                            onChange={(e) => setNewMember({...newMember, lastName: e.target.value})}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          name="email"
+                          type="email"
+                          className="bg-black border-gray-700 text-white"
+                          required
+                          value={newMember.email}
+                          onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input
+                          name="phone"
+                          className="bg-black border-gray-700 text-white"
+                          value={newMember.phone}
+                          onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="membershipTierId">Membership Type</Label>
+                        <Select
+                          name="membershipTierId"
+                          required
+                          value={newMember.membershipTierId}
+                          onValueChange={(value) => setNewMember({...newMember, membershipTierId: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select membership type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            {membershipTiers?.map((tier: any) => (
+                              <SelectItem key={tier._id} value={tier._id} className="focus:bg-gold focus:text-black">
+                                {tier.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="emergencyContact">Emergency Contact</Label>
+                        <Input
+                          name="emergencyContact"
+                          className="bg-black border-gray-700 text-white"
+                          value={newMember.emergencyContact}
+                          onChange={(e) => setNewMember({...newMember, emergencyContact: e.target.value})}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="fitnessGoals">Fitness Goals</Label>
+                        <Textarea
+                          name="fitnessGoals"
+                          placeholder="Member's fitness goals..."
+                          className="bg-black border-gray-700 text-white"
+                          value={newMember.fitnessGoals}
+                          onChange={(e) => setNewMember({...newMember, fitnessGoals: e.target.value})}
+                        />
+                      </div>
+                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createMemberMutation.isPending || updateMemberMutation.isPending}>
+                        {editingMember ? (createMemberMutation.isPending || updateMemberMutation.isPending ? "Updating..." : "Update Member") : (createMemberMutation.isPending ? "Creating..." : "Create Member")}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={showAddTrainerModal} onOpenChange={(open) => {
+                  if (!open) closeModals();
+                }}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="border-gold text-gold hover:bg-gold hover:text-black"
+                      onClick={() => setShowAddTrainerModal(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Trainer
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="text-gold">
+                        {editingTrainer ? 'Edit Trainer' : 'Add New Trainer'}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleAddTrainer} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="firstName">First Name</Label>
+                          <Input
+                            name="firstName"
+                            required
+                            value={newTrainer.firstName}
+                            onChange={(e) => setNewTrainer({...newTrainer, firstName: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="lastName">Last Name</Label>
+                          <Input
+                            name="lastName"
+                            required
+                            value={newTrainer.lastName}
+                            onChange={(e) => setNewTrainer({...newTrainer, lastName: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          name="email"
+                          type="email"
+                          required
+                          value={newTrainer.email}
+                          onChange={(e) => setNewTrainer({...newTrainer, email: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="specializations">Specializations</Label>
+                        <Input
+                          name="specializations"
+                          placeholder="e.g., Strength Training, Yoga, HIIT"
+                          required
+                          value={newTrainer.specializations}
+                          onChange={(e) => setNewTrainer({...newTrainer, specializations: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="hourlyRate">Hourly Rate ($)</Label>
+                          <Input
+                            name="hourlyRate"
+                            type="number"
+                            step="0.01"
+                            value={newTrainer.hourlyRate}
+                            onChange={(e) => setNewTrainer({...newTrainer, hourlyRate: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="experienceYears">Experience (Years)</Label>
+                          <Input
+                            name="experienceYears"
+                            type="number"
+                            value={newTrainer.experienceYears}
+                            onChange={(e) => setNewTrainer({...newTrainer, experienceYears: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="certifications">Certifications</Label>
+                        <Textarea
+                          name="certifications"
+                          placeholder="Professional certifications..."
+                          value={newTrainer.certifications}
+                          onChange={(e) => setNewTrainer({...newTrainer, certifications: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="bio">Bio</Label>
+                        <Textarea
+                          name="bio"
+                          placeholder="Professional bio..."
+                          value={newTrainer.bio}
+                          onChange={(e) => setNewTrainer({...newTrainer, bio: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createTrainerMutation.isPending || updateTrainerMutation.isPending}>
+                        {editingTrainer ? (createTrainerMutation.isPending || updateTrainerMutation.isPending ? "Updating..." : "Update Trainer") : (createTrainerMutation.isPending ? "Creating..." : "Add Trainer")}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+
+            {/* Members Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Current Members ({members?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Email</TableHead>
+                      <TableHead className="text-gray-400">Phone</TableHead>
+                      <TableHead className="text-gray-400">Membership</TableHead>
+                      <TableHead className="text-gray-400">Join Date</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members?.map((member: any) => (
+                      <TableRow key={member.userId} className="border-gray-800">
+                        <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
+                        <TableCell className="text-gray-400">{member.email}</TableCell>
+                        <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="border-gold text-gold">
+                            {member.membershipTier || 'N/A'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-gray-400">
+                          {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => handleEditMember(member)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:bg-red-400 hover:text-white"
+                              onClick={() => handleDeleteMember(member)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Trainers Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Training Staff ({trainers?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Email</TableHead>
+                      <TableHead className="text-gray-400">Specializations</TableHead>
+                      <TableHead className="text-gray-400">Rate</TableHead>
+                      <TableHead className="text-gray-400">Experience</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainers?.map((trainer: any) => (
+                      <TableRow key={trainer.userId} className="border-gray-800">
+                        <TableCell className="text-white">{trainer.firstName} {trainer.lastName}</TableCell>
+                        <TableCell className="text-gray-400">{trainer.email}</TableCell>
+                        <TableCell className="text-gray-400">
+                          {trainer.specializations?.join(', ') || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-gray-400">${trainer.hourlyRate}/hr</TableCell>
+                        <TableCell className="text-gray-400">{trainer.experienceYears} years</TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => handleEditTrainer(trainer)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:bg-red-400 hover:text-white"
+                              onClick={() => handleDeleteTrainer(trainer)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="inquiries" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">Contact Inquiries</h2>
+            </div>
+
+            {/* Inquiries Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Recent Inquiries ({inquiries?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Email</TableHead>
+                      <TableHead className="text-gray-400">Phone</TableHead>
+                      <TableHead className="text-gray-400">Interest</TableHead>
+                      <TableHead className="text-gray-400">Location</TableHead>
+                      <TableHead className="text-gray-400">Submitted</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.isArray(inquiries) && inquiries.map((inquiry: any) => (
+                      <TableRow key={inquiry._id} className="border-gray-800">
+                        <TableCell className="text-white">{inquiry.firstName} {inquiry.lastName}</TableCell>
+                        <TableCell className="text-gray-400">{inquiry.email}</TableCell>
+                        <TableCell className="text-gray-400">{inquiry.phone}</TableCell>
+                        <TableCell className="text-gray-400">{inquiry.interest}</TableCell>
+                        <TableCell className="text-gray-400">{inquiry.location}</TableCell>
+                        <TableCell className="text-gray-400">
+                          {new Date(inquiry.submittedAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => handleConvertInquiry(inquiry)}
+                            >
+                              Convert to Member
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleDeleteInquiry(inquiry._id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!Array.isArray(inquiries) || inquiries.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400">
+                          No inquiries found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Convert Inquiry Modal */}
+            <Dialog open={showConvertModal} onOpenChange={setShowConvertModal}>
+              <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-gold">
+                    Convert Inquiry to Member - {selectedInquiry?.firstName} {selectedInquiry?.lastName}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmitConversion} className="space-y-6">
+                  {/* Basic Information Display */}
+                  <div className="space-y-4 p-4 bg-black rounded-lg">
+                    <h3 className="text-lg font-semibold text-gold">Inquiry Information</h3>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-400">Name:</span>
+                        <span className="text-white ml-2">{selectedInquiry?.firstName} {selectedInquiry?.lastName}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Email:</span>
+                        <span className="text-white ml-2">{selectedInquiry?.email}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Phone:</span>
+                        <span className="text-white ml-2">{selectedInquiry?.phone}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">Interest:</span>
+                        <span className="text-white ml-2">{selectedInquiry?.interest}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-400">Message:</span>
+                        <span className="text-white ml-2">{selectedInquiry?.message}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Complete Body Assessment Form */}
+                  <div className="space-y-6">
+                    <h3 className="text-lg font-semibold text-gold">Complete Body Assessment</h3>
+
+                    {/* Basic Information */}
+                    <div className="space-y-4 p-4 bg-black rounded-lg">
+                      <h4 className="text-md font-semibold text-gold">Basic Information</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                          <Input
+                            type="date"
+                            value={newAssessment.dateOfBirth}
+                            onChange={(e) => setNewAssessment({...newAssessment, dateOfBirth: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="age">Age</Label>
+                          <Input
+                            type="number"
+                            value={newAssessment.age}
+                            onChange={(e) => setNewAssessment({...newAssessment, age: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="height">Height (cm)</Label>
+                          <Input
+                            type="number"
+                            value={newAssessment.height}
+                            onChange={(e) => setNewAssessment({...newAssessment, height: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="bloodPressure">Blood Pressure</Label>
+                          <Input
+                            placeholder="e.g., 124/84"
+                            value={newAssessment.bloodPressure}
+                            onChange={(e) => setNewAssessment({...newAssessment, bloodPressure: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="afterTreadmillBP">After Treadmill Test</Label>
+                          <Input
+                            placeholder="e.g., 152/92"
+                            value={newAssessment.afterTreadmillBP}
+                            onChange={(e) => setNewAssessment({...newAssessment, afterTreadmillBP: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="emergencyContact">Emergency Contact</Label>
+                          <Input
+                            value={newAssessment.emergencyContact}
+                            onChange={(e) => setNewAssessment({...newAssessment, emergencyContact: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Body Composition Measurements */}
+                    <div className="space-y-4 p-4 bg-black rounded-lg">
+                      <h4 className="text-md font-semibold text-gold">Body Composition Measurements</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="bmi">BMI</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.bodyComposition.bmi}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, bmi: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="weight">Weight (kg)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.bodyComposition.weight}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, weight: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="muscle">Muscle (%)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.bodyComposition.muscle}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, muscle: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="fat">Fat (%)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.bodyComposition.fat}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, fat: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="saturatedFat">Saturated Fat (%)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.bodyComposition.saturatedFat}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, saturatedFat: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="visceralFat">Visceral Fat</Label>
+                          <Input
+                            type="number"
+                            value={newAssessment.bodyComposition.visceralFat}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, visceralFat: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="bmr">BMR</Label>
+                          <Input
+                            type="number"
+                            value={newAssessment.bodyComposition.bmr}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, bmr: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="bodyAge">Body Age</Label>
+                          <Input
+                            type="number"
+                            value={newAssessment.bodyComposition.bodyAge}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyComposition: {...newAssessment.bodyComposition, bodyAge: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Postural Assessment */}
+                    <div className="space-y-4 p-4 bg-black rounded-lg">
+                      <h4 className="text-md font-semibold text-gold">Postural Assessment</h4>
+                      <div className="mb-4">
+                        <label className="flex items-center space-x-2 text-white">
+                          <input
+                            type="checkbox"
+                            checked={newAssessment.posturalAssessment.asymmetrical}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, asymmetrical: e.target.checked}})}
+                            className="rounded"
+                          />
+                          <span>Asymmetrical</span>
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="headNeckAlignment">Head and Neck Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.headNeckAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, headNeckAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., neutral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="shoulderAlignment">Shoulder Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.shoulderAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, shoulderAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., rounded shoulder"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="upperBackAlignment">Upper Back Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.upperBackAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, upperBackAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., kyphotic curve"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="lowerBackAlignment">Lower Back Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.lowerBackAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, lowerBackAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., neutral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="pelvicAlignment">Pelvic Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.pelvicAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, pelvicAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., neutral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="hipKneeAlignment">Hip and Knee Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.hipKneeAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, hipKneeAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., neutral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="ankleAlignment">Ankle Alignment</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.ankleAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, ankleAlignment: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., neutral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="spinalMobility">Spinal Mobility</Label>
+                          <Input
+                            value={newAssessment.posturalAssessment.spinalMobility}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, spinalMobility: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., decreased (spinal rotation, side bending, forward flexion)"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="stretching">Stretching Recommendations</Label>
+                          <Textarea
+                            value={newAssessment.posturalAssessment.recommendations.stretching}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, recommendations: {...newAssessment.posturalAssessment.recommendations, stretching: e.target.value}}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., hamstring, glutes maximus, TFL, calf, trapezius, pectoral"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="strengthening">Strengthening Recommendations</Label>
+                          <Textarea
+                            value={newAssessment.posturalAssessment.recommendations.strengthening}
+                            onChange={(e) => setNewAssessment({...newAssessment, posturalAssessment: {...newAssessment.posturalAssessment, recommendations: {...newAssessment.posturalAssessment.recommendations, strengthening: e.target.value}}})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., gluteus maximus and quadriceps, rotator cuff, scapular muscle"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Circumference Measurements */}
+                    <div className="space-y-4 p-4 bg-black rounded-lg">
+                      <h4 className="text-md font-semibold text-gold">Circumference Measurements (inches)</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="neck">Neck</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.neck}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="shoulders">Shoulders</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.shoulders}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="chest">Chest</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.chest}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="upperArm">Upper Arm</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.upperArm}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, upperArm: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="forearms">Forearms</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.forearms}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, forearms: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="wrist">Wrist</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.wrist}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, wrist: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="waist">Waist</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.waist}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="hip">Hip</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.hip}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="thighs">Thighs</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.thighs}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, thighs: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="calf">Calf</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.calf}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, calf: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="ankle">Ankle</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newAssessment.circumferenceMeasurements.ankle}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, ankle: e.target.value}})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Advice */}
+                    <div className="space-y-4 p-4 bg-black rounded-lg">
+                      <h4 className="text-md font-semibold text-gold">Professional Advice</h4>
+                      <div>
+                        <Label htmlFor="advice">Recommendations and Advice</Label>
+                        <Textarea
+                          value={newAssessment.advice}
+                          onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                          rows={4}
+                          placeholder="e.g., Lower body mobility exercises, Deep breathing exercises, Core strengthening, Pelvic floor muscle activation, Glutes muscles and quadriceps strengthening, Rotator cuff strengthening, Scapular strengthening"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={convertInquiryMutation.isPending}>
+                    {convertInquiryMutation.isPending ? "Converting..." : "Convert to Member"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          <TabsContent value="assessments" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">Body Composition & BMI Assessments</h2>
+              <div className="space-x-4">
+                <Button
+                  variant="outline"
+                  className="border-gold text-gold hover:bg-gold hover:text-black"
+                  onClick={exportToExcel}
+                >
+                  Export to Excel
+                </Button>
+                <Dialog open={showAssessmentModal} onOpenChange={setShowAssessmentModal}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-gold text-black hover:bg-white">
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Assessment
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle className="text-gold">Body Composition & BMI Assessment</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleCreateAssessment} className="space-y-6">
+                      {/* Basic Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gold">Basic Information</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="memberId">Client Name</Label>
+                            <Select
+                              required
+                              value={newAssessment.memberId}
+                              onValueChange={(value) => setNewAssessment({...newAssessment, memberId: value})}
+                            >
+                              <SelectTrigger className="bg-black border-gray-700 text-white">
+                                <SelectValue placeholder="Select client" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                                {members?.map((member: any) => (
+                                  <SelectItem key={member.userId} value={member.userId} className="focus:bg-gold focus:text-black">
+                                    {member.firstName} {member.lastName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                            <Input
+                              type="date"
+                              value={newAssessment.dateOfBirth}
+                              onChange={(e) => setNewAssessment({...newAssessment, dateOfBirth: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="age">Age</Label>
+                            <Input
+                              type="number"
+                              required
+                              value={newAssessment.age}
+                              onChange={(e) => setNewAssessment({...newAssessment, age: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="height">Height (cm)</Label>
+                            <Input
+                              type="number"
+                              required
+                              value={newAssessment.height}
+                              onChange={(e) => setNewAssessment({...newAssessment, height: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="bloodPressure">Blood Pressure</Label>
+                            <Input
+                              value={newAssessment.bloodPressure}
+                              onChange={(e) => setNewAssessment({...newAssessment, bloodPressure: e.target.value})}
+                              placeholder="e.g., 124/84"
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="afterTreadmillBP">After Treadmill Test</Label>
+                            <Input
+                              value={newAssessment.afterTreadmillBP}
+                              onChange={(e) => setNewAssessment({...newAssessment, afterTreadmillBP: e.target.value})}
+                              placeholder="e.g., 152/92"
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <Label htmlFor="emergencyContact">Emergency Contact</Label>
+                            <Input
+                              value={newAssessment.emergencyContact}
+                              onChange={(e) => setNewAssessment({...newAssessment, emergencyContact: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Body Composition */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gold">Body Composition Measurement</h3>
+                        <div className="grid grid-cols-4 gap-4">
+                          <div>
+                            <Label htmlFor="bmi">BMI</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.bodyComposition.bmi}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, bmi: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="weight">Weight (kg)</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.bodyComposition.weight}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, weight: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="muscle">Muscle (%)</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.bodyComposition.muscle}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, muscle: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="fat">Fat (%)</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.bodyComposition.fat}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, fat: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="saturatedFat">Saturated Fat (%)</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.bodyComposition.saturatedFat}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, saturatedFat: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="visceralFat">Visceral Fat</Label>
+                            <Input
+                              type="number"
+                              value={newAssessment.bodyComposition.visceralFat}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, visceralFat: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="bmr">BMR</Label>
+                            <Input
+                              type="number"
+                              value={newAssessment.bodyComposition.bmr}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, bmr: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="bodyAge">Body Age</Label>
+                            <Input
+                              type="number"
+                              value={newAssessment.bodyComposition.bodyAge}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                bodyComposition: {...newAssessment.bodyComposition, bodyAge: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Postural Assessment */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gold">Postural Assessment</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="headNeckAlignment">Head and Neck Alignment</Label>
+                            <Input
+                              value={newAssessment.posturalAssessment.headNeckAlignment}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                posturalAssessment: {...newAssessment.posturalAssessment, headNeckAlignment: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="shoulderAlignment">Shoulder Alignment</Label>
+                            <Input
+                              value={newAssessment.posturalAssessment.shoulderAlignment}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                posturalAssessment: {...newAssessment.posturalAssessment, shoulderAlignment: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="spinalMobility">Spinal Mobility</Label>
+                            <Input
+                              value={newAssessment.posturalAssessment.spinalMobility}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                posturalAssessment: {...newAssessment.posturalAssessment, spinalMobility: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <Label htmlFor="stretching">Stretching Recommendations</Label>
+                            <Textarea
+                              value={newAssessment.posturalAssessment.recommendations.stretching}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                posturalAssessment: {
+                                  ...newAssessment.posturalAssessment,
+                                  recommendations: {
+                                    ...newAssessment.posturalAssessment.recommendations,
+                                    stretching: e.target.value
+                                  }
+                                }
+                              })}
+                              placeholder="e.g., hamstring, glutes maximus, TFL, calf, trapezius, pectoral"
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="strengthening">Strengthening Recommendations</Label>
+                            <Textarea
+                              value={newAssessment.posturalAssessment.recommendations.strengthening}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                posturalAssessment: {
+                                  ...newAssessment.posturalAssessment,
+                                  recommendations: {
+                                    ...newAssessment.posturalAssessment.recommendations,
+                                    strengthening: e.target.value
+                                  }
+                                }
+                              })}
+                              placeholder="e.g., gluteus maximus and quadriceps, rotator cuff, scapular muscle"
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Circumference Measurements */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gold">Circumference Measurements (inches)</h3>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <Label htmlFor="neck">Neck</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.neck}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="shoulders">Shoulders</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.shoulders}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="chest">Chest</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.chest}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="waist">Waist</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.waist}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="hip">Hip</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.hip}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="thighs">Thighs</Label>
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={newAssessment.circumferenceMeasurements.thighs}
+                              onChange={(e) => setNewAssessment({
+                                ...newAssessment,
+                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, thighs: e.target.value}
+                              })}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Advice */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gold">Advice</h3>
+                        <Textarea
+                          value={newAssessment.advice}
+                          onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
+                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
+                          className="bg-black border-gray-700 text-white"
+                          rows={4}
+                        />
+                      </div>
+
+                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createAssessmentMutation.isPending}>
+                        {createAssessmentMutation.isPending ? "Creating..." : "Create Assessment"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+
+            {/* Assessments Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Body Assessments ({bodyAssessments?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Client Name</TableHead>
+                      <TableHead className="text-gray-400">Age</TableHead>
+                      <TableHead className="text-gray-400">BMI</TableHead>
+                      <TableHead className="text-gray-400">Weight</TableHead>
+                      <TableHead className="text-gray-400">Body Fat %</TableHead>
+                      <TableHead className="text-gray-400">Date Created</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.isArray(bodyAssessments) && bodyAssessments.map((assessment: any) => (
+                      <TableRow key={assessment._id} className="border-gray-800">
+                        <TableCell className="text-white">{assessment.memberName}</TableCell>
+                        <TableCell className="text-gray-400">{assessment.age}</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.bmi || 'N/A'}</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.weight || 'N/A'} kg</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.fat || 'N/A'}%</TableCell>
+                        <TableCell className="text-gray-400">
+                          {new Date(assessment.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-blue-400 hover:bg-blue-400 hover:text-white"
+                              onClick={() => handleShareAssessment(assessment)}
+                            >
+                              Share
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!Array.isArray(bodyAssessments) || bodyAssessments.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400">
+                          No body assessments found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Share Assessment Modal */}
+            <Dialog open={showShareModal} onOpenChange={setShowShareModal}>
+              <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                <DialogHeader>
+                  <DialogTitle className="text-gold">Share Assessment with Trainer</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <p className="text-gray-400">
+                    Share assessment for <strong>{selectedAssessment?.memberName}</strong> with a trainer:
+                  </p>
+                  <div className="space-y-2">
+                    {trainers?.map((trainer: any) => (
+                      <Button
+                        key={trainer.userId}
+                        variant="outline"
+                        className="w-full justify-start border-gray-700 text-white hover:bg-gold hover:text-black"
+                        onClick={() => {
+                          shareAssessmentMutation.mutate({
+                            assessmentId: selectedAssessment._id,
+                            trainerId: trainer.userId
+                          });
+                        }}
+                        disabled={shareAssessmentMutation.isPending}
+                      >
+                        {trainer.firstName} {trainer.lastName}
+                        <span className="ml-auto text-sm text-gray-400">
+                          {trainer.specializations?.join(', ')}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </TabsContent>
+
+          <TabsContent value="attendance" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">Trainer Attendance System</h2>
+              <div className="flex items-center space-x-4">
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-black border-gray-700 text-white"
+                />
+                <Button 
+                  variant="outline"
+                  className="border-gold text-gold hover:bg-gold hover:text-black"
+                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                >
+                  Today
+                </Button>
+                <Dialog open={showAttendanceModal} onOpenChange={setShowAttendanceModal}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-gold text-black hover:bg-white">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Record Attendance
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="text-gold">Record Trainer Attendance</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleRecordAttendance} className="space-y-4">
+                      <div>
+                        <Label htmlFor="trainerId">Select Trainer</Label>
+                        <Select
+                          name="trainerId"
+                          required
+                          value={newAttendance.trainerId}
+                          onValueChange={(value) => setNewAttendance({...newAttendance, trainerId: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white">
+                            <SelectValue placeholder="Select a trainer" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            {trainers?.map((trainer: any) => (
+                              <SelectItem key={trainer.userId} value={trainer.userId} className="focus:bg-gold focus:text-black">
+                                {trainer.firstName} {trainer.lastName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="status">Status</Label>
+                        <Select
+                          name="status"
+                          required
+                          value={newAttendance.status}
+                          onValueChange={(value) => setNewAttendance({...newAttendance, status: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            <SelectItem value="present" className="focus:bg-gold focus:text-black">Present</SelectItem>
+                            <SelectItem value="absent" className="focus:bg-gold focus:text-black">Absent</SelectItem>
+                            <SelectItem value="late" className="focus:bg-gold focus:text-black">Late</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="checkInTime">Check In Time</Label>
+                          <Input
+                            name="checkInTime"
+                            type="time"
+                            value={newAttendance.checkInTime}
+                            onChange={(e) => setNewAttendance({...newAttendance, checkInTime: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="checkOutTime">Check Out Time</Label>
+                          <Input
+                            name="checkOutTime"
+                            type="time"
+                            value={newAttendance.checkOutTime}
+                            onChange={(e) => setNewAttendance({...newAttendance, checkOutTime: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea
+                          name="notes"
+                          placeholder="Additional notes..."
+                          value={newAttendance.notes}
+                          onChange={(e) => setNewAttendance({...newAttendance, notes: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={recordAttendanceMutation.isPending}>
+                        {recordAttendanceMutation.isPending ? "Recording..." : "Record Attendance"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </div>
+
+            {/* Attendance Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Today's Attendance</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="text-2xl font-bold text-white">
+                    {Array.isArray(todayAttendance) ? todayAttendance.filter((a: any) => a.status === 'present').length : 0} / {Array.isArray(todayAttendance) ? todayAttendance.length : 0}
+                  </div>
+                  <p className="text-gray-400">Present / Total</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">This Month</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="text-2xl font-bold text-green-400">
+                    {Array.isArray(monthlyAttendanceStats) ? monthlyAttendanceStats.reduce((sum: number, trainer: any) => sum + trainer.presentDays, 0) : 0}
+                  </div>
+                  <p className="text-gray-400">Total Present Days</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">This Year</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="text-2xl font-bold text-blue-400">
+                    {Array.isArray(attendanceStats) ? attendanceStats.reduce((sum: number, trainer: any) => sum + trainer.presentDays, 0) : 0}
+                  </div>
+                  <p className="text-gray-400">Total Present Days</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Quick Mark Attendance */}
+            {selectedDate === new Date().toISOString().split('T')[0] && (
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Quick Mark Attendance - Today</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {trainers?.map((trainer: any) => {
+                      const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
+                      return (
+                        <div key={trainer.userId} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
+                          <div>
+                            <p className="text-white font-medium">{trainer.firstName} {trainer.lastName}</p>
+                            <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ')}</p>
+                          </div>
+                          <div className="flex space-x-2">
+                            {!hasAttendance ? (
+                              <>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                  onClick={() => handleQuickAttendance(trainer.userId, "present")}
+                                  disabled={recordAttendanceMutation.isPending}
+                                >
+                                  Present
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-red-600 hover:bg-red-700 text-white"
+                                  onClick={() => handleQuickAttendance(trainer.userId, "absent")}
+                                  disabled={recordAttendanceMutation.isPending}
+                                >
+                                  Absent
+                                </Button>
+                              </>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                {getAttendanceStatusBadge(hasAttendance.status)}
+                                <span className="text-xs text-gray-400">{hasAttendance.checkInTime}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Today's Attendance Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Attendance for {selectedDate}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Trainer Name</TableHead>
+                      <TableHead className="text-gray-400">Status</TableHead>
+                      <TableHead className="text-gray-400">Check In</TableHead>
+                      <TableHead className="text-gray-400">Check Out</TableHead>
+                      <TableHead className="text-gray-400">Hours</TableHead>
+                      <TableHead className="text-gray-400">Notes</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.isArray(todayAttendance) && todayAttendance.map((attendance: any) => {
+                      const hours = attendance.checkInTime && attendance.checkOutTime 
+                        ? ((new Date(`1970-01-01T${attendance.checkOutTime}:00`).getTime() - new Date(`1970-01-01T${attendance.checkInTime}:00`).getTime()) / (1000 * 60 * 60)).toFixed(1)
+                        : 'N/A';
+                      return (
+                        <TableRow key={attendance._id} className="border-gray-800">
+                          <TableCell className="text-white">{attendance.trainerName}</TableCell>
+                          <TableCell>{getAttendanceStatusBadge(attendance.status)}</TableCell>
+                          <TableCell className="text-gray-400">{attendance.checkInTime || 'N/A'}</TableCell>
+                          <TableCell className="text-gray-400">{attendance.checkOutTime || 'N/A'}</TableCell>
+                          <TableCell className="text-gray-400">{hours}h</TableCell>
+                          <TableCell className="text-gray-400">{attendance.notes || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => {
+                                // Set the attendance data for editing
+                                setNewAttendance({
+                                  trainerId: attendance.trainerId,
+                                  status: attendance.status,
+                                  checkInTime: attendance.checkInTime || "",
+                                  checkOutTime: attendance.checkOutTime || "",
+                                  notes: attendance.notes || ""
+                                });
+                                setShowAttendanceModal(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {(!Array.isArray(todayAttendance) || todayAttendance.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400">
+                          No attendance records for this date
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Monthly/Yearly Statistics */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Trainer Attendance Statistics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Trainer Name</TableHead>
+                      <TableHead className="text-gray-400">Present Days (Month)</TableHead>
+                      <TableHead className="text-gray-400">Present Days (Year)</TableHead>
+                      <TableHead className="text-gray-400">Attendance Rate (Year)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.isArray(attendanceStats) && attendanceStats.map((stat: any) => {
+                      const monthlyData = Array.isArray(monthlyAttendanceStats) ? monthlyAttendanceStats.find((m: any) => m.trainerId === stat.trainerId) : null;
+                      return (
+                        <TableRow key={stat.trainerId} className="border-gray-800">
+                          <TableCell className="text-white">{stat.trainerName}</TableCell>
+                          <TableCell className="text-green-400">{monthlyData?.presentDays || 0}</TableCell>
+                          <TableCell className="text-blue-400">{stat.presentDays}</TableCell>
+                          <TableCell className="text-purple-400">{stat.attendanceRate?.toFixed(1)}%</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {(!Array.isArray(attendanceStats) || attendanceStats.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-gray-400">
+                          No attendance statistics available
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-6">
+            <h2 className="text-2xl font-bold text-gold">Business Reports</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Revenue Analytics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">This Month</span>
+                      <span className="text-white font-bold">${stats?.monthlyRevenue?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Growth Rate</span>
+                      <span className="text-green-400 font-bold">{stats?.growth || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Active Subscriptions</span>
+                      <span className="text-white font-bold">{stats?.activeSubscriptions || 0}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Training Statistics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Total Sessions</span>
+                      <span className="text-white">{stats?.totalSessions || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Active Trainers</span>
+                      <span className="text-white">{stats?.totalTrainers || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Member to Trainer Ratio</span>
+                      <span className="text-white">
+                        {stats?.totalMembers && stats?.totalTrainers
+                          ? Math.round(stats.totalMembers / stats.totalTrainers)
+                          : 0}:1
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <h2 className="text-2xl font-bold text-gold">System Settings</h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Gym Configuration</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSaveGymConfiguration} className="space-y-4">
+                    <div>
+                      <Label htmlFor="gymName">Gym Name</Label>
+                      <Input
+                        id="gymName"
+                        value={gymSettings.gymName}
+                        onChange={(e) => setGymSettings({...gymSettings, gymName: e.target.value})}
+                        className="bg-black border-gray-700 text-white focus:ring-gold"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="address">Address</Label>
+                      <Textarea
+                        id="address"
+                        value={gymSettings.address}
+                        onChange={(e) => setGymSettings({...gymSettings, address: e.target.value})}
+                        className="bg-black border-gray-700 text-white focus:ring-gold"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="hours">Operating Hours</Label>
+                      <Input
+                        id="hours"
+                        value={gymSettings.operatingHours}
+                        onChange={(e) => setGymSettings({...gymSettings, operatingHours: e.target.value})}
+                        className="bg-black border-gray-700 text-white focus:ring-gold"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="bg-gold text-black hover:bg-white"
+                      disabled={updateGymSettingsMutation.isPending}
+                    >
+                      {updateGymSettingsMutation.isPending ? "Saving..." : "Save Configuration"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gray-900 border-gray-800">
+                <CardHeader>
+                  <CardTitle className="text-gold">Membership Settings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleUpdatePricing} className="space-y-4">
+                    {membershipTiers?.map((tier: any) => (
+                      <div key={tier._id}>
+                        <Label htmlFor={`price-${tier._id}`}>{tier.name} Price</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                          <Input
+                            id={`price-${tier._id}`}
+                            type="number"
+                            step="0.01"
+                            value={membershipPricing[tier._id] || ''}
+                            onChange={(e) => setMembershipPricing({
+                              ...membershipPricing,
+                              [tier._id]: e.target.value
+                            })}
+                            className="bg-black border-gray-700 text-white focus:ring-gold pl-8"
+                            placeholder="0.00"
+                          />
+                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">/month</span>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="submit"
+                      className="bg-gold text-black hover:bg-white"
+                      disabled={updateMembershipPricingMutation.isPending}
+                    >
+                      {updateMembershipPricingMutation.isPending ? "Updating..." : "Update Pricing"}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
