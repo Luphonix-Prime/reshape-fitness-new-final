@@ -44,6 +44,60 @@ interface TrainerProfile {
 }
 
 export const storage = {
+  // Get user by ID
+  async getUser(userId: string): Promise<User | null> {
+    try {
+      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (rows.length === 0) return null;
+
+      const row = rows[0];
+      return {
+        id: row.id.toString(),
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        userType: row.user_type,
+        phone: row.phone,
+        stripeSubscriptionId: row.stripe_subscription_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        user_type: row.user_type
+      };
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return null;
+    }
+  },
+
+  // Get user by email
+  async getUserByEmail(email: string): Promise<User | null> {
+    try {
+      const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+      if (rows.length === 0) return null;
+
+      const row = rows[0];
+      return {
+        id: row.id.toString(),
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        userType: row.user_type,
+        phone: row.phone,
+        stripeSubscriptionId: row.stripe_subscription_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        user_type: row.user_type
+      };
+    } catch (error) {
+      console.error('Error getting user by email:', error);
+      return null;
+    }
+  },
+
   // User operations
   async createUser(userData: Omit<User, 'id'>): Promise<User> {
     const { rows } = await pool.query(
@@ -53,85 +107,34 @@ export const storage = {
     return this.mapUserFromDb(rows[0]);
   },
 
-  async getUser(id: string): Promise<User | null> {
-    try {
-      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-      const user = rows[0];
-      if (user) {
-        return {
-          id: user.id,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          userType: user.user_type,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          user_type: user.user_type,
-          phone: user.phone
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting user:', error);
-      return null;
-    }
-  },
-
-  async getUserByEmail(email: string): Promise<User | null> {
-    try {
-      const { rows } = await pool.query(
-        'SELECT * FROM users WHERE email = $1',
-        [email]
-      );
-      const user = rows[0];
-      if (user) {
-        return {
-          id: user.id,
-          email: user.email,
-          firstName: user.first_name,
-          lastName: user.last_name,
-          userType: user.user_type,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          user_type: user.user_type,
-          phone: user.phone
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error getting user by email:', error);
-      return null;
-    }
-  },
-
   async deleteUser(id: string): Promise<void> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // First check if user exists
       const userCheck = await client.query('SELECT * FROM users WHERE id = $1', [id]);
       if (userCheck.rows.length === 0) {
         throw new Error(`User with id ${id} not found`);
       }
-      
+
       const user = userCheck.rows[0];
       console.log(`Deleting user: ${user.first_name} ${user.last_name} (${user.user_type})`);
-      
+
       // Delete related records first (if they exist) - using user_id for profile tables
       await client.query('DELETE FROM member_profiles WHERE user_id = $1', [id]);
       await client.query('DELETE FROM trainer_profiles WHERE user_id = $1', [id]);
-      
+
       // For other tables that might use the profile IDs, we need to handle them differently
       // But for now, let's just delete the user and let CASCADE handle it if set up
-      
+
       // Finally delete the user
       const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
-      
+
       if (result.rows.length === 0) {
         throw new Error(`Failed to delete user with id ${id}`);
       }
-      
+
       await client.query('COMMIT');
       console.log(`Successfully deleted user with id: ${id} (${user.first_name} ${user.last_name})`);
     } catch (error) {
@@ -156,12 +159,12 @@ export const storage = {
   },
 
   // Member profile operations
-  async createMemberProfile(profileData: Omit<MemberProfile, 'id'>): Promise<MemberProfile> {
+  async createMemberProfile(profileData: any): Promise<any> {
     const { rows } = await pool.query(
-      'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact) VALUES ($1, $2, $3, $4) RETURNING *',
-      [profileData.userId, profileData.membershipTierId, profileData.fitnessGoals, profileData.emergencyContact]
+      'INSERT INTO member_profiles (user_id, first_name, last_name, email, phone, membership_tier_id, fitness_goals, emergency_contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [profileData.userId || null, profileData.firstName, profileData.lastName, profileData.email, profileData.phone || null, profileData.membershipTierId, profileData.fitnessGoals, profileData.emergencyContact]
     );
-    return this.mapMemberProfileFromDb(rows[0]);
+    return rows[0];
   },
 
   async getMemberProfile(userId: string): Promise<MemberProfile | null> {
@@ -171,33 +174,29 @@ export const storage = {
   },
 
   async getAllMembers(): Promise<any[]> {
+    // Get only member profiles (exclude demo users completely)
     const { rows } = await pool.query(`
-      SELECT u.*, mp.*, mt.name as membership_tier, mt.price as membership_tier_price
-      FROM users u 
-      LEFT JOIN member_profiles mp ON u.id = mp.user_id 
+      SELECT mp.*, mt.name as membership_tier, mt.price as membership_tier_price
+      FROM member_profiles mp 
       LEFT JOIN membership_tiers mt ON mp.membership_tier_id = mt.id 
-      WHERE u.user_type = 'member'
-      ORDER BY u.created_at DESC
+      WHERE mp.user_id IS NULL
+      ORDER BY mp.created_at DESC
     `);
 
     if (rows.length === 0) return [];
 
-    return rows.map(row => {
-      const user = this.mapUserFromDb(row);
-      if (!user) return null;
-      return {
-        userId: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phone: user.phone,
-        membershipTier: row.membership_tier || 'N/A',
-        membershipTierId: row.membership_tier_id,
-        joinDate: row.created_at,
-        emergencyContact: row.emergency_contact,
-        fitnessGoals: row.fitness_goals
-      };
-    }).filter(member => member !== null);
+    return rows.map(row => ({
+      userId: row.id.toString(),
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      phone: row.phone,
+      membershipTier: row.membership_tier || 'N/A',
+      membershipTierId: row.membership_tier_id,
+      joinDate: row.created_at,
+      emergencyContact: row.emergency_contact,
+      fitnessGoals: row.fitness_goals
+    }));
   },
 
   async updateMemberById(userId: string, updates: any): Promise<void> {
@@ -262,12 +261,12 @@ export const storage = {
   },
 
   // Trainer profile operations
-  async createTrainerProfile(profileData: Omit<TrainerProfile, 'id'>): Promise<TrainerProfile> {
+  async createTrainerProfile(profileData: any): Promise<any> {
     const { rows } = await pool.query(
-      'INSERT INTO trainer_profiles (user_id, specializations, hourly_rate, experience_years, certifications, bio, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [profileData.userId, profileData.specializations, profileData.hourlyRate, profileData.experienceYears, profileData.certifications, profileData.bio, profileData.isAvailable]
+      'INSERT INTO trainer_profiles (user_id, first_name, last_name, email, phone, specializations, hourly_rate, experience_years, certifications, bio, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+      [profileData.userId || null, profileData.firstName, profileData.lastName, profileData.email, profileData.phone || null, profileData.specializations, profileData.hourlyRate, profileData.experienceYears, profileData.certifications, profileData.bio, profileData.isAvailable]
     );
-    return this.mapTrainerProfileFromDb(rows[0]);
+    return rows[0];
   },
 
   async getTrainerProfile(userId: string): Promise<TrainerProfile | null> {
@@ -277,32 +276,28 @@ export const storage = {
   },
 
   async getAllTrainers(): Promise<any[]> {
+    // Get only trainer profiles (exclude demo users completely)
     const { rows } = await pool.query(`
-      SELECT u.*, tp.* 
-      FROM users u 
-      LEFT JOIN trainer_profiles tp ON u.id = tp.user_id 
-      WHERE u.user_type = 'trainer'
-      ORDER BY u.created_at DESC
+      SELECT tp.*
+      FROM trainer_profiles tp 
+      WHERE tp.user_id IS NULL
+      ORDER BY tp.created_at DESC
     `);
 
     if (rows.length === 0) return [];
 
-    return rows.map(row => {
-      const user = this.mapUserFromDb(row);
-      if (!user) return null;
-      return {
-        userId: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        specializations: row.specializations || [],
-        hourlyRate: row.hourly_rate || 75,
-        experienceYears: row.experience_years || 2,
-        certifications: row.certifications || '',
-        bio: row.bio || '',
-        isAvailable: row.is_available !== false
-      };
-    }).filter(trainer => trainer !== null);
+    return rows.map(row => ({
+      userId: row.id.toString(),
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      specializations: row.specializations || [],
+      hourlyRate: row.hourly_rate || 75,
+      experienceYears: row.experience_years || 2,
+      certifications: row.certifications || '',
+      bio: row.bio || '',
+      isAvailable: row.is_available !== false
+    }));
   },
 
   async updateTrainerById(userId: string, updates: any): Promise<void> {
@@ -465,7 +460,7 @@ export const storage = {
       'SELECT u.first_name, u.last_name FROM users u WHERE u.id = $1',
       [assessmentData.memberId]
     );
-    
+
     const clientName = memberQuery.rows[0] 
       ? `${memberQuery.rows[0].first_name} ${memberQuery.rows[0].last_name}`
       : 'Unknown Client';
@@ -588,7 +583,7 @@ export const storage = {
         WHERE u.email LIKE 'contact_%'
         ORDER BY u.created_at DESC
       `);
-      
+
       return rows.map(row => ({
         _id: row.id,
         firstName: row.first_name,
@@ -604,6 +599,134 @@ export const storage = {
       console.error('Error getting contact submissions:', error);
       return [];
     }
+  },
+
+  // Trainer attendance methods
+  async recordTrainerAttendance(attendanceData: any): Promise<any> {
+    // Convert empty strings to null for time fields
+    const checkInTime = attendanceData.checkInTime && attendanceData.checkInTime.trim() !== '' ? attendanceData.checkInTime : null;
+    const checkOutTime = attendanceData.checkOutTime && attendanceData.checkOutTime.trim() !== '' ? attendanceData.checkOutTime : null;
+    const notes = attendanceData.notes && attendanceData.notes.trim() !== '' ? attendanceData.notes : null;
+
+    const { rows } = await pool.query(
+      `INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       ON CONFLICT (trainer_id, date) 
+       DO UPDATE SET status = $3, check_in_time = $4, check_out_time = $5, notes = $6, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [attendanceData.trainerId, attendanceData.date, attendanceData.status, checkInTime, checkOutTime, notes]
+    );
+    return rows[0];
+  },
+
+  async getTrainerAttendance(date: string): Promise<any[]> {
+    const { rows } = await pool.query(`
+      SELECT ta.*, tp.first_name, tp.last_name, tp.email,
+             CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name
+      FROM trainer_attendance ta 
+      JOIN trainer_profiles tp ON ta.trainer_id = tp.id 
+      WHERE ta.date = $1 
+      ORDER BY ta.check_in_time DESC NULLS LAST
+    `, [date]);
+    return rows.map(row => ({
+      ...row,
+      _id: row.id,
+      trainerId: row.trainer_id,
+      trainerName: row.trainer_name,
+      checkInTime: row.check_in_time,
+      checkOutTime: row.check_out_time
+    }));
+  },
+
+  // Member session scheduling methods
+  async createMemberSession(sessionData: any): Promise<any> {
+    // Validate and clean input data
+    const memberId = sessionData.memberId || null;
+    const trainerId = sessionData.trainerId || null;
+    const sessionType = sessionData.sessionType && sessionData.sessionType.trim() !== '' ? sessionData.sessionType : 'General Training';
+    const scheduledDate = sessionData.scheduledDate || null;
+    const scheduledTime = sessionData.scheduledTime && sessionData.scheduledTime.trim() !== '' ? sessionData.scheduledTime : null;
+    const duration = sessionData.duration || 60;
+    const status = sessionData.status || 'scheduled';
+    const notes = sessionData.notes && sessionData.notes.trim() !== '' ? sessionData.notes : null;
+    const memberName = sessionData.memberName && sessionData.memberName.trim() !== '' ? sessionData.memberName : null;
+    const trainerName = sessionData.trainerName && sessionData.trainerName.trim() !== '' ? sessionData.trainerName : null;
+
+    const { rows } = await pool.query(
+      `INSERT INTO member_sessions (member_id, trainer_id, session_type, scheduled_date, scheduled_time, duration, status, notes, member_name, trainer_name) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [memberId, trainerId, sessionType, scheduledDate, scheduledTime, duration, status, notes, memberName, trainerName]
+    );
+    return rows[0];
+  },
+
+  async getMemberSessions(filters: any): Promise<any[]> {
+    let query = `
+      SELECT ms.*, mp.first_name as member_first_name, mp.last_name as member_last_name,
+             tp.first_name as trainer_first_name, tp.last_name as trainer_last_name
+      FROM member_sessions ms 
+      LEFT JOIN member_profiles mp ON ms.member_id = mp.id
+      LEFT JOIN trainer_profiles tp ON ms.trainer_id = tp.id
+      WHERE 1=1`;
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.memberId) {
+      query += ` AND ms.member_id = $${paramIndex++}`;
+      params.push(filters.memberId);
+    }
+    if (filters.trainerId) {
+      query += ` AND ms.trainer_id = $${paramIndex++}`;
+      params.push(filters.trainerId);
+    }
+    if (filters.date) {
+      query += ` AND ms.scheduled_date = $${paramIndex++}`;
+      params.push(filters.date);
+    }
+
+    query += ' ORDER BY ms.scheduled_date DESC, ms.scheduled_time DESC';
+    const { rows } = await pool.query(query, params);
+    return rows.map(row => ({
+      ...row,
+      memberName: `${row.member_first_name || ''} ${row.member_last_name || ''}`.trim() || row.member_name,
+      trainerName: `${row.trainer_first_name || ''} ${row.trainer_last_name || ''}`.trim() || row.trainer_name
+    }));
+  },
+
+  async updateMemberSession(sessionId: string, updates: any): Promise<void> {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.status && updates.status.trim() !== '') {
+      fields.push(`status = $${paramIndex++}`);
+      values.push(updates.status);
+    }
+    if (updates.notes !== undefined) {
+      fields.push(`notes = $${paramIndex++}`);
+      values.push(updates.notes && updates.notes.trim() !== '' ? updates.notes : null);
+    }
+    if (updates.scheduledDate && updates.scheduledDate.trim() !== '') {
+      fields.push(`scheduled_date = $${paramIndex++}`);
+      values.push(updates.scheduledDate);
+    }
+    if (updates.scheduledTime !== undefined) {
+      fields.push(`scheduled_time = $${paramIndex++}`);
+      values.push(updates.scheduledTime && updates.scheduledTime.trim() !== '' ? updates.scheduledTime : null);
+    }
+
+    if (fields.length > 0) {
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(sessionId);
+      await pool.query(
+        `UPDATE member_sessions SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    }
+  },
+
+  async deleteMemberSession(sessionId: string): Promise<void> {
+    await pool.query('DELETE FROM member_sessions WHERE id = $1', [sessionId]);
   },
 
   // Helper methods for mapping database results

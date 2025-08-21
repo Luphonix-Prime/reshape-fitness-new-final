@@ -60,6 +60,10 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS member_profiles (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      first_name VARCHAR(255) NOT NULL,
+      last_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      phone VARCHAR(20),
       membership_tier_id INTEGER REFERENCES membership_tiers(id),
       fitness_goals TEXT,
       emergency_contact VARCHAR(255),
@@ -72,6 +76,10 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS trainer_profiles (
       id SERIAL PRIMARY KEY,
       user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      first_name VARCHAR(255) NOT NULL,
+      last_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      phone VARCHAR(20),
       specializations TEXT[],
       hourly_rate DECIMAL(10,2) DEFAULT 75.00,
       experience_years INTEGER DEFAULT 2,
@@ -184,6 +192,39 @@ async function createTables() {
     );
   `;
 
+  const createTrainerAttendanceTable = `
+    CREATE TABLE IF NOT EXISTS trainer_attendance (
+      id SERIAL PRIMARY KEY,
+      trainer_id INTEGER REFERENCES trainer_profiles(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'present',
+      check_in_time TIME,
+      check_out_time TIME,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(trainer_id, date)
+    );
+  `;
+
+  const createMemberSessionsTable = `
+    CREATE TABLE IF NOT EXISTS member_sessions (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE,
+      trainer_id INTEGER REFERENCES trainer_profiles(id) ON DELETE CASCADE,
+      session_type VARCHAR(255) NOT NULL,
+      scheduled_date DATE NOT NULL,
+      scheduled_time TIME NOT NULL,
+      duration INTEGER DEFAULT 60,
+      status VARCHAR(50) DEFAULT 'scheduled',
+      notes TEXT,
+      member_name VARCHAR(255),
+      trainer_name VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
   const tables = [
     createUsersTable,
     createMembershipTiersTable,
@@ -194,7 +235,9 @@ async function createTables() {
     createWorkoutPlansTable,
     createNutritionPlansTable,
     createBodyAssessmentsTable,
-    createAttendanceTable
+    createAttendanceTable,
+    createTrainerAttendanceTable,
+    createMemberSessionsTable
   ];
 
   for (const table of tables) {
@@ -204,72 +247,94 @@ async function createTables() {
 
 async function insertSampleData() {
   try {
-    // Check if data already exists
+    // Insert membership tiers (always check/insert these)
     const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
-    if (parseInt(existingTiers[0].count) > 0) {
-      console.log('Sample data already exists, skipping insertion');
-      return;
+    if (parseInt(existingTiers[0].count) === 0) {
+      const tierInserts = [
+        {
+          name: 'BRONZE',
+          price: 199,
+          features: ['Access to gym equipment', 'Locker room access', 'Basic fitness assessment'],
+          description: 'Perfect for getting started on your fitness journey'
+        },
+        {
+          name: 'SILVER',
+          price: 299,
+          features: ['Everything in Bronze', '2 personal training sessions/month', 'Nutrition consultation', 'Group classes'],
+          description: 'Enhanced experience with personal guidance'
+        },
+        {
+          name: 'GOLD',
+          price: 499,
+          features: ['Everything in Silver', 'Unlimited personal training', 'Custom meal plans', 'Recovery services', '24/7 gym access'],
+          description: 'The ultimate luxury fitness experience'
+        }
+      ];
+
+      for (const tier of tierInserts) {
+        await pool.query(
+          'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
+          [tier.name, tier.price, tier.features, tier.description]
+        );
+      }
+      console.log('Membership tiers inserted');
     }
 
-    // Insert membership tiers
-    const tierInserts = [
-      {
-        name: 'BRONZE',
-        price: 199,
-        features: ['Access to gym equipment', 'Locker room access', 'Basic fitness assessment'],
-        description: 'Perfect for getting started on your fitness journey'
-      },
-      {
-        name: 'SILVER',
-        price: 299,
-        features: ['Everything in Bronze', '2 personal training sessions/month', 'Nutrition consultation', 'Group classes'],
-        description: 'Enhanced experience with personal guidance'
-      },
-      {
-        name: 'GOLD',
-        price: 499,
-        features: ['Everything in Silver', 'Unlimited personal training', 'Custom meal plans', 'Recovery services', '24/7 gym access'],
-        description: 'The ultimate luxury fitness experience'
-      }
-    ];
+    // Always ensure admin, trainer, and member users exist
+    const adminEmail = 'admin@reshape.com';
+    const trainerEmail = 'trainer@reshape.com';
+    const memberEmail = 'member@reshape.com';
 
-    for (const tier of tierInserts) {
-      await pool.query(
-        'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
-        [tier.name, tier.price, tier.features, tier.description]
-      );
-    }
-
-    // Insert sample users
-    const userInserts = [
-      {
-        email: 'admin@reshape.com',
-        firstName: 'Admin',
-        lastName: 'User',
-        userType: 'admin'
-      },
-      {
-        email: 'trainer@reshape.com',
-        firstName: 'Trainer',
-        lastName: 'Pro',
-        userType: 'trainer'
-      },
-      {
-        email: 'member@reshape.com',
-        firstName: 'Member',
-        lastName: 'Test',
-        userType: 'member'
-      }
-    ];
-
-    for (const user of userInserts) {
+    // Check and insert admin user
+    const { rows: existingAdmin } = await pool.query('SELECT id FROM users WHERE email = $1', [adminEmail]);
+    if (existingAdmin.length === 0) {
       await pool.query(
         'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4)',
-        [user.email, user.firstName, user.lastName, user.userType]
+        [adminEmail, 'Admin', 'User', 'admin']
       );
+      console.log('Admin user created');
     }
 
-    console.log('Sample data inserted successfully');
+    // Check and insert trainer user
+    const { rows: existingTrainer } = await pool.query('SELECT id FROM users WHERE email = $1', [trainerEmail]);
+    if (existingTrainer.length === 0) {
+      const { rows: trainerRows } = await pool.query(
+        'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4) RETURNING id',
+        [trainerEmail, 'Trainer', 'Pro', 'trainer']
+      );
+      
+      // Create trainer profile
+      if (trainerRows[0]) {
+        await pool.query(
+          'INSERT INTO trainer_profiles (user_id, specializations, hourly_rate, experience_years, certifications, bio, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [trainerRows[0].id, ['Strength Training', 'Cardio', 'Weight Loss'], 75.00, 3, 'NASM Certified Personal Trainer', 'Experienced fitness trainer specializing in strength training and weight loss.', true]
+        );
+      }
+      console.log('Trainer user and profile created');
+    }
+
+    // Check and insert member user
+    const { rows: existingMember } = await pool.query('SELECT id FROM users WHERE email = $1', [memberEmail]);
+    if (existingMember.length === 0) {
+      const { rows: memberRows } = await pool.query(
+        'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4) RETURNING id',
+        [memberEmail, 'Member', 'Test', 'member']
+      );
+      
+      // Create member profile with a membership tier
+      if (memberRows[0]) {
+        const { rows: tierRows } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['BRONZE']);
+        if (tierRows[0]) {
+          await pool.query(
+            'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact) VALUES ($1, $2, $3, $4)',
+            [memberRows[0].id, tierRows[0].id, 'General fitness and health improvement', memberEmail]
+          );
+        }
+      }
+      console.log('Member user and profile created');
+    }
+
+    console.log('Sample data initialization completed successfully');
   } catch (error) {
     console.error('Error inserting sample data:', error);
   }

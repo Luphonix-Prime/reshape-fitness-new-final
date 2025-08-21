@@ -1,4 +1,3 @@
-
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import session from 'express-session';
@@ -13,12 +12,12 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
       req.user = { claims: { sub: req.session.user.id } };
       return next();
     }
-    
+
     // Allow some endpoints without auth
     if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/test') || req.path.startsWith('/api/contact')) {
       return next();
     }
-    
+
     // Check if user exists in database as fallback
     if (req.user?.claims?.sub) {
       const user = await storage.getUser(req.user.claims.sub);
@@ -26,7 +25,7 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
         return next();
       }
     }
-    
+
     return res.status(401).json({ message: "Authentication required" });
   } catch (error) {
     console.error("Authentication middleware error:", error);
@@ -52,17 +51,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/login', async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       // Validate input
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
-      
+
       let userData = null;
-      
+
       // Check main user credentials
       if (email === "admin" && password === "admin") {
-        // Try to get from database, fallback to hardcoded
+        // Get admin user from database
         try {
           const dbUser = await storage.getUserByEmail("admin@reshape.com");
           if (dbUser) {
@@ -77,27 +76,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               last_name: dbUser.lastName || dbUser.last_name || 'User',
               user_type: dbUser.userType || dbUser.user_type || 'admin'
             };
+          } else {
+            return res.status(401).json({ message: "Admin user not found in database. Please check database initialization." });
           }
         } catch (dbError) {
           console.error("Database lookup error for admin:", dbError);
-        }
-        
-        // Fallback to hardcoded admin
-        if (!userData) {
-          userData = {
-            id: "1",
-            email: "admin@reshape.com",
-            firstName: "Admin",
-            lastName: "User",
-            userType: "admin",
-            role: "admin",
-            first_name: "Admin",
-            last_name: "User",
-            user_type: "admin"
-          };
+          return res.status(500).json({ message: "Database error during admin authentication." });
         }
       } else if (email === "trainer" && password === "trainer") {
-        // Try to get trainer from database, fallback to hardcoded
+        // Get trainer user from database
         try {
           const dbUser = await storage.getUserByEmail("trainer@reshape.com");
           if (dbUser) {
@@ -112,27 +99,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               last_name: dbUser.lastName || dbUser.last_name || 'Pro',
               user_type: dbUser.userType || dbUser.user_type || 'trainer'
             };
+          } else {
+            return res.status(401).json({ message: "Trainer user not found in database. Please check database initialization." });
           }
         } catch (dbError) {
           console.error("Database lookup error for trainer:", dbError);
-        }
-        
-        // Fallback to hardcoded trainer
-        if (!userData) {
-          userData = {
-            id: "2",
-            email: "trainer@reshape.com",
-            firstName: "Trainer",
-            lastName: "Pro",
-            userType: "trainer",
-            role: "trainer",
-            first_name: "Trainer",
-            last_name: "Pro",
-            user_type: "trainer"
-          };
+          return res.status(500).json({ message: "Database error during trainer authentication." });
         }
       } else if (email === "member" && password === "member") {
-        // Try to get member from database, fallback to hardcoded
+        // Get member user from database
         try {
           const dbUser = await storage.getUserByEmail("member@reshape.com");
           if (dbUser) {
@@ -147,34 +122,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               last_name: dbUser.lastName || dbUser.last_name || 'Test',
               user_type: dbUser.userType || dbUser.user_type || 'member'
             };
+          } else {
+            return res.status(401).json({ message: "Member user not found in database. Please check database initialization." });
           }
         } catch (dbError) {
           console.error("Database lookup error for member:", dbError);
-        }
-        
-        // Fallback to hardcoded member
-        if (!userData) {
-          userData = {
-            id: "3",
-            email: "member@reshape.com",
-            firstName: "Member",
-            lastName: "Test",
-            userType: "member",
-            role: "member",
-            first_name: "Member",
-            last_name: "Test",
-            user_type: "member"
-          };
+          return res.status(500).json({ message: "Database error during member authentication." });
         }
       }
-      
+
       if (!userData) {
         return res.status(401).json({ message: "Invalid credentials. Use: admin/admin, trainer/trainer, or member/member" });
       }
-      
+
       // Store user in session
       req.session.user = userData;
-      
+
       res.json({ 
         message: "Login successful",
         user: userData,
@@ -194,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Session destroy error:", err);
           return res.status(500).json({ message: "Logout failed" });
         }
-        
+
         // Clear the session cookie
         res.clearCookie('connect.sid');
         res.json({ message: "Logout successful" });
@@ -225,7 +188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/contact', async (req, res) => {
     try {
       const { firstName, lastName, email, phone, location, interest, message } = req.body;
-      
+
       // Validate required fields
       if (!firstName || !lastName || !email || !phone || !location || !interest || !message) {
         return res.status(400).json({ message: "All fields are required" });
@@ -239,9 +202,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userType: 'member',
         phone
       });
-      
+
       console.log('Contact form submitted:', { firstName, lastName, email, location, interest });
-      
+
       res.json({ 
         message: "Contact form submitted successfully",
         submissionId: contactUser.id
@@ -283,15 +246,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         return res.json(userData);
       }
-      
+
       // Fallback to database lookup for legacy users
       const userId = req.user?.claims?.sub;
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
       }
-      
+
       const user = await storage.getUser(userId);
-      
+
       if (!user) {
         return res.status(401).json({ message: "Not authenticated" });
       }
@@ -391,7 +354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user?.claims?.sub || '1';
       const user = await storage.getUser(userId);
-      
+
       let sessions = [];
       if (user?.userType === 'member') {
         const memberProfile = await storage.getMemberProfile(userId);
@@ -428,7 +391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user?.claims?.sub || '1';
       const user = await storage.getUser(userId);
-      
+
       let plans = [];
       if (user?.userType === 'member') {
         const memberProfile = await storage.getMemberProfile(userId);
@@ -465,7 +428,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user?.claims?.sub || '1';
       const user = await storage.getUser(userId);
-      
+
       let plans = [];
       if (user?.userType === 'member') {
         const memberProfile = await storage.getMemberProfile(userId);
@@ -502,7 +465,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user?.claims?.sub || '1';
       const user = await storage.getUser(userId);
-      
+
       let assessments = [];
       if (user?.userType === 'member') {
         const memberProfile = await storage.getMemberProfile(userId);
@@ -728,6 +691,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Member session routes
+  app.post('/api/admin/member-sessions', async (req, res) => {
+    try {
+      const { memberId, trainerId, sessionType, scheduledDate, scheduledTime, duration, notes, memberName, trainerName } = req.body;
+
+      if (!memberId || !trainerId || !sessionType || !scheduledDate) {
+        return res.status(400).json({ message: "Missing required fields: memberId, trainerId, sessionType, scheduledDate" });
+      }
+
+      // Validate time format if provided
+      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (scheduledTime && scheduledTime.trim() !== '' && !timePattern.test(scheduledTime)) {
+        return res.status(400).json({ message: "Invalid time format. Use HH:MM format." });
+      }
+
+      const session = await storage.createMemberSession({
+        memberId,
+        trainerId,
+        sessionType,
+        scheduledDate,
+        scheduledTime,
+        duration: duration || 60,
+        notes,
+        memberName,
+        trainerName
+      });
+
+      res.json({ 
+        message: "Session scheduled successfully",
+        session
+      });
+    } catch (error: any) {
+      console.error("Error creating member session:", error);
+      res.status(500).json({ message: error.message || "Failed to create session" });
+    }
+  });
+
+  app.get('/api/admin/member-sessions', async (req, res) => {
+    try {
+      const { memberId, trainerId, date } = req.query;
+      const sessions = await storage.getMemberSessions({ memberId, trainerId, date });
+      res.json(sessions);
+    } catch (error: any) {
+      console.error("Error fetching member sessions:", error);
+      res.status(500).json({ message: "Failed to fetch sessions" });
+    }
+  });
+
+  app.put('/api/admin/member-sessions/:sessionId', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      const updates = req.body;
+
+      // Validate time format if provided
+      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (updates.scheduledTime && updates.scheduledTime.trim() !== '' && !timePattern.test(updates.scheduledTime)) {
+        return res.status(400).json({ message: "Invalid time format. Use HH:MM format." });
+      }
+
+      await storage.updateMemberSession(sessionId, updates);
+      res.json({ message: "Session updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating member session:", error);
+      res.status(500).json({ message: error.message || "Failed to update session" });
+    }
+  });
+
+  app.delete('/api/admin/member-sessions/:sessionId', async (req, res) => {
+    try {
+      const { sessionId } = req.params;
+      await storage.deleteMemberSession(sessionId);
+      res.json({ message: "Session deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting member session:", error);
+      res.status(500).json({ message: error.message || "Failed to delete session" });
+    }
+  });
+
   // Member routes
   app.get('/api/member/stats', async (req, res) => {
     try {
@@ -811,7 +852,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes
   app.get('/api/admin/members', async (req, res) => {
     try {
-      const members = await storage.getAllMembers();
+      // Exclude demo users from management lists
+      const members = await storage.getAllMembers({ excludeDemo: true });
       res.json(members);
     } catch (error) {
       console.error("Error fetching members:", error);
@@ -865,7 +907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { inquiryId } = req.params;
       const { memberData, assessmentData } = req.body;
-      
+
       // Mock conversion functionality
       res.json({ message: "Inquiry converted successfully" });
     } catch (error) {
@@ -889,59 +931,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/attendance', async (req, res) => {
     try {
       const { trainerId, status, date, checkInTime, checkOutTime, notes } = req.body;
-      
+
       if (!trainerId || !status || !date) {
         return res.status(400).json({ message: "Missing required fields: trainerId, status, date" });
       }
 
-      // For now, create a simple attendance record
-      // In a real app, you'd have a proper attendance table
-      const { rows } = await pool.query(
-        `INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes, created_at) 
-         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
-         ON CONFLICT (trainer_id, date) 
-         DO UPDATE SET status = $3, check_in_time = $4, check_out_time = $5, notes = $6, updated_at = CURRENT_TIMESTAMP
-         RETURNING *`,
-        [trainerId, date, status, checkInTime, checkOutTime, notes]
-      );
+      // Validate time format if provided
+      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      
+      if (checkInTime && checkInTime.trim() !== '' && !timePattern.test(checkInTime)) {
+        return res.status(400).json({ message: "Invalid check-in time format. Use HH:MM format." });
+      }
+      
+      if (checkOutTime && checkOutTime.trim() !== '' && !timePattern.test(checkOutTime)) {
+        return res.status(400).json({ message: "Invalid check-out time format. Use HH:MM format." });
+      }
+
+      const attendance = await storage.recordTrainerAttendance({
+        trainerId,
+        date,
+        status,
+        checkInTime: checkInTime || null,
+        checkOutTime: checkOutTime || null,
+        notes: notes || null
+      });
 
       res.json({ 
         message: "Attendance recorded successfully",
-        attendance: rows[0]
+        attendance
       });
     } catch (error: any) {
       console.error("Error recording attendance:", error);
-      // Create table if it doesn't exist
-      if (error.message?.includes('relation "trainer_attendance" does not exist')) {
-        try {
-          await pool.query(`
-            CREATE TABLE IF NOT EXISTS trainer_attendance (
-              id SERIAL PRIMARY KEY,
-              trainer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-              date DATE NOT NULL,
-              status VARCHAR(20) NOT NULL,
-              check_in_time TIME,
-              check_out_time TIME,
-              notes TEXT,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              UNIQUE(trainer_id, date)
-            )
-          `);
-          res.json({ message: "Attendance table created. Please try again." });
-        } catch (createError) {
-          console.error("Error creating attendance table:", createError);
-          res.status(500).json({ message: "Failed to create attendance table" });
-        }
-      } else {
-        res.status(500).json({ message: error.message || "Failed to record attendance" });
-      }
+      res.status(500).json({ message: error.message || "Failed to record attendance" });
     }
   });
 
   app.get('/api/admin/trainers', async (req, res) => {
     try {
-      const trainers = await storage.getAllTrainers();
+      // Exclude demo users from management lists
+      const trainers = await storage.getAllTrainers({ excludeDemo: true });
       res.json(trainers);
     } catch (error) {
       console.error("Error fetching trainers:", error);
@@ -962,44 +990,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/create-member', async (req, res) => {
     try {
       const { firstName, lastName, email, membershipTierId, phone, emergencyContact, fitnessGoals } = req.body;
-      
+
       console.log('Creating member with data:', req.body);
-      
+
       if (!firstName || !lastName || !email) {
         return res.status(400).json({ message: "Missing required fields: firstName, lastName, email" });
       }
 
-      // Check if user already exists
-      const existingUser = await storage.getUserByEmail(email);
-      if (existingUser) {
-        return res.status(400).json({ message: "User with this email already exists" });
+      // Check if email already exists in member_profiles
+      const { rows: existingMembers } = await pool.query('SELECT * FROM member_profiles WHERE email = $1', [email]);
+      if (existingMembers.length > 0) {
+        return res.status(400).json({ message: "Member with this email already exists" });
       }
 
-      const newUser = await storage.createUser({
-        email,
+      // Create member profile directly (no user creation)
+      const memberProfile = await storage.createMemberProfile({
         firstName,
         lastName,
-        userType: 'member',
-        phone: phone || null
+        email,
+        phone: phone || null,
+        membershipTierId: membershipTierId || null,
+        emergencyContact: emergencyContact || email,
+        fitnessGoals: fitnessGoals || "General fitness improvement"
       });
 
-      console.log('Created user:', newUser);
-
-      // Only create member profile if membershipTierId is provided
-      let memberProfile = null;
-      if (membershipTierId) {
-        memberProfile = await storage.createMemberProfile({
-          userId: newUser.id,
-          membershipTierId,
-          emergencyContact: emergencyContact || email,
-          fitnessGoals: fitnessGoals || "General fitness improvement"
-        });
-        console.log('Created member profile:', memberProfile);
-      }
+      console.log('Created member profile:', memberProfile);
 
       res.json({ 
         message: "Member created successfully",
-        user: newUser, 
         profile: memberProfile 
       });
     } catch (error: any) {
@@ -1010,21 +1028,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/create-trainer', async (req, res) => {
     try {
-      const { firstName, lastName, email, specializations, hourlyRate, experienceYears, certifications, bio } = req.body;
-      
+      const { firstName, lastName, email, phone, specializations, hourlyRate, experienceYears, certifications, bio } = req.body;
+
       if (!firstName || !lastName || !email) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const newUser = await storage.createUser({
-        email,
+      // Check if email already exists in trainer_profiles
+      const { rows: existingTrainers } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [email]);
+      if (existingTrainers.length > 0) {
+        return res.status(400).json({ message: "Trainer with this email already exists" });
+      }
+
+      // Create trainer profile directly (no user creation)
+      const trainerProfile = await storage.createTrainerProfile({
         firstName,
         lastName,
-        userType: 'trainer'
-      });
-
-      const trainerProfile = await storage.createTrainerProfile({
-        userId: newUser.id,
+        email,
+        phone: phone || null,
         specializations: specializations || [],
         hourlyRate: hourlyRate || 75.00,
         experienceYears: experienceYears || 2,
@@ -1033,7 +1054,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isAvailable: true
       });
 
-      res.json({ user: newUser, profile: trainerProfile });
+      res.json({ profile: trainerProfile });
     } catch (error: any) {
       console.error("Error creating trainer:", error);
       res.status(500).json({ message: error.message || "Failed to create trainer" });
@@ -1043,70 +1064,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/delete-member/:userId', async (req, res) => {
     try {
       const { userId } = req.params;
-      
+
       if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
+        return res.status(400).json({ message: "Profile ID is required" });
       }
 
-      console.log(`Attempting to delete member with userId: ${userId}`);
-      
-      // First check if user exists and is a member
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      console.log(`Attempting to delete member profile with ID: ${userId}`);
+
+      // Delete from member_profiles table
+      const { rows } = await pool.query('DELETE FROM member_profiles WHERE id = $1 RETURNING *', [userId]);
+
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "Member profile not found" });
       }
 
-      if (user.userType !== 'member') {
-        return res.status(400).json({ message: "User is not a member" });
-      }
-
-      // Delete user (this should cascade to delete member profile)
-      await storage.deleteUser(userId);
-      
-      console.log(`Successfully deleted member with userId: ${userId}`);
+      console.log(`Successfully deleted member profile with ID: ${userId}`);
       res.json({ message: "Member deleted successfully", success: true });
     } catch (error: any) {
       console.error("Error deleting member:", error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ message: error.message });
-      } else {
-        res.status(500).json({ message: error.message || "Failed to delete member" });
-      }
+      res.status(500).json({ message: error.message || "Failed to delete member" });
     }
   });
 
   app.delete('/api/admin/delete-trainer/:userId', async (req, res) => {
     try {
       const { userId } = req.params;
-      
+
       if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
+        return res.status(400).json({ message: "Profile ID is required" });
       }
 
-      console.log(`Attempting to delete trainer with userId: ${userId}`);
-      
-      // First check if user exists and is a trainer
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
+      console.log(`Attempting to delete trainer profile with ID: ${userId}`);
+
+      // Delete from trainer_profiles table
+      const { rows } = await pool.query('DELETE FROM trainer_profiles WHERE id = $1 RETURNING *', [userId]);
+
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
       }
 
-      if (user.userType !== 'trainer') {
-        return res.status(400).json({ message: "User is not a trainer" });
-      }
-
-      // Delete user (this should cascade to delete trainer profile)
-      await storage.deleteUser(userId);
-      
-      console.log(`Successfully deleted trainer with userId: ${userId}`);
+      console.log(`Successfully deleted trainer profile with ID: ${userId}`);
       res.json({ message: "Trainer deleted successfully", success: true });
     } catch (error: any) {
       console.error("Error deleting trainer:", error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ message: error.message });
-      } else {
-        res.status(500).json({ message: error.message || "Failed to delete trainer" });
-      }
+      res.status(500).json({ message: error.message || "Failed to delete trainer" });
     }
   });
 
@@ -1114,12 +1115,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       const updates = req.body;
-      
+
       if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
+        return res.status(400).json({ message: "Profile ID is required" });
       }
 
-      await storage.updateMemberById(userId, updates);
+      // Update member profile directly
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      if (updates.firstName) {
+        fields.push(`first_name = $${paramIndex++}`);
+        values.push(updates.firstName);
+      }
+      if (updates.lastName) {
+        fields.push(`last_name = $${paramIndex++}`);
+        values.push(updates.lastName);
+      }
+      if (updates.email) {
+        fields.push(`email = $${paramIndex++}`);
+        values.push(updates.email);
+      }
+      if (updates.phone) {
+        fields.push(`phone = $${paramIndex++}`);
+        values.push(updates.phone);
+      }
+      if (updates.membershipTierId) {
+        fields.push(`membership_tier_id = $${paramIndex++}`);
+        values.push(updates.membershipTierId);
+      }
+      if (updates.fitnessGoals) {
+        fields.push(`fitness_goals = $${paramIndex++}`);
+        values.push(updates.fitnessGoals);
+      }
+      if (updates.emergencyContact) {
+        fields.push(`emergency_contact = $${paramIndex++}`);
+        values.push(updates.emergencyContact);
+      }
+
+      if (fields.length > 0) {
+        fields.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(userId);
+        await pool.query(
+          `UPDATE member_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+          values
+        );
+      }
+
       res.json({ message: "Member updated successfully" });
     } catch (error: any) {
       console.error("Error updating member:", error);
@@ -1131,12 +1174,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       const updates = req.body;
-      
+
       if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
+        return res.status(400).json({ message: "Profile ID is required" });
       }
 
-      await storage.updateTrainerById(userId, updates);
+      // Update trainer profile directly
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      if (updates.firstName) {
+        fields.push(`first_name = $${paramIndex++}`);
+        values.push(updates.firstName);
+      }
+      if (updates.lastName) {
+        fields.push(`last_name = $${paramIndex++}`);
+        values.push(updates.lastName);
+      }
+      if (updates.email) {
+        fields.push(`email = $${paramIndex++}`);
+        values.push(updates.email);
+      }
+      if (updates.phone) {
+        fields.push(`phone = $${paramIndex++}`);
+        values.push(updates.phone);
+      }
+      if (updates.specializations) {
+        fields.push(`specializations = $${paramIndex++}`);
+        values.push(updates.specializations);
+      }
+      if (updates.hourlyRate) {
+        fields.push(`hourly_rate = $${paramIndex++}`);
+        values.push(updates.hourlyRate);
+      }
+      if (updates.experienceYears) {
+        fields.push(`experience_years = $${paramIndex++}`);
+        values.push(updates.experienceYears);
+      }
+      if (updates.certifications) {
+        fields.push(`certifications = $${paramIndex++}`);
+        values.push(updates.certifications);
+      }
+      if (updates.bio !== undefined) {
+        fields.push(`bio = $${paramIndex++}`);
+        values.push(updates.bio);
+      }
+      if (updates.isAvailable !== undefined) {
+        fields.push(`is_available = $${paramIndex++}`);
+        values.push(updates.isAvailable);
+      }
+
+      if (fields.length > 0) {
+        fields.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(userId);
+        await pool.query(
+          `UPDATE trainer_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+          values
+        );
+      }
+
       res.json({ message: "Trainer updated successfully" });
     } catch (error: any) {
       console.error("Error updating trainer:", error);
