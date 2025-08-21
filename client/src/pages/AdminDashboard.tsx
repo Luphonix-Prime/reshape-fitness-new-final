@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,35 +17,8 @@ import Navigation from "@/components/Navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AdminDashboard() {
+  // ALL HOOKS MUST BE DECLARED AT THE TOP - BEFORE ANY CONDITIONAL LOGIC
   const { user, isAuthenticated, isLoading } = useAuth();
-
-  // Show loading spinner while checking authentication
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
-      </div>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    window.location.href = '/login';
-    return null;
-  }
-
-  // Check if user has admin role
-  if (user?.userType !== 'admin' && user?.role !== 'admin') {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white text-center">
-          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
-          <p className="text-gray-300">You don't have permission to access this page.</p>
-        </div>
-      </div>
-    );
-  }
-
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("members");
@@ -206,7 +179,7 @@ export default function AdminDashboard() {
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to create member",
+        description: error.response?.data?.message || error.message || "Failed to create member",
         variant: "destructive"
       });
     }
@@ -419,7 +392,18 @@ export default function AdminDashboard() {
     if (!newMember.firstName || !newMember.lastName || !newMember.email) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (First Name, Last Name, Email)",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Ensure membershipTierId is set
+    const membershipTierId = newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id);
+    if (!membershipTierId) {
+      toast({
+        title: "Error",
+        description: "Please select a membership type",
         variant: "destructive"
       });
       return;
@@ -427,8 +411,10 @@ export default function AdminDashboard() {
 
     const memberData = {
       ...newMember,
-      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || "")
+      membershipTierId
     };
+
+    console.log('Creating member with data:', memberData);
 
     if (editingMember) {
       updateMemberMutation.mutate({ id: editingMember.userId, memberData });
@@ -497,18 +483,18 @@ export default function AdminDashboard() {
   const handleDeleteMember = async (member: any) => {
     if (confirm(`Are you sure you want to delete member ${member.firstName} ${member.lastName}?`)) {
       try {
-        const response = await fetch(`/api/admin/delete-member/${member.userId}`, {
-          method: 'DELETE',
-        });
+        const response = await apiRequest('DELETE', `/api/admin/delete-member/${member.userId}`, {});
 
-        if (response.ok) {
-          refetchMembers();
+        if (response) {
+          // Refresh all related data
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+          ]);
           toast({
             title: "Success",
             description: "Member deleted successfully!",
           });
-        } else {
-          throw new Error('Failed to delete member');
         }
       } catch (error: any) {
         toast({
@@ -523,18 +509,18 @@ export default function AdminDashboard() {
   const handleDeleteTrainer = async (trainer: any) => {
     if (confirm(`Are you sure you want to delete trainer ${trainer.firstName} ${trainer.lastName}?`)) {
       try {
-        const response = await fetch(`/api/admin/delete-trainer/${trainer.userId}`, {
-          method: 'DELETE',
-        });
+        const response = await apiRequest('DELETE', `/api/admin/delete-trainer/${trainer.userId}`, {});
 
-        if (response.ok) {
-          refetchTrainers();
+        if (response) {
+          // Refresh all related data
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/trainers'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+          ]);
           toast({
             title: "Success",
             description: "Trainer deleted successfully!",
           });
-        } else {
-          throw new Error('Failed to delete trainer');
         }
       } catch (error: any) {
         toast({
@@ -592,11 +578,39 @@ export default function AdminDashboard() {
     if (membershipTiers && membershipTiers.length > 0) {
       const pricing = {};
       membershipTiers.forEach(tier => {
-        pricing[tier._id] = tier.monthlyPrice;
+        const tierId = tier._id || tier.id;
+        pricing[tierId] = tier.monthlyPrice || tier.price;
       });
       setMembershipPricing(pricing);
     }
   }, [membershipTiers]);
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    window.location.href = '/login';
+    return null;
+  }
+
+  // Check if user has admin role
+  if (user?.userType !== 'admin' && user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
+          <p className="text-gray-300">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleRecordAttendance = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1021,7 +1035,7 @@ export default function AdminDashboard() {
                           </SelectTrigger>
                           <SelectContent className="bg-gray-900 border-gray-800 text-white">
                             {membershipTiers?.map((tier: any) => (
-                              <SelectItem key={tier._id} value={tier._id} className="focus:bg-gold focus:text-black">
+                              <SelectItem key={`member-tier-${tier._id || tier.id}`} value={tier._id || tier.id} className="focus:bg-gold focus:text-black">
                                 {tier.name}
                               </SelectItem>
                             ))}
@@ -1678,36 +1692,6 @@ export default function AdminDashboard() {
                           />
                         </div>
                         <div>
-                          <Label htmlFor="upperArm">Upper Arm</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={newAssessment.circumferenceMeasurements.upperArm}
-                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, upperArm: e.target.value}})}
-                            className="bg-black border-gray-700 text-white"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="forearms">Forearms</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={newAssessment.circumferenceMeasurements.forearms}
-                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, forearms: e.target.value}})}
-                            className="bg-black border-gray-700 text-white"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="wrist">Wrist</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={newAssessment.circumferenceMeasurements.wrist}
-                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, wrist: e.target.value}})}
-                            className="bg-black border-gray-700 text-white"
-                          />
-                        </div>
-                        <div>
                           <Label htmlFor="waist">Waist</Label>
                           <Input
                             type="number"
@@ -1737,26 +1721,6 @@ export default function AdminDashboard() {
                             className="bg-black border-gray-700 text-white"
                           />
                         </div>
-                        <div>
-                          <Label htmlFor="calf">Calf</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={newAssessment.circumferenceMeasurements.calf}
-                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, calf: e.target.value}})}
-                            className="bg-black border-gray-700 text-white"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="ankle">Ankle</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={newAssessment.circumferenceMeasurements.ankle}
-                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, ankle: e.target.value}})}
-                            className="bg-black border-gray-700 text-white"
-                          />
-                        </div>
                       </div>
                     </div>
 
@@ -1770,7 +1734,7 @@ export default function AdminDashboard() {
                           onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
                           className="bg-black border-gray-700 text-white"
                           rows={4}
-                          placeholder="e.g., Lower body mobility exercises, Deep breathing exercises, Core strengthening, Pelvic floor muscle activation, Glutes muscles and quadriceps strengthening, Rotator cuff strengthening, Scapular strengthening"
+                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
                         />
                       </div>
                     </div>
@@ -1823,7 +1787,7 @@ export default function AdminDashboard() {
                               </SelectTrigger>
                               <SelectContent className="bg-gray-900 border-gray-800 text-white">
                                 {members?.map((member: any) => (
-                                  <SelectItem key={member.userId} value={member.userId} className="focus:bg-gold focus:text-black">
+                                  <SelectItem key={`assessment-member-${member.userId || member.id}`} value={member.userId || member.id} className="focus:bg-gold focus:text-black">
                                     {member.firstName} {member.lastName}
                                   </SelectItem>
                                 ))}
@@ -2123,10 +2087,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.waist}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2136,10 +2097,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.hip}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2149,10 +2107,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.thighs}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, thighs: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, thighs: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2255,7 +2210,7 @@ export default function AdminDashboard() {
                   <div className="space-y-2">
                     {trainers?.map((trainer: any) => (
                       <Button
-                        key={trainer.userId}
+                        key={`share-trainer-${trainer.userId}`}
                         variant="outline"
                         className="w-full justify-start border-gray-700 text-white hover:bg-gold hover:text-black"
                         onClick={() => {
@@ -2320,7 +2275,7 @@ export default function AdminDashboard() {
                           </SelectTrigger>
                           <SelectContent className="bg-gray-900 border-gray-800 text-white">
                             {trainers?.map((trainer: any) => (
-                              <SelectItem key={trainer.userId} value={trainer.userId} className="focus:bg-gold focus:text-black">
+                              <SelectItem key={`attendance-trainer-${trainer.userId}`} value={trainer.userId} className="focus:bg-gold focus:text-black">
                                 {trainer.firstName} {trainer.lastName}
                               </SelectItem>
                             ))}
@@ -2436,7 +2391,7 @@ export default function AdminDashboard() {
                     {trainers?.map((trainer: any) => {
                       const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
                       return (
-                        <div key={trainer.userId} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
+                        <div key={`quick-attendance-${trainer.userId}`} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
                           <div>
                             <p className="text-white font-medium">{trainer.firstName} {trainer.lastName}</p>
                             <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ')}</p>
@@ -2561,7 +2516,7 @@ export default function AdminDashboard() {
                     {Array.isArray(attendanceStats) && attendanceStats.map((stat: any) => {
                       const monthlyData = Array.isArray(monthlyAttendanceStats) ? monthlyAttendanceStats.find((m: any) => m.trainerId === stat.trainerId) : null;
                       return (
-                        <TableRow key={stat.trainerId} className="border-gray-800">
+                        <TableRow key={`stat-trainer-${stat.trainerId}`} className="border-gray-800">
                           <TableCell className="text-white">{stat.trainerName}</TableCell>
                           <TableCell className="text-green-400">{monthlyData?.presentDays || 0}</TableCell>
                           <TableCell className="text-blue-400">{stat.presentDays}</TableCell>
@@ -2690,27 +2645,33 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleUpdatePricing} className="space-y-4">
-                    {membershipTiers?.map((tier: any) => (
-                      <div key={tier._id}>
-                        <Label htmlFor={`price-${tier._id}`}>{tier.name} Price</Label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
-                          <Input
-                            id={`price-${tier._id}`}
-                            type="number"
-                            step="0.01"
-                            value={membershipPricing[tier._id] || ''}
-                            onChange={(e) => setMembershipPricing({
-                              ...membershipPricing,
-                              [tier._id]: e.target.value
-                            })}
-                            className="bg-black border-gray-700 text-white focus:ring-gold pl-8"
-                            placeholder="0.00"
-                          />
-                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">/month</span>
+                    {membershipTiers?.map((tier: any, index: number) => {
+                      const tierId = tier._id || tier.id;
+                      // Only render if we have a valid tier ID
+                      if (!tierId) return null;
+                      
+                      return (
+                        <div key={`pricing-tier-${tierId}`}>
+                          <Label htmlFor={`price-${tierId}`}>{tier.name} Price</Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                            <Input
+                              id={`price-${tierId}`}
+                              type="number"
+                              step="0.01"
+                              value={membershipPricing[tierId] || ''}
+                              onChange={(e) => setMembershipPricing({
+                                ...membershipPricing,
+                                [tierId]: e.target.value
+                              })}
+                              className="bg-black border-gray-700 text-white focus:ring-gold pl-8"
+                              placeholder="0.00"
+                            />
+                            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">/month</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <Button
                       type="submit"
                       className="bg-gold text-black hover:bg-white"

@@ -105,7 +105,42 @@ export const storage = {
   },
 
   async deleteUser(id: string): Promise<void> {
-    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // First check if user exists
+      const userCheck = await client.query('SELECT * FROM users WHERE id = $1', [id]);
+      if (userCheck.rows.length === 0) {
+        throw new Error(`User with id ${id} not found`);
+      }
+      
+      const user = userCheck.rows[0];
+      console.log(`Deleting user: ${user.first_name} ${user.last_name} (${user.user_type})`);
+      
+      // Delete related records first (if they exist) - using user_id for profile tables
+      await client.query('DELETE FROM member_profiles WHERE user_id = $1', [id]);
+      await client.query('DELETE FROM trainer_profiles WHERE user_id = $1', [id]);
+      
+      // For other tables that might use the profile IDs, we need to handle them differently
+      // But for now, let's just delete the user and let CASCADE handle it if set up
+      
+      // Finally delete the user
+      const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+      
+      if (result.rows.length === 0) {
+        throw new Error(`Failed to delete user with id ${id}`);
+      }
+      
+      await client.query('COMMIT');
+      console.log(`Successfully deleted user with id: ${id} (${user.first_name} ${user.last_name})`);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error(`Error deleting user ${id}:`, error);
+      throw error;
+    } finally {
+      client.release();
+    }
   },
 
   // Membership tier operations
@@ -137,7 +172,7 @@ export const storage = {
 
   async getAllMembers(): Promise<any[]> {
     const { rows } = await pool.query(`
-      SELECT u.*, mp.*, mt.name as membership_tier_name 
+      SELECT u.*, mp.*, mt.name as membership_tier, mt.price as membership_tier_price
       FROM users u 
       LEFT JOIN member_profiles mp ON u.id = mp.user_id 
       LEFT JOIN membership_tiers mt ON mp.membership_tier_id = mt.id 
@@ -151,9 +186,16 @@ export const storage = {
       const user = this.mapUserFromDb(row);
       if (!user) return null;
       return {
-        ...user,
-        profile: row.user_id ? this.mapMemberProfileFromDb(row) : null,
-        membershipTierName: row.membership_tier_name
+        userId: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        membershipTier: row.membership_tier || 'N/A',
+        membershipTierId: row.membership_tier_id,
+        joinDate: row.created_at,
+        emergencyContact: row.emergency_contact,
+        fitnessGoals: row.fitness_goals
       };
     }).filter(member => member !== null);
   },
@@ -249,8 +291,16 @@ export const storage = {
       const user = this.mapUserFromDb(row);
       if (!user) return null;
       return {
-        ...user,
-        profile: row.user_id ? this.mapTrainerProfileFromDb(row) : null
+        userId: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        specializations: row.specializations || [],
+        hourlyRate: row.hourly_rate || 75,
+        experienceYears: row.experience_years || 2,
+        certifications: row.certifications || '',
+        bio: row.bio || '',
+        isAvailable: row.is_available !== false
       };
     }).filter(trainer => trainer !== null);
   },
@@ -410,6 +460,16 @@ export const storage = {
 
   // Body assessments
   async createBodyAssessment(assessmentData: any): Promise<any> {
+    // Get member info to set client name
+    const memberQuery = await pool.query(
+      'SELECT u.first_name, u.last_name FROM users u WHERE u.id = $1',
+      [assessmentData.memberId]
+    );
+    
+    const clientName = memberQuery.rows[0] 
+      ? `${memberQuery.rows[0].first_name} ${memberQuery.rows[0].last_name}`
+      : 'Unknown Client';
+
     const { rows } = await pool.query(
       `INSERT INTO body_assessments (
         member_id, trainer_id, client_name, date_of_birth, age, height, bp, bp_after_treadmill,
@@ -419,39 +479,61 @@ export const storage = {
         recommendations, circumference_measurements, advice
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
       [
-        assessmentData.memberId, assessmentData.trainerId, assessmentData.clientName,
-        assessmentData.dateOfBirth, assessmentData.age, assessmentData.height, assessmentData.bp,
-        assessmentData.bpAfterTreadmill, assessmentData.emergencyContact, assessmentData.bmi,
-        assessmentData.weight, assessmentData.muscle, assessmentData.fat, assessmentData.saturatedFat,
-        assessmentData.visceralFat, assessmentData.bmr, assessmentData.bodyAge,
-        assessmentData.posturalAssessment, assessmentData.headNeckAlignment,
-        assessmentData.shoulderAlignment, assessmentData.upperBackAlignment,
-        assessmentData.lowerBackAlignment, assessmentData.pelvicAlignment,
-        assessmentData.hipKneeAlignment, assessmentData.ankleAlignment, assessmentData.spinalMobility,
-        assessmentData.recommendations, JSON.stringify(assessmentData.circumferenceMeasurements),
-        assessmentData.advice
+        assessmentData.memberId, assessmentData.trainerId || null, clientName,
+        assessmentData.dateOfBirth, assessmentData.age, assessmentData.height, 
+        assessmentData.bloodPressure, assessmentData.afterTreadmillBP, assessmentData.emergencyContact,
+        assessmentData.bodyComposition?.bmi, assessmentData.bodyComposition?.weight, 
+        assessmentData.bodyComposition?.muscle, assessmentData.bodyComposition?.fat, 
+        assessmentData.bodyComposition?.saturatedFat, assessmentData.bodyComposition?.visceralFat, 
+        assessmentData.bodyComposition?.bmr, assessmentData.bodyComposition?.bodyAge,
+        JSON.stringify(assessmentData.posturalAssessment), assessmentData.posturalAssessment?.headNeckAlignment,
+        assessmentData.posturalAssessment?.shoulderAlignment, assessmentData.posturalAssessment?.upperBackAlignment,
+        assessmentData.posturalAssessment?.lowerBackAlignment, assessmentData.posturalAssessment?.pelvicAlignment,
+        assessmentData.posturalAssessment?.hipKneeAlignment, assessmentData.posturalAssessment?.ankleAlignment, 
+        assessmentData.posturalAssessment?.spinalMobility, JSON.stringify(assessmentData.posturalAssessment?.recommendations),
+        JSON.stringify(assessmentData.circumferenceMeasurements), assessmentData.advice
       ]
     );
     return rows[0];
   },
 
   async getBodyAssessments(filters: any): Promise<any[]> {
-    let query = 'SELECT * FROM body_assessments WHERE 1=1';
+    let query = `
+      SELECT ba.*, ba.client_name as memberName,
+             JSON_BUILD_OBJECT(
+               'bmi', ba.bmi,
+               'weight', ba.weight,
+               'muscle', ba.muscle,
+               'fat', ba.fat,
+               'saturatedFat', ba.saturated_fat,
+               'visceralFat', ba.visceral_fat,
+               'bmr', ba.bmr,
+               'bodyAge', ba.body_age
+             ) as bodyComposition,
+             ba.postural_assessment as posturalAssessment,
+             ba.circumference_measurements as circumferenceMeasurements
+      FROM body_assessments ba WHERE 1=1`;
     const params = [];
     let paramIndex = 1;
 
     if (filters.memberId) {
-      query += ` AND member_id = $${paramIndex++}`;
+      query += ` AND ba.member_id = $${paramIndex++}`;
       params.push(filters.memberId);
     }
     if (filters.trainerId) {
-      query += ` AND trainer_id = $${paramIndex++}`;
+      query += ` AND ba.trainer_id = $${paramIndex++}`;
       params.push(filters.trainerId);
     }
 
-    query += ' ORDER BY created_at DESC';
+    query += ' ORDER BY ba.created_at DESC';
     const { rows } = await pool.query(query, params);
-    return rows;
+    return rows.map(row => ({
+      ...row,
+      _id: row.id,
+      memberName: row.client_name,
+      bodyComposition: row.bodycomposition,
+      createdAt: row.created_at
+    }));
   },
 
   // Subscriptions
@@ -470,11 +552,20 @@ export const storage = {
       const trainerCountQuery = await pool.query("SELECT COUNT(*) FROM users WHERE user_type = 'trainer'");
       const activeSubscriptionsQuery = await pool.query("SELECT COUNT(*) FROM subscriptions WHERE is_active = true");
 
+      // Calculate monthly revenue from active subscriptions
+      const revenueQuery = await pool.query(`
+        SELECT COALESCE(SUM(mt.price), 0) as monthly_revenue 
+        FROM subscriptions s 
+        JOIN membership_tiers mt ON s.membership_tier_id = mt.id 
+        WHERE s.is_active = true
+      `);
+
       return {
         totalMembers: parseInt(memberCountQuery.rows[0]?.count || '0'),
         totalTrainers: parseInt(trainerCountQuery.rows[0]?.count || '0'),
         activeSubscriptions: parseInt(activeSubscriptionsQuery.rows[0]?.count || '0'),
-        revenue: 0 // Calculate from active subscriptions
+        monthlyRevenue: parseFloat(revenueQuery.rows[0]?.monthly_revenue || '0'),
+        totalSessions: 0 // Could be calculated from training_sessions table
       };
     } catch (error) {
       console.error('Error getting admin stats:', error);
@@ -482,8 +573,36 @@ export const storage = {
         totalMembers: 0,
         totalTrainers: 0,
         activeSubscriptions: 0,
-        revenue: 0
+        monthlyRevenue: 0,
+        totalSessions: 0
       };
+    }
+  },
+
+  // Contact submissions
+  async getContactSubmissions(): Promise<any[]> {
+    try {
+      const { rows } = await pool.query(`
+        SELECT u.*, 'contact' as inquiry_type 
+        FROM users u 
+        WHERE u.email LIKE 'contact_%'
+        ORDER BY u.created_at DESC
+      `);
+      
+      return rows.map(row => ({
+        _id: row.id,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        email: row.email.replace(/^contact_\d+_/, ''),
+        phone: row.phone,
+        location: 'Unknown',
+        interest: 'General Fitness',
+        message: 'Contact form submission',
+        submittedAt: row.created_at
+      }));
+    } catch (error) {
+      console.error('Error getting contact submissions:', error);
+      return [];
     }
   },
 

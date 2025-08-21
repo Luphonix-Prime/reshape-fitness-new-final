@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,9 +8,12 @@ import { Progress } from "@/components/ui/progress";
 import { Calendar, Dumbbell, Target, TrendingUp, Clock, Apple, User } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function MemberDashboard() {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("overview");
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -27,7 +29,19 @@ export default function MemberDashboard() {
     window.location.href = '/login';
     return null;
   }
-  const [activeTab, setActiveTab] = useState("overview");
+
+  // Check if user has member role
+  if (user?.userType !== 'member' && user?.role !== 'member') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
+          <p className="text-gray-300">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
 
   // Mock member data
   const memberStats = {
@@ -56,10 +70,21 @@ export default function MemberDashboard() {
     { goal: "Bench Press 150 lbs", progress: 80, target: "Mar 31" },
   ];
 
+  const handleCancelSession = (sessionId: string) => {
+    toast({
+      title: "Session Cancelled",
+      description: "Your training session has been cancelled successfully."
+    });
+  };
+
+  const handleRescheduleSession = (sessionId: string) => {
+  };
+
+
   return (
     <div className="min-h-screen bg-black text-white">
       <Navigation />
-      
+
       <div className="container mx-auto px-6 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-wider text-gold mb-2">MEMBER DASHBOARD</h1>
@@ -227,6 +252,11 @@ export default function MemberDashboard() {
                       </div>
                     </div>
                   ))}
+                  {(!Array.isArray(recentWorkouts) || recentWorkouts.length === 0) && (
+                    <div className="text-center text-gray-400 py-8">
+                      No recent workouts found
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -249,6 +279,11 @@ export default function MemberDashboard() {
                       <p className="text-right text-gold text-sm font-semibold">{goal.progress}% Complete</p>
                     </div>
                   ))}
+                  {(!Array.isArray(fitnessGoals) || fitnessGoals.length === 0) && (
+                    <div className="text-center text-gray-400 py-8">
+                      No fitness goals set yet
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

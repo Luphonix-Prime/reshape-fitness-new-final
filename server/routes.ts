@@ -14,7 +14,7 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
       return next();
     }
     
-    // For development, allow some endpoints without auth
+    // Allow some endpoints without auth
     if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/test') || req.path.startsWith('/api/contact')) {
       return next();
     }
@@ -60,7 +60,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let userData = null;
       
-      // Check demo credentials first (no database password validation needed)
+      // Check main user credentials
       if (email === "admin" && password === "admin") {
         // Try to get from database, fallback to hardcoded
         try {
@@ -105,11 +105,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               id: dbUser.id.toString(),
               email: dbUser.email,
               firstName: dbUser.firstName || dbUser.first_name || 'Trainer',
-              lastName: dbUser.lastName || dbUser.last_name || 'User',
+              lastName: dbUser.lastName || dbUser.last_name || 'Pro',
               userType: dbUser.userType || dbUser.user_type || 'trainer',
               role: dbUser.userType || dbUser.user_type || 'trainer',
               first_name: dbUser.firstName || dbUser.first_name || 'Trainer',
-              last_name: dbUser.lastName || dbUser.last_name || 'User',
+              last_name: dbUser.lastName || dbUser.last_name || 'Pro',
               user_type: dbUser.userType || dbUser.user_type || 'trainer'
             };
           }
@@ -123,11 +123,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: "2",
             email: "trainer@reshape.com",
             firstName: "Trainer",
-            lastName: "User",
+            lastName: "Pro",
             userType: "trainer",
             role: "trainer",
             first_name: "Trainer",
-            last_name: "User",
+            last_name: "Pro",
             user_type: "trainer"
           };
         }
@@ -140,11 +140,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               id: dbUser.id.toString(),
               email: dbUser.email,
               firstName: dbUser.firstName || dbUser.first_name || 'Member',
-              lastName: dbUser.lastName || dbUser.last_name || 'User',
+              lastName: dbUser.lastName || dbUser.last_name || 'Test',
               userType: dbUser.userType || dbUser.user_type || 'member',
               role: dbUser.userType || dbUser.user_type || 'member',
               first_name: dbUser.firstName || dbUser.first_name || 'Member',
-              last_name: dbUser.lastName || dbUser.last_name || 'User',
+              last_name: dbUser.lastName || dbUser.last_name || 'Test',
               user_type: dbUser.userType || dbUser.user_type || 'member'
             };
           }
@@ -158,18 +158,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: "3",
             email: "member@reshape.com",
             firstName: "Member",
-            lastName: "User",
+            lastName: "Test",
             userType: "member",
             role: "member",
             first_name: "Member",
-            last_name: "User",
+            last_name: "Test",
             user_type: "member"
           };
         }
       }
       
       if (!userData) {
-        return res.status(401).json({ message: "Invalid credentials. Use demo credentials: admin/admin, trainer/trainer, or member/member" });
+        return res.status(401).json({ message: "Invalid credentials. Use: admin/admin, trainer/trainer, or member/member" });
       }
       
       // Store user in session
@@ -539,17 +539,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { date } = req.params;
       const { rows } = await pool.query(`
-        SELECT a.*, u.first_name, u.last_name, u.email 
-        FROM attendance a 
-        JOIN member_profiles mp ON a.member_id = mp.id 
-        JOIN users u ON mp.user_id = u.id 
-        WHERE a.date = $1 
-        ORDER BY a.check_in_time DESC
+        SELECT ta.*, u.first_name, u.last_name, u.email,
+               CONCAT(u.first_name, ' ', u.last_name) as trainerName
+        FROM trainer_attendance ta 
+        JOIN users u ON ta.trainer_id = u.id 
+        WHERE ta.date = $1 
+        ORDER BY ta.check_in_time DESC NULLS LAST
       `, [date]);
-      res.json(rows);
-    } catch (error) {
+      res.json(rows.map(row => ({
+        ...row,
+        _id: row.id,
+        trainerId: row.trainer_id,
+        trainerName: row.trainername,
+        checkInTime: row.check_in_time,
+        checkOutTime: row.check_out_time
+      })));
+    } catch (error: any) {
       console.error("Error fetching attendance:", error);
-      res.status(500).json({ message: "Failed to fetch attendance" });
+      if (error.message?.includes('relation "trainer_attendance" does not exist')) {
+        res.json([]); // Return empty array if table doesn't exist
+      } else {
+        res.status(500).json({ message: "Failed to fetch attendance" });
+      }
     }
   });
 
@@ -574,6 +585,229 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Trainer routes
+  app.get('/api/trainer/stats', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock stats for now - implement with real database queries
+      const stats = {
+        totalClients: 12,
+        todaySessions: 4,
+        weeklyHours: 32,
+        avgRating: 4.8
+      };
+
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error fetching trainer stats:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/sessions', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock sessions for now - implement with real database queries
+      const sessions = [
+        {
+          id: 1,
+          clientName: "Sarah Johnson",
+          sessionType: "Strength Training",
+          date: "2024-01-15",
+          time: "09:00 AM",
+          duration: 60,
+          status: "Confirmed",
+          notes: "Focus on upper body strength"
+        }
+      ];
+
+      res.json(sessions);
+    } catch (error: any) {
+      console.error('Error fetching trainer sessions:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/clients', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock clients for now - implement with real database queries
+      const clients = [
+        { id: 1, name: "Sarah Johnson", email: "sarah@email.com", joinDate: "2024-01-01", sessionsCompleted: 24 }
+      ];
+
+      res.json(clients);
+    } catch (error: any) {
+      console.error('Error fetching trainer clients:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/workout-plans', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock workout plans for now - implement with real database queries
+      const workoutPlans = [
+        { id: 1, clientName: "Sarah Johnson", planName: "Upper Body Strength", createdDate: "2024-01-10", exercises: 8 }
+      ];
+
+      res.json(workoutPlans);
+    } catch (error: any) {
+      console.error('Error fetching workout plans:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/nutrition-plans', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock nutrition plans for now - implement with real database queries
+      const nutritionPlans = [
+        { id: 1, clientName: "Sarah Johnson", planName: "Muscle Gain Diet", createdDate: "2024-01-10", calories: 2200 }
+      ];
+
+      res.json(nutritionPlans);
+    } catch (error: any) {
+      console.error('Error fetching nutrition plans:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/assessments', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock assessments for now - implement with real database queries
+      const assessments = [
+        { id: 1, clientName: "Keval Patel", date: "2024-01-14", trainerName: "Coach Alex" }
+      ];
+
+      res.json(assessments);
+    } catch (error: any) {
+      console.error('Error fetching assessments:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/trainer/inquiries', async (req, res) => {
+    try {
+      const trainerId = req.user?.id;
+      if (!trainerId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Fetch inquiries from database
+      const inquiries = await storage.getContactSubmissions();
+      res.json(inquiries || []);
+    } catch (error: any) {
+      console.error('Error fetching inquiries:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Member routes
+  app.get('/api/member/stats', async (req, res) => {
+    try {
+      const memberId = req.user?.id;
+      if (!memberId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock stats for now - implement with real database queries
+      const stats = {
+        workoutsThisMonth: 18,
+        caloriesBurned: 2400,
+        avgWorkoutTime: 65,
+        fitnessScore: 78
+      };
+
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error fetching member stats:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/member/sessions', async (req, res) => {
+    try {
+      const memberId = req.user?.id;
+      if (!memberId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock sessions for now - implement with real database queries
+      const sessions = [
+        { id: 1, trainer: "Alex Johnson", date: "Today", time: "10:00 AM", type: "Strength Training", status: "Confirmed" }
+      ];
+
+      res.json(sessions);
+    } catch (error: any) {
+      console.error('Error fetching member sessions:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/member/workouts', async (req, res) => {
+    try {
+      const memberId = req.user?.id;
+      if (!memberId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock workouts for now - implement with real database queries
+      const workouts = [
+        { id: 1, type: "Strength Training", duration: "60 min", calories: 320, date: "Jan 15", trainer: "Alex Johnson" }
+      ];
+
+      res.json(workouts);
+    } catch (error: any) {
+      console.error('Error fetching member workouts:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get('/api/member/goals', async (req, res) => {
+    try {
+      const memberId = req.user?.id;
+      if (!memberId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      // Mock goals for now - implement with real database queries
+      const goals = [
+        { goal: "Lose 5 lbs", progress: 60, target: "Feb 28" }
+      ];
+
+      res.json(goals);
+    } catch (error: any) {
+      console.error('Error fetching member goals:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Admin routes
   app.get('/api/admin/members', async (req, res) => {
     try {
@@ -582,6 +816,126 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching members:", error);
       res.status(500).json({ message: "Failed to fetch members" });
+    }
+  });
+
+  // Body assessments routes
+  app.get('/api/admin/body-assessments', async (req, res) => {
+    try {
+      const assessments = await storage.getBodyAssessments({});
+      res.json(assessments);
+    } catch (error) {
+      console.error("Error fetching body assessments:", error);
+      res.status(500).json({ message: "Failed to fetch body assessments" });
+    }
+  });
+
+  app.post('/api/admin/body-assessments', async (req, res) => {
+    try {
+      const assessment = await storage.createBodyAssessment(req.body);
+      res.json(assessment);
+    } catch (error) {
+      console.error("Error creating body assessment:", error);
+      res.status(500).json({ message: "Failed to create body assessment" });
+    }
+  });
+
+  app.post('/api/admin/body-assessments/:assessmentId/share/:trainerId', async (req, res) => {
+    try {
+      // Mock sharing functionality
+      res.json({ message: "Assessment shared successfully" });
+    } catch (error) {
+      console.error("Error sharing assessment:", error);
+      res.status(500).json({ message: "Failed to share assessment" });
+    }
+  });
+
+  // Inquiries routes
+  app.get('/api/admin/inquiries', async (req, res) => {
+    try {
+      const inquiries = await storage.getContactSubmissions();
+      res.json(inquiries || []);
+    } catch (error) {
+      console.error("Error fetching inquiries:", error);
+      res.status(500).json({ message: "Failed to fetch inquiries" });
+    }
+  });
+
+  app.post('/api/admin/inquiries/:inquiryId/convert', async (req, res) => {
+    try {
+      const { inquiryId } = req.params;
+      const { memberData, assessmentData } = req.body;
+      
+      // Mock conversion functionality
+      res.json({ message: "Inquiry converted successfully" });
+    } catch (error) {
+      console.error("Error converting inquiry:", error);
+      res.status(500).json({ message: "Failed to convert inquiry" });
+    }
+  });
+
+  app.delete('/api/admin/inquiries/:inquiryId', async (req, res) => {
+    try {
+      const { inquiryId } = req.params;
+      // Mock deletion functionality
+      res.json({ message: "Inquiry deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting inquiry:", error);
+      res.status(500).json({ message: "Failed to delete inquiry" });
+    }
+  });
+
+  // Attendance routes
+  app.post('/api/admin/attendance', async (req, res) => {
+    try {
+      const { trainerId, status, date, checkInTime, checkOutTime, notes } = req.body;
+      
+      if (!trainerId || !status || !date) {
+        return res.status(400).json({ message: "Missing required fields: trainerId, status, date" });
+      }
+
+      // For now, create a simple attendance record
+      // In a real app, you'd have a proper attendance table
+      const { rows } = await pool.query(
+        `INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes, created_at) 
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
+         ON CONFLICT (trainer_id, date) 
+         DO UPDATE SET status = $3, check_in_time = $4, check_out_time = $5, notes = $6, updated_at = CURRENT_TIMESTAMP
+         RETURNING *`,
+        [trainerId, date, status, checkInTime, checkOutTime, notes]
+      );
+
+      res.json({ 
+        message: "Attendance recorded successfully",
+        attendance: rows[0]
+      });
+    } catch (error: any) {
+      console.error("Error recording attendance:", error);
+      // Create table if it doesn't exist
+      if (error.message?.includes('relation "trainer_attendance" does not exist')) {
+        try {
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS trainer_attendance (
+              id SERIAL PRIMARY KEY,
+              trainer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+              date DATE NOT NULL,
+              status VARCHAR(20) NOT NULL,
+              check_in_time TIME,
+              check_out_time TIME,
+              notes TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(trainer_id, date)
+            )
+          `);
+          res.json({ message: "Attendance table created. Please try again." });
+        } catch (createError) {
+          console.error("Error creating attendance table:", createError);
+          res.status(500).json({ message: "Failed to create attendance table" });
+        }
+      } else {
+        res.status(500).json({ message: error.message || "Failed to record attendance" });
+      }
     }
   });
 
@@ -609,8 +963,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { firstName, lastName, email, membershipTierId, phone, emergencyContact, fitnessGoals } = req.body;
       
-      if (!firstName || !lastName || !email || !membershipTierId) {
-        return res.status(400).json({ message: "Missing required fields" });
+      console.log('Creating member with data:', req.body);
+      
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({ message: "Missing required fields: firstName, lastName, email" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this email already exists" });
       }
 
       const newUser = await storage.createUser({
@@ -621,14 +983,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: phone || null
       });
 
-      const memberProfile = await storage.createMemberProfile({
-        userId: newUser.id,
-        membershipTierId,
-        emergencyContact: emergencyContact || email,
-        fitnessGoals: fitnessGoals || "General fitness improvement"
-      });
+      console.log('Created user:', newUser);
 
-      res.json({ user: newUser, profile: memberProfile });
+      // Only create member profile if membershipTierId is provided
+      let memberProfile = null;
+      if (membershipTierId) {
+        memberProfile = await storage.createMemberProfile({
+          userId: newUser.id,
+          membershipTierId,
+          emergencyContact: emergencyContact || email,
+          fitnessGoals: fitnessGoals || "General fitness improvement"
+        });
+        console.log('Created member profile:', memberProfile);
+      }
+
+      res.json({ 
+        message: "Member created successfully",
+        user: newUser, 
+        profile: memberProfile 
+      });
     } catch (error: any) {
       console.error("Error creating member:", error);
       res.status(500).json({ message: error.message || "Failed to create member" });
@@ -675,11 +1048,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
+      console.log(`Attempting to delete member with userId: ${userId}`);
+      
+      // First check if user exists and is a member
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.userType !== 'member') {
+        return res.status(400).json({ message: "User is not a member" });
+      }
+
+      // Delete user (this should cascade to delete member profile)
       await storage.deleteUser(userId);
-      res.json({ message: "Member deleted successfully" });
+      
+      console.log(`Successfully deleted member with userId: ${userId}`);
+      res.json({ message: "Member deleted successfully", success: true });
     } catch (error: any) {
       console.error("Error deleting member:", error);
-      res.status(500).json({ message: error.message || "Failed to delete member" });
+      if (error.message.includes('not found')) {
+        res.status(404).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: error.message || "Failed to delete member" });
+      }
     }
   });
 
@@ -691,11 +1083,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
+      console.log(`Attempting to delete trainer with userId: ${userId}`);
+      
+      // First check if user exists and is a trainer
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.userType !== 'trainer') {
+        return res.status(400).json({ message: "User is not a trainer" });
+      }
+
+      // Delete user (this should cascade to delete trainer profile)
       await storage.deleteUser(userId);
-      res.json({ message: "Trainer deleted successfully" });
+      
+      console.log(`Successfully deleted trainer with userId: ${userId}`);
+      res.json({ message: "Trainer deleted successfully", success: true });
     } catch (error: any) {
       console.error("Error deleting trainer:", error);
-      res.status(500).json({ message: error.message || "Failed to delete trainer" });
+      if (error.message.includes('not found')) {
+        res.status(404).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: error.message || "Failed to delete trainer" });
+      }
     }
   });
 

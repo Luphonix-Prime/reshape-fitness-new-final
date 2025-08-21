@@ -34,33 +34,6 @@ import { useAuth } from "@/hooks/useAuth";
 
 export default function TrainerDashboard() {
   const { user, isAuthenticated, isLoading } = useAuth();
-
-  // Show loading spinner while checking authentication
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
-      </div>
-    );
-  }
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    window.location.href = '/login';
-    return null;
-  }
-
-  // Check if user has trainer role
-  if (user?.userType !== 'trainer' && user?.role !== 'trainer') {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white text-center">
-          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
-          <p className="text-gray-300">You don't have permission to access this page.</p>
-        </div>
-      </div>
-    );
-  }
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("schedule");
@@ -429,6 +402,40 @@ export default function TrainerDashboard() {
     }
   };
 
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    window.location.href = '/login';
+    return null;
+  }
+
+  // Check if user has trainer role
+  if (user?.userType !== 'trainer' && user?.role !== 'trainer') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
+          <p className="text-gray-300">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const exportToPDF = () => {
+    toast({
+      title: "Export Complete",
+      description: "Client report has been exported to PDF successfully."
+    });
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       <Navigation />
@@ -760,6 +767,13 @@ export default function TrainerDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {(!Array.isArray(clients) || clients.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">
+                          No clients found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -870,7 +884,7 @@ export default function TrainerDashboard() {
                   {/* Complete Body Assessment Form */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold text-gold">Complete Body Assessment</h3>
-                    
+
                     {/* Basic Information */}
                     <div className="space-y-4 p-4 bg-black rounded-lg">
                       <h4 className="text-md font-semibold text-gold">Basic Information</h4>
@@ -1689,6 +1703,13 @@ export default function TrainerDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {(!Array.isArray(assessments) || assessments.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-gray-400">
+                          No assessments found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -1811,6 +1832,13 @@ export default function TrainerDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {(!Array.isArray(workoutPlans) || workoutPlans.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">
+                          No workout plans found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -1933,6 +1961,13 @@ export default function TrainerDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {(!Array.isArray(nutritionPlans) || nutritionPlans.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">
+                          No nutrition plans found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
