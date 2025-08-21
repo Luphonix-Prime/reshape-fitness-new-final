@@ -1,110 +1,285 @@
 
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import Database from 'better-sqlite3';
-import * as schema from "@shared/schema";
+import { Pool } from 'pg';
 
-// Use in-memory database for temporary preview
-const sqlite = new Database(':memory:');
-export const db = drizzle({ client: sqlite, schema });
+const connectionString = 'postgresql://neondb_owner:npg_JKfVe1Scpz7R@ep-proud-resonance-afmhcyuk-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
-// Initialize database with tables and sample data
+export const pool = new Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
 export async function initializeDatabase() {
   try {
-    // Create tables (these will be auto-created by Drizzle, but we'll ensure they exist)
+    console.log('Connecting to PostgreSQL...');
     
-    // Create sample membership tiers
-    const membershipTiers = [
-      {
-        name: "Access",
-        monthlyPrice: 200.00,
-        annualPrice: 2000.00,
-        benefits: ["Full gym access", "Group fitness classes", "Locker room amenities", "Basic wellness services"],
-        maxGuests: 0,
-        personalTrainingIncluded: 0,
-      },
-      {
-        name: "All Access", 
-        monthlyPrice: 300.00,
-        annualPrice: 3000.00,
-        benefits: ["Multiple location access", "Personal training sessions", "Spa services included", "Nutrition consultations", "Guest privileges"],
-        maxGuests: 2,
-        personalTrainingIncluded: 2,
-      },
-      {
-        name: "Executive",
-        monthlyPrice: 500.00,
-        annualPrice: 5000.00,
-        benefits: ["VIP lounge access", "Unlimited personal training", "Concierge services", "Exclusive events", "Priority booking"],
-        maxGuests: 5,
-        personalTrainingIncluded: 999,
-      }
-    ];
+    // Test connection
+    const client = await pool.connect();
+    console.log('Connected to PostgreSQL successfully');
+    client.release();
+
+    // Create tables if they don't exist
+    await createTables();
+    await insertSampleData();
+    
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    throw error;
+  }
+}
+
+async function createTables() {
+  const createUsersTable = `
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      first_name VARCHAR(255) NOT NULL,
+      last_name VARCHAR(255) NOT NULL,
+      user_type VARCHAR(50) NOT NULL DEFAULT 'member',
+      phone VARCHAR(20),
+      stripe_subscription_id VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createMembershipTiersTable = `
+    CREATE TABLE IF NOT EXISTS membership_tiers (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      price DECIMAL(10,2) NOT NULL,
+      features TEXT[],
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createMemberProfilesTable = `
+    CREATE TABLE IF NOT EXISTS member_profiles (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      membership_tier_id INTEGER REFERENCES membership_tiers(id),
+      fitness_goals TEXT,
+      emergency_contact VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createTrainerProfilesTable = `
+    CREATE TABLE IF NOT EXISTS trainer_profiles (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      specializations TEXT[],
+      hourly_rate DECIMAL(10,2) DEFAULT 75.00,
+      experience_years INTEGER DEFAULT 2,
+      certifications TEXT,
+      bio TEXT,
+      is_available BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createSubscriptionsTable = `
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE,
+      membership_tier_id INTEGER REFERENCES membership_tiers(id),
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      is_active BOOLEAN DEFAULT true,
+      auto_renew BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createTrainingSessionsTable = `
+    CREATE TABLE IF NOT EXISTS training_sessions (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id),
+      trainer_id INTEGER REFERENCES trainer_profiles(id),
+      session_type VARCHAR(255),
+      scheduled_date DATE,
+      scheduled_time TIME,
+      duration INTEGER DEFAULT 60,
+      status VARCHAR(50) DEFAULT 'scheduled',
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createWorkoutPlansTable = `
+    CREATE TABLE IF NOT EXISTS workout_plans (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id),
+      trainer_id INTEGER REFERENCES trainer_profiles(id),
+      plan_name VARCHAR(255) NOT NULL,
+      description TEXT,
+      duration INTEGER,
+      exercises TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createNutritionPlansTable = `
+    CREATE TABLE IF NOT EXISTS nutrition_plans (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id),
+      trainer_id INTEGER REFERENCES trainer_profiles(id),
+      plan_name VARCHAR(255) NOT NULL,
+      description TEXT,
+      calories INTEGER,
+      meals TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createBodyAssessmentsTable = `
+    CREATE TABLE IF NOT EXISTS body_assessments (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id),
+      trainer_id INTEGER REFERENCES trainer_profiles(id),
+      client_name VARCHAR(255) NOT NULL,
+      date_of_birth DATE,
+      age INTEGER,
+      height DECIMAL(5,2),
+      bp VARCHAR(20),
+      bp_after_treadmill VARCHAR(20),
+      emergency_contact VARCHAR(255),
+      bmi DECIMAL(5,2),
+      weight DECIMAL(5,2),
+      muscle DECIMAL(5,2),
+      fat DECIMAL(5,2),
+      saturated_fat DECIMAL(5,2),
+      visceral_fat DECIMAL(5,2),
+      bmr INTEGER,
+      body_age INTEGER,
+      postural_assessment TEXT,
+      head_neck_alignment VARCHAR(255),
+      shoulder_alignment VARCHAR(255),
+      upper_back_alignment VARCHAR(255),
+      lower_back_alignment VARCHAR(255),
+      pelvic_alignment VARCHAR(255),
+      hip_knee_alignment VARCHAR(255),
+      ankle_alignment VARCHAR(255),
+      spinal_mobility VARCHAR(255),
+      recommendations TEXT,
+      circumference_measurements JSONB,
+      advice TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createAttendanceTable = `
+    CREATE TABLE IF NOT EXISTS attendance (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id),
+      check_in_time TIMESTAMP NOT NULL,
+      check_out_time TIMESTAMP,
+      date DATE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const tables = [
+    createUsersTable,
+    createMembershipTiersTable,
+    createMemberProfilesTable,
+    createTrainerProfilesTable,
+    createSubscriptionsTable,
+    createTrainingSessionsTable,
+    createWorkoutPlansTable,
+    createNutritionPlansTable,
+    createBodyAssessmentsTable,
+    createAttendanceTable
+  ];
+
+  for (const table of tables) {
+    await pool.query(table);
+  }
+}
+
+async function insertSampleData() {
+  try {
+    // Check if data already exists
+    const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
+    if (parseInt(existingTiers[0].count) > 0) {
+      console.log('Sample data already exists, skipping insertion');
+      return;
+    }
 
     // Insert membership tiers
-    for (const tier of membershipTiers) {
-      await db.insert(schema.membershipTiers).values(tier);
-    }
-
-    // Create sample users
-    const sampleUsers = [
+    const tierInserts = [
       {
-        email: "john.doe@example.com",
-        firstName: "John",
-        lastName: "Doe",
-        userType: "member" as const,
-        phone: "+1-555-0123"
+        name: 'BRONZE',
+        price: 199,
+        features: ['Access to gym equipment', 'Locker room access', 'Basic fitness assessment'],
+        description: 'Perfect for getting started on your fitness journey'
       },
       {
-        email: "jane.trainer@example.com",
-        firstName: "Jane",
-        lastName: "Smith",
-        userType: "trainer" as const,
-        phone: "+1-555-0124"
+        name: 'SILVER',
+        price: 299,
+        features: ['Everything in Bronze', '2 personal training sessions/month', 'Nutrition consultation', 'Group classes'],
+        description: 'Enhanced experience with personal guidance'
       },
       {
-        email: "admin@reshape.com",
-        firstName: "Admin",
-        lastName: "User",
-        userType: "admin" as const,
-        phone: "+1-555-0125"
+        name: 'GOLD',
+        price: 499,
+        features: ['Everything in Silver', 'Unlimited personal training', 'Custom meal plans', 'Recovery services', '24/7 gym access'],
+        description: 'The ultimate luxury fitness experience'
       }
     ];
 
-    const insertedUsers = [];
-    for (const user of sampleUsers) {
-      const [insertedUser] = await db.insert(schema.users).values(user).returning();
-      insertedUsers.push(insertedUser);
+    for (const tier of tierInserts) {
+      await pool.query(
+        'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
+        [tier.name, tier.price, tier.features, tier.description]
+      );
     }
 
-    // Create sample member profile for John Doe
-    const memberUser = insertedUsers.find(u => u.email === "john.doe@example.com");
-    const accessTier = await db.select().from(schema.membershipTiers).where(schema.membershipTiers.name.eq("Access")).limit(1);
-    
-    if (memberUser && accessTier.length > 0) {
-      await db.insert(schema.memberProfiles).values({
-        userId: memberUser.id,
-        membershipTierId: accessTier[0].id,
-        emergencyContact: "emergency@example.com",
-        fitnessGoals: "General fitness and weight loss"
-      });
+    // Insert sample users
+    const userInserts = [
+      {
+        email: 'admin@reshape.com',
+        firstName: 'Admin',
+        lastName: 'User',
+        userType: 'admin'
+      },
+      {
+        email: 'trainer@reshape.com',
+        firstName: 'Trainer',
+        lastName: 'Pro',
+        userType: 'trainer'
+      },
+      {
+        email: 'member@reshape.com',
+        firstName: 'Member',
+        lastName: 'Test',
+        userType: 'member'
+      }
+    ];
+
+    for (const user of userInserts) {
+      await pool.query(
+        'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4)',
+        [user.email, user.firstName, user.lastName, user.userType]
+      );
     }
 
-    // Create sample trainer profile for Jane Smith
-    const trainerUser = insertedUsers.find(u => u.email === "jane.trainer@example.com");
-    if (trainerUser) {
-      await db.insert(schema.trainerProfiles).values({
-        userId: trainerUser.id,
-        specializations: ["Weight Training", "Cardio", "Nutrition"],
-        certifications: "NASM-CPT, Nutrition Specialist",
-        experienceYears: 5,
-        hourlyRate: 75.00,
-        bio: "Experienced personal trainer specializing in weight loss and strength training.",
-        isAvailable: true
-      });
-    }
-
-    console.log("Database initialized with sample data");
+    console.log('Sample data inserted successfully');
   } catch (error) {
-    console.error("Error initializing database:", error);
+    console.error('Error inserting sample data:', error);
+  }
+}
+
+export async function closeDatabase() {
+  try {
+    await pool.end();
+    console.log('Database connection closed');
+  } catch (error) {
+    console.error('Error closing database:', error);
   }
 }

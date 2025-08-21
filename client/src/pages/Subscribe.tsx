@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { CheckCircle, CreditCard, User, Mail, Phone } from "lucide-react";
-import Navigation from "@/components/Navigation";
 
 const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
   const { toast } = useToast();
@@ -201,8 +200,22 @@ export default function Subscribe() {
   });
 
   const handleTierSelect = async (tier: any) => {
-    // Navigate to contact page for all membership inquiries
-    setLocation('/contact');
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to subscribe",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+      return;
+    }
+
+    setSelectedTier(tier);
+    setShowPaymentForm(true);
+    // Store the selected tier in localStorage
+    localStorage.setItem('selectedMembershipTier', JSON.stringify(tier));
   };
 
   // Effect to load selected tier from localStorage on component mount
@@ -251,7 +264,22 @@ export default function Subscribe() {
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse delay-700"></div>
         </div>
 
-        <Navigation />
+        {/* Navigation */}
+        <nav className="fixed top-0 w-full z-50 glass-effect relative">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+            <div className="flex justify-between items-center h-20">
+              <h1 className="text-2xl font-bold tracking-wider text-gold">RESHAPE</h1>
+              <Button
+                onClick={() => setLocation('/')}
+                variant="outline"
+                size="sm"
+                className="border-gold text-gold hover:bg-gold hover:text-black transition-all duration-300"
+              >
+                Back to Home
+              </Button>
+            </div>
+          </div>
+        </nav>
 
         <div className="pt-20 min-h-screen flex items-center justify-center relative z-10">
           <div className="max-w-2xl mx-auto px-6 py-20">
@@ -312,7 +340,22 @@ export default function Subscribe() {
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse delay-700"></div>
       </div>
 
-      <Navigation />
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 glass-effect relative">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="flex justify-between items-center h-20">
+            <h1 className="text-2xl font-bold tracking-wider text-gold">RESHAPE</h1>
+            <Button
+              onClick={() => setLocation('/')}
+              variant="outline"
+              size="sm"
+              className="border-gold text-gold hover:bg-gold hover:text-black transition-all duration-300"
+            >
+              Back to Home
+            </Button>
+          </div>
+        </div>
+      </nav>
 
       {/* Membership Selection */}
       <section className="pt-32 pb-32 relative z-10">
@@ -333,7 +376,7 @@ export default function Subscribe() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {membershipTiers?.map((tier: any, index: number) => (
               <Card
-                key={tier._id || tier.id || `tier-${index}`}
+                key={tier.id}
                 className="bg-white/5 backdrop-blur-sm border border-white/10 hover:border-gold/50 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20 animate-fade-in"
                 style={{animationDelay: `${index * 200}ms`}}
                 onClick={() => handleTierSelect(tier)}

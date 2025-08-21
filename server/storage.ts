@@ -1,344 +1,507 @@
-import {
-  users,
-  membershipTiers,
-  memberProfiles,
-  trainerProfiles,
-  trainingSessions,
-  workoutPlans,
-  nutritionPlans,
-  subscriptions,
-  type User,
-  type UpsertUser,
-  type MembershipTier,
-  type InsertMembershipTier,
-  type MemberProfile,
-  type InsertMemberProfile,
-  type TrainerProfile,
-  type InsertTrainerProfile,
-  type TrainingSession,
-  type InsertTrainingSession,
-  type WorkoutPlan,
-  type InsertWorkoutPlan,
-  type NutritionPlan,
-  type InsertNutritionPlan,
-  type Subscription,
-} from "@shared/schema";
-import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
 
-export interface IStorage {
-  // User operations (mandatory for Replit Auth)
-  getUser(id: string): Promise<User | undefined>;
-  createUser(userData: Omit<UpsertUser, 'id'>): Promise<User>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  updateUserStripeInfo(userId: string, stripeCustomerId: string, stripeSubscriptionId: string): Promise<User>;
-  deleteUser(userId: string): Promise<void>;
+import { pool } from './db.js';
 
-  // Membership tier operations
-  getMembershipTiers(): Promise<MembershipTier[]>;
-  getMembershipTier(id: string): Promise<MembershipTier | undefined>;
-  createMembershipTier(tier: InsertMembershipTier): Promise<MembershipTier>;
-
-  // Member profile operations
-  getMemberProfile(userId: string): Promise<MemberProfile | undefined>;
-  createMemberProfile(profile: InsertMemberProfile): Promise<MemberProfile>;
-  updateMemberProfile(id: string, profile: Partial<InsertMemberProfile>): Promise<MemberProfile>;
-
-  // Trainer profile operations
-  getTrainerProfile(userId: string): Promise<TrainerProfile | undefined>;
-  getTrainerProfiles(): Promise<TrainerProfile[]>;
-  createTrainerProfile(profile: InsertTrainerProfile): Promise<TrainerProfile>;
-  updateTrainerProfile(id: string, profile: Partial<InsertTrainerProfile>): Promise<TrainerProfile>;
-
-  // Training session operations
-  getTrainingSessions(filters: { trainerId?: string; memberId?: string }): Promise<TrainingSession[]>;
-  createTrainingSession(session: InsertTrainingSession): Promise<TrainingSession>;
-  updateTrainingSession(id: string, session: Partial<InsertTrainingSession>): Promise<TrainingSession>;
-
-  // Workout plan operations
-  getWorkoutPlans(filters: { trainerId?: string; memberId?: string }): Promise<WorkoutPlan[]>;
-  createWorkoutPlan(plan: InsertWorkoutPlan): Promise<WorkoutPlan>;
-
-  // Nutrition plan operations
-  getNutritionPlans(filters: { trainerId?: string; memberId?: string }): Promise<NutritionPlan[]>;
-  createNutritionPlan(plan: InsertNutritionPlan): Promise<NutritionPlan>;
-
-  // Subscription operations
-  getUserSubscription(memberId: string): Promise<Subscription | undefined>;
-  createSubscription(subscription: Partial<Subscription>): Promise<Subscription>;
-
-  // Admin operations
-  getAllMembers(): Promise<any[]>;
-  getAllTrainers(): Promise<any[]>;
-  getAdminStats(): Promise<any>;
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  userType: 'member' | 'trainer' | 'admin';
+  phone?: string;
+  stripeSubscriptionId?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-export class DatabaseStorage implements IStorage {
+interface MembershipTier {
+  id: string;
+  name: string;
+  price: number;
+  features: string[];
+  description: string;
+}
+
+interface MemberProfile {
+  id: string;
+  userId: string;
+  membershipTierId: string;
+  fitnessGoals: string;
+  emergencyContact: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+interface TrainerProfile {
+  id: string;
+  userId: string;
+  specializations: string[];
+  hourlyRate: number;
+  experienceYears: number;
+  certifications: string;
+  bio: string;
+  isAvailable: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export const storage = {
   // User operations
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
-  }
+  async createUser(userData: Omit<User, 'id'>): Promise<User> {
+    const { rows } = await pool.query(
+      'INSERT INTO users (email, first_name, last_name, user_type, phone, stripe_subscription_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [userData.email, userData.firstName, userData.lastName, userData.userType, userData.phone || null, userData.stripeSubscriptionId || null]
+    );
+    return this.mapUserFromDb(rows[0]);
+  },
 
-  async createUser(userData: Omit<UpsertUser, 'id'>): Promise<User> {
-    const [user] = await db.insert(users).values(userData).returning();
-    return user;
-  }
+  async getUser(id: string): Promise<User | null> {
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    if (rows.length === 0) return null;
+    return this.mapUserFromDb(rows[0]);
+  },
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    const [user] = await db
-      .insert(users)
-      .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return user;
-  }
+  async getUserByEmail(email: string): Promise<User | null> {
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (rows.length === 0) return null;
+    return this.mapUserFromDb(rows[0]);
+  },
 
-  async updateUserStripeInfo(userId: string, stripeCustomerId: string, stripeSubscriptionId: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        stripeCustomerId,
-        stripeSubscriptionId,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
-  }
-
-  async deleteUser(userId: string): Promise<void> {
-    // Delete user (this will cascade delete profiles due to foreign key constraints)
-    await db.delete(users).where(eq(users.id, userId));
-  }
+  async deleteUser(id: string): Promise<void> {
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+  },
 
   // Membership tier operations
   async getMembershipTiers(): Promise<MembershipTier[]> {
-    return await db.select().from(membershipTiers);
-  }
+    const { rows } = await pool.query('SELECT * FROM membership_tiers ORDER BY price ASC');
+    return rows.map(this.mapMembershipTierFromDb);
+  },
 
-  async getMembershipTier(id: string): Promise<MembershipTier | undefined> {
-    const [tier] = await db.select().from(membershipTiers).where(eq(membershipTiers.id, id));
-    return tier;
-  }
-
-  async createMembershipTier(tier: InsertMembershipTier): Promise<MembershipTier> {
-    const [newTier] = await db.insert(membershipTiers).values(tier).returning();
-    return newTier;
-  }
+  async getMembershipTier(id: string): Promise<MembershipTier | null> {
+    const { rows } = await pool.query('SELECT * FROM membership_tiers WHERE id = $1', [id]);
+    if (rows.length === 0) return null;
+    return this.mapMembershipTierFromDb(rows[0]);
+  },
 
   // Member profile operations
-  async getMemberProfile(userId: string): Promise<MemberProfile | undefined> {
-    const [profile] = await db.select().from(memberProfiles).where(eq(memberProfiles.userId, userId));
-    return profile;
-  }
+  async createMemberProfile(profileData: Omit<MemberProfile, 'id'>): Promise<MemberProfile> {
+    const { rows } = await pool.query(
+      'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact) VALUES ($1, $2, $3, $4) RETURNING *',
+      [profileData.userId, profileData.membershipTierId, profileData.fitnessGoals, profileData.emergencyContact]
+    );
+    return this.mapMemberProfileFromDb(rows[0]);
+  },
 
-  async createMemberProfile(profile: InsertMemberProfile): Promise<MemberProfile> {
-    const [newProfile] = await db.insert(memberProfiles).values(profile).returning();
-    return newProfile;
-  }
+  async getMemberProfile(userId: string): Promise<MemberProfile | null> {
+    const { rows } = await pool.query('SELECT * FROM member_profiles WHERE user_id = $1', [userId]);
+    if (rows.length === 0) return null;
+    return this.mapMemberProfileFromDb(rows[0]);
+  },
 
-  async updateMemberProfile(id: string, profile: Partial<InsertMemberProfile>): Promise<MemberProfile> {
-    const [updatedProfile] = await db
-      .update(memberProfiles)
-      .set(profile)
-      .where(eq(memberProfiles.id, id))
-      .returning();
-    return updatedProfile;
-  }
+  async getAllMembers(): Promise<any[]> {
+    const { rows } = await pool.query(`
+      SELECT u.*, mp.*, mt.name as membership_tier_name 
+      FROM users u 
+      LEFT JOIN member_profiles mp ON u.id = mp.user_id 
+      LEFT JOIN membership_tiers mt ON mp.membership_tier_id = mt.id 
+      WHERE u.user_type = 'member'
+      ORDER BY u.created_at DESC
+    `);
+    
+    if (rows.length === 0) return [];
+    
+    return rows.map(row => {
+      const user = this.mapUserFromDb(row);
+      if (!user) return null;
+      return {
+        ...user,
+        profile: row.user_id ? this.mapMemberProfileFromDb(row) : null,
+        membershipTierName: row.membership_tier_name
+      };
+    }).filter(member => member !== null);
+  },
+
+  async updateMemberById(userId: string, updates: any): Promise<void> {
+    const userFields = [];
+    const userValues = [];
+    let paramIndex = 1;
+
+    if (updates.firstName) {
+      userFields.push(`first_name = $${paramIndex++}`);
+      userValues.push(updates.firstName);
+    }
+    if (updates.lastName) {
+      userFields.push(`last_name = $${paramIndex++}`);
+      userValues.push(updates.lastName);
+    }
+    if (updates.email) {
+      userFields.push(`email = $${paramIndex++}`);
+      userValues.push(updates.email);
+    }
+    if (updates.phone) {
+      userFields.push(`phone = $${paramIndex++}`);
+      userValues.push(updates.phone);
+    }
+
+    if (userFields.length > 0) {
+      userFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      userValues.push(userId);
+      await pool.query(
+        `UPDATE users SET ${userFields.join(', ')} WHERE id = $${paramIndex}`,
+        userValues
+      );
+    }
+
+    // Update member profile if needed
+    if (updates.fitnessGoals || updates.emergencyContact || updates.membershipTierId) {
+      const profileFields = [];
+      const profileValues = [];
+      let profileParamIndex = 1;
+
+      if (updates.fitnessGoals) {
+        profileFields.push(`fitness_goals = $${profileParamIndex++}`);
+        profileValues.push(updates.fitnessGoals);
+      }
+      if (updates.emergencyContact) {
+        profileFields.push(`emergency_contact = $${profileParamIndex++}`);
+        profileValues.push(updates.emergencyContact);
+      }
+      if (updates.membershipTierId) {
+        profileFields.push(`membership_tier_id = $${profileParamIndex++}`);
+        profileValues.push(updates.membershipTierId);
+      }
+
+      if (profileFields.length > 0) {
+        profileFields.push(`updated_at = CURRENT_TIMESTAMP`);
+        profileValues.push(userId);
+        await pool.query(
+          `UPDATE member_profiles SET ${profileFields.join(', ')} WHERE user_id = $${profileParamIndex}`,
+          profileValues
+        );
+      }
+    }
+  },
 
   // Trainer profile operations
-  async getTrainerProfile(userId: string): Promise<TrainerProfile | undefined> {
-    const [profile] = await db.select().from(trainerProfiles).where(eq(trainerProfiles.userId, userId));
-    return profile;
-  }
+  async createTrainerProfile(profileData: Omit<TrainerProfile, 'id'>): Promise<TrainerProfile> {
+    const { rows } = await pool.query(
+      'INSERT INTO trainer_profiles (user_id, specializations, hourly_rate, experience_years, certifications, bio, is_available) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [profileData.userId, profileData.specializations, profileData.hourlyRate, profileData.experienceYears, profileData.certifications, profileData.bio, profileData.isAvailable]
+    );
+    return this.mapTrainerProfileFromDb(rows[0]);
+  },
 
-  async getTrainerProfiles(): Promise<TrainerProfile[]> {
-    return await db.select().from(trainerProfiles).where(eq(trainerProfiles.isAvailable, true));
-  }
-
-  async createTrainerProfile(profile: InsertTrainerProfile): Promise<TrainerProfile> {
-    const [newProfile] = await db.insert(trainerProfiles).values(profile).returning();
-    return newProfile;
-  }
-
-  async updateTrainerProfile(id: string, profile: Partial<InsertTrainerProfile>): Promise<TrainerProfile> {
-    const [updatedProfile] = await db
-      .update(trainerProfiles)
-      .set(profile)
-      .where(eq(trainerProfiles.id, id))
-      .returning();
-    return updatedProfile;
-  }
-
-  // Training session operations
-  async getTrainingSessions(filters: { trainerId?: string; memberId?: string }): Promise<TrainingSession[]> {
-    if (filters.trainerId && filters.memberId) {
-      return await db.select().from(trainingSessions).where(and(
-        eq(trainingSessions.trainerId, filters.trainerId),
-        eq(trainingSessions.memberId, filters.memberId)
-      ));
-    } else if (filters.trainerId) {
-      return await db.select().from(trainingSessions).where(eq(trainingSessions.trainerId, filters.trainerId));
-    } else if (filters.memberId) {
-      return await db.select().from(trainingSessions).where(eq(trainingSessions.memberId, filters.memberId));
-    }
-
-    return await db.select().from(trainingSessions);
-  }
-
-  async createTrainingSession(session: InsertTrainingSession): Promise<TrainingSession> {
-    const [newSession] = await db.insert(trainingSessions).values(session).returning();
-    return newSession;
-  }
-
-  async updateTrainingSession(id: string, session: Partial<InsertTrainingSession>): Promise<TrainingSession> {
-    const [updatedSession] = await db
-      .update(trainingSessions)
-      .set(session)
-      .where(eq(trainingSessions.id, id))
-      .returning();
-    return updatedSession;
-  }
-
-  // Workout plan operations
-  async getWorkoutPlans(filters: { trainerId?: string; memberId?: string }): Promise<WorkoutPlan[]> {
-    if (filters.trainerId && filters.memberId) {
-      return await db.select().from(workoutPlans).where(and(
-        eq(workoutPlans.trainerId, filters.trainerId),
-        eq(workoutPlans.memberId, filters.memberId)
-      ));
-    } else if (filters.trainerId) {
-      return await db.select().from(workoutPlans).where(eq(workoutPlans.trainerId, filters.trainerId));
-    } else if (filters.memberId) {
-      return await db.select().from(workoutPlans).where(eq(workoutPlans.memberId, filters.memberId));
-    }
-
-    return await db.select().from(workoutPlans);
-  }
-
-  async createWorkoutPlan(plan: InsertWorkoutPlan): Promise<WorkoutPlan> {
-    const [newPlan] = await db.insert(workoutPlans).values(plan).returning();
-    return newPlan;
-  }
-
-  // Nutrition plan operations
-  async getNutritionPlans(filters: { trainerId?: string; memberId?: string }): Promise<NutritionPlan[]> {
-    if (filters.trainerId && filters.memberId) {
-      return await db.select().from(nutritionPlans).where(and(
-        eq(nutritionPlans.trainerId, filters.trainerId),
-        eq(nutritionPlans.memberId, filters.memberId)
-      ));
-    } else if (filters.trainerId) {
-      return await db.select().from(nutritionPlans).where(eq(nutritionPlans.trainerId, filters.trainerId));
-    } else if (filters.memberId) {
-      return await db.select().from(nutritionPlans).where(eq(nutritionPlans.memberId, filters.memberId));
-    }
-
-    return await db.select().from(nutritionPlans);
-  }
-
-  async createNutritionPlan(plan: InsertNutritionPlan): Promise<NutritionPlan> {
-    const [newPlan] = await db.insert(nutritionPlans).values(plan).returning();
-    return newPlan;
-  }
-
-  // Subscription operations
-  async getUserSubscription(memberId: string): Promise<Subscription | undefined> {
-    const [subscription] = await db
-      .select()
-      .from(subscriptions)
-      .where(eq(subscriptions.memberId, memberId));
-    return subscription;
-  }
-
-  async createSubscription(subscription: Partial<Subscription>): Promise<Subscription> {
-    const [newSubscription] = await db.insert(subscriptions).values(subscription).returning();
-    return newSubscription;
-  }
-
-  // Admin operations
-  async getAllMembers(): Promise<any[]> {
-    const members = await db
-      .select({
-        id: memberProfiles.id,
-        userId: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-        phone: users.phone,
-        membershipTier: membershipTiers.name,
-        joinDate: memberProfiles.joinDate,
-        createdAt: users.createdAt,
-        emergencyContact: memberProfiles.emergencyContact,
-        fitnessGoals: memberProfiles.fitnessGoals
-      })
-      .from(users)
-      .innerJoin(memberProfiles, eq(users.id, memberProfiles.userId))
-      .leftJoin(membershipTiers, eq(memberProfiles.membershipTierId, membershipTiers.id))
-      .where(eq(users.userType, 'member'));
-
-    return members;
-  }
+  async getTrainerProfile(userId: string): Promise<TrainerProfile | null> {
+    const { rows } = await pool.query('SELECT * FROM trainer_profiles WHERE user_id = $1', [userId]);
+    if (rows.length === 0) return null;
+    return this.mapTrainerProfileFromDb(rows[0]);
+  },
 
   async getAllTrainers(): Promise<any[]> {
-    const trainers = await db
-      .select({
-        id: trainerProfiles.id,
-        userId: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-        specializations: trainerProfiles.specializations,
-        hourlyRate: trainerProfiles.hourlyRate,
-        experienceYears: trainerProfiles.experienceYears,
-        certifications: trainerProfiles.certifications,
-        bio: trainerProfiles.bio,
-        isAvailable: trainerProfiles.isAvailable,
-        createdAt: users.createdAt
-      })
-      .from(users)
-      .innerJoin(trainerProfiles, eq(users.id, trainerProfiles.userId))
-      .where(eq(users.userType, 'trainer'));
+    const { rows } = await pool.query(`
+      SELECT u.*, tp.* 
+      FROM users u 
+      LEFT JOIN trainer_profiles tp ON u.id = tp.user_id 
+      WHERE u.user_type = 'trainer'
+      ORDER BY u.created_at DESC
+    `);
+    
+    if (rows.length === 0) return [];
+    
+    return rows.map(row => {
+      const user = this.mapUserFromDb(row);
+      if (!user) return null;
+      return {
+        ...user,
+        profile: row.user_id ? this.mapTrainerProfileFromDb(row) : null
+      };
+    }).filter(trainer => trainer !== null);
+  },
 
-    return trainers;
-  }
+  async updateTrainerById(userId: string, updates: any): Promise<void> {
+    const userFields = [];
+    const userValues = [];
+    let paramIndex = 1;
 
+    if (updates.firstName) {
+      userFields.push(`first_name = $${paramIndex++}`);
+      userValues.push(updates.firstName);
+    }
+    if (updates.lastName) {
+      userFields.push(`last_name = $${paramIndex++}`);
+      userValues.push(updates.lastName);
+    }
+    if (updates.email) {
+      userFields.push(`email = $${paramIndex++}`);
+      userValues.push(updates.email);
+    }
+
+    if (userFields.length > 0) {
+      userFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      userValues.push(userId);
+      await pool.query(
+        `UPDATE users SET ${userFields.join(', ')} WHERE id = $${paramIndex}`,
+        userValues
+      );
+    }
+
+    // Update trainer profile if needed
+    if (updates.specializations || updates.hourlyRate || updates.experienceYears || updates.certifications || updates.bio !== undefined || updates.isAvailable !== undefined) {
+      const profileFields = [];
+      const profileValues = [];
+      let profileParamIndex = 1;
+
+      if (updates.specializations) {
+        profileFields.push(`specializations = $${profileParamIndex++}`);
+        profileValues.push(updates.specializations);
+      }
+      if (updates.hourlyRate) {
+        profileFields.push(`hourly_rate = $${profileParamIndex++}`);
+        profileValues.push(updates.hourlyRate);
+      }
+      if (updates.experienceYears) {
+        profileFields.push(`experience_years = $${profileParamIndex++}`);
+        profileValues.push(updates.experienceYears);
+      }
+      if (updates.certifications) {
+        profileFields.push(`certifications = $${profileParamIndex++}`);
+        profileValues.push(updates.certifications);
+      }
+      if (updates.bio !== undefined) {
+        profileFields.push(`bio = $${profileParamIndex++}`);
+        profileValues.push(updates.bio);
+      }
+      if (updates.isAvailable !== undefined) {
+        profileFields.push(`is_available = $${profileParamIndex++}`);
+        profileValues.push(updates.isAvailable);
+      }
+
+      if (profileFields.length > 0) {
+        profileFields.push(`updated_at = CURRENT_TIMESTAMP`);
+        profileValues.push(userId);
+        await pool.query(
+          `UPDATE trainer_profiles SET ${profileFields.join(', ')} WHERE user_id = $${profileParamIndex}`,
+          profileValues
+        );
+      }
+    }
+  },
+
+  // Training sessions
+  async createTrainingSession(sessionData: any): Promise<any> {
+    const { rows } = await pool.query(
+      'INSERT INTO training_sessions (member_id, trainer_id, session_type, scheduled_date, scheduled_time, duration, status, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [sessionData.memberId, sessionData.trainerId, sessionData.sessionType, sessionData.scheduledDate, sessionData.scheduledTime, sessionData.duration, sessionData.status || 'scheduled', sessionData.notes]
+    );
+    return rows[0];
+  },
+
+  async getTrainingSessions(filters: any): Promise<any[]> {
+    let query = 'SELECT * FROM training_sessions WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.memberId) {
+      query += ` AND member_id = $${paramIndex++}`;
+      params.push(filters.memberId);
+    }
+    if (filters.trainerId) {
+      query += ` AND trainer_id = $${paramIndex++}`;
+      params.push(filters.trainerId);
+    }
+
+    query += ' ORDER BY scheduled_date DESC, scheduled_time DESC';
+    const { rows } = await pool.query(query, params);
+    return rows;
+  },
+
+  // Workout plans
+  async createWorkoutPlan(planData: any): Promise<any> {
+    const { rows } = await pool.query(
+      'INSERT INTO workout_plans (member_id, trainer_id, plan_name, description, duration, exercises) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [planData.memberId, planData.trainerId, planData.planName, planData.description, planData.duration, planData.exercises]
+    );
+    return rows[0];
+  },
+
+  async getWorkoutPlans(filters: any): Promise<any[]> {
+    let query = 'SELECT * FROM workout_plans WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.memberId) {
+      query += ` AND member_id = $${paramIndex++}`;
+      params.push(filters.memberId);
+    }
+    if (filters.trainerId) {
+      query += ` AND trainer_id = $${paramIndex++}`;
+      params.push(filters.trainerId);
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, params);
+    return rows;
+  },
+
+  // Nutrition plans
+  async createNutritionPlan(planData: any): Promise<any> {
+    const { rows } = await pool.query(
+      'INSERT INTO nutrition_plans (member_id, trainer_id, plan_name, description, calories, meals) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [planData.memberId, planData.trainerId, planData.planName, planData.description, planData.calories, planData.meals]
+    );
+    return rows[0];
+  },
+
+  async getNutritionPlans(filters: any): Promise<any[]> {
+    let query = 'SELECT * FROM nutrition_plans WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.memberId) {
+      query += ` AND member_id = $${paramIndex++}`;
+      params.push(filters.memberId);
+    }
+    if (filters.trainerId) {
+      query += ` AND trainer_id = $${paramIndex++}`;
+      params.push(filters.trainerId);
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, params);
+    return rows;
+  },
+
+  // Body assessments
+  async createBodyAssessment(assessmentData: any): Promise<any> {
+    const { rows } = await pool.query(
+      `INSERT INTO body_assessments (
+        member_id, trainer_id, client_name, date_of_birth, age, height, bp, bp_after_treadmill,
+        emergency_contact, bmi, weight, muscle, fat, saturated_fat, visceral_fat, bmr, body_age,
+        postural_assessment, head_neck_alignment, shoulder_alignment, upper_back_alignment,
+        lower_back_alignment, pelvic_alignment, hip_knee_alignment, ankle_alignment, spinal_mobility,
+        recommendations, circumference_measurements, advice
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
+      [
+        assessmentData.memberId, assessmentData.trainerId, assessmentData.clientName,
+        assessmentData.dateOfBirth, assessmentData.age, assessmentData.height, assessmentData.bp,
+        assessmentData.bpAfterTreadmill, assessmentData.emergencyContact, assessmentData.bmi,
+        assessmentData.weight, assessmentData.muscle, assessmentData.fat, assessmentData.saturatedFat,
+        assessmentData.visceralFat, assessmentData.bmr, assessmentData.bodyAge,
+        assessmentData.posturalAssessment, assessmentData.headNeckAlignment,
+        assessmentData.shoulderAlignment, assessmentData.upperBackAlignment,
+        assessmentData.lowerBackAlignment, assessmentData.pelvicAlignment,
+        assessmentData.hipKneeAlignment, assessmentData.ankleAlignment, assessmentData.spinalMobility,
+        assessmentData.recommendations, JSON.stringify(assessmentData.circumferenceMeasurements),
+        assessmentData.advice
+      ]
+    );
+    return rows[0];
+  },
+
+  async getBodyAssessments(filters: any): Promise<any[]> {
+    let query = 'SELECT * FROM body_assessments WHERE 1=1';
+    const params = [];
+    let paramIndex = 1;
+
+    if (filters.memberId) {
+      query += ` AND member_id = $${paramIndex++}`;
+      params.push(filters.memberId);
+    }
+    if (filters.trainerId) {
+      query += ` AND trainer_id = $${paramIndex++}`;
+      params.push(filters.trainerId);
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const { rows } = await pool.query(query, params);
+    return rows;
+  },
+
+  // Subscriptions
+  async createSubscription(subscriptionData: any): Promise<any> {
+    const { rows } = await pool.query(
+      'INSERT INTO subscriptions (member_id, membership_tier_id, start_date, end_date, is_active, auto_renew) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [subscriptionData.memberId, subscriptionData.membershipTierId, subscriptionData.startDate, subscriptionData.endDate, subscriptionData.isActive, subscriptionData.autoRenew]
+    );
+    return rows[0];
+  },
+
+  // Admin stats
   async getAdminStats(): Promise<any> {
-    const totalMembers = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(eq(users.userType, 'member'));
+    try {
+      const memberCountQuery = await pool.query("SELECT COUNT(*) FROM users WHERE user_type = 'member'");
+      const trainerCountQuery = await pool.query("SELECT COUNT(*) FROM users WHERE user_type = 'trainer'");
+      const activeSubscriptionsQuery = await pool.query("SELECT COUNT(*) FROM subscriptions WHERE is_active = true");
 
-    const totalTrainers = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(eq(users.userType, 'trainer'));
+      return {
+        totalMembers: parseInt(memberCountQuery.rows[0]?.count || '0'),
+        totalTrainers: parseInt(trainerCountQuery.rows[0]?.count || '0'),
+        activeSubscriptions: parseInt(activeSubscriptionsQuery.rows[0]?.count || '0'),
+        revenue: 0 // Calculate from active subscriptions
+      };
+    } catch (error) {
+      console.error('Error getting admin stats:', error);
+      return {
+        totalMembers: 0,
+        totalTrainers: 0,
+        activeSubscriptions: 0,
+        revenue: 0
+      };
+    }
+  },
 
-    const totalSessions = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(trainingSessions);
-
-    const activeSubscriptions = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(subscriptions)
-      .where(eq(subscriptions.isActive, true));
-
+  // Helper methods for mapping database results
+  mapUserFromDb(row: any): User {
+    if (!row || !row.id) return null;
     return {
-      totalMembers: totalMembers[0]?.count || 0,
-      totalTrainers: totalTrainers[0]?.count || 0,
-      totalSessions: totalSessions[0]?.count || 0,
-      activeSubscriptions: activeSubscriptions[0]?.count || 0,
-      monthlyRevenue: 52800, // Static for now
-      growth: "+12%" // Static for now
+      id: row.id.toString(),
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      userType: row.user_type,
+      phone: row.phone,
+      stripeSubscriptionId: row.stripe_subscription_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  },
+
+  mapMembershipTierFromDb(row: any): MembershipTier {
+    if (!row || !row.id) return null;
+    return {
+      id: row.id.toString(),
+      name: row.name,
+      price: parseFloat(row.price),
+      features: row.features,
+      description: row.description
+    };
+  },
+
+  mapMemberProfileFromDb(row: any): MemberProfile {
+    if (!row || !row.id) return null;
+    return {
+      id: row.id.toString(),
+      userId: row.user_id?.toString(),
+      membershipTierId: row.membership_tier_id?.toString(),
+      fitnessGoals: row.fitness_goals,
+      emergencyContact: row.emergency_contact,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  },
+
+  mapTrainerProfileFromDb(row: any): TrainerProfile {
+    if (!row || !row.id) return null;
+    return {
+      id: row.id.toString(),
+      userId: row.user_id?.toString(),
+      specializations: row.specializations || [],
+      hourlyRate: parseFloat(row.hourly_rate || 75),
+      experienceYears: row.experience_years || 2,
+      certifications: row.certifications || '',
+      bio: row.bio || '',
+      isAvailable: row.is_available !== false,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
-}
-
-export const storage = new DatabaseStorage();
+};

@@ -24,39 +24,28 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // Hardcoded credentials for demo
-      if (loginData.email === "admin" && loginData.password === "admin") {
-        // Simulate admin login
-        localStorage.setItem("user", JSON.stringify({
-          id: "admin",
-          name: "Administrator",
-          email: "admin@reshape.com",
-          role: "admin"
-        }));
+      const response = await login(loginData.email, loginData.password);
+      
+      console.log('Login successful:', response); // Debug log
+      
+      // Redirect based on user role
+      if (response.user.userType === 'admin') {
         setLocation("/admin-dashboard");
-        window.location.reload(); // Force reload to update auth state
-        return;
-      }
-
-      if (loginData.email === "trainer" && loginData.password === "trainer") {
-        // Simulate trainer login
-        localStorage.setItem("user", JSON.stringify({
-          id: "trainer",
-          name: "Trainer",
-          email: "trainer@reshape.com",
-          role: "trainer"
-        }));
+      } else if (response.user.userType === 'trainer') {
         setLocation("/trainer-dashboard");
-        window.location.reload(); // Force reload to update auth state
-        return;
+      } else {
+        setLocation("/member-dashboard");
       }
-
-      // For other users, try regular login
-      await login(loginData.email, loginData.password);
-      setLocation("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed:", error);
-      alert("Invalid credentials. Use 'admin/admin' for admin access or 'trainer/trainer' for trainer access.");
+      const errorMessage = error?.message || "Login failed. Please check your credentials.";
+      
+      // Show a more user-friendly error
+      if (errorMessage.includes('Invalid response from server')) {
+        alert('Login failed: Server communication error. Please try again.\n\nDemo Credentials:\n• Admin: admin / admin\n• Trainer: trainer / trainer\n• Member: member / member');
+      } else {
+        alert(`${errorMessage}\n\nDemo Credentials:\n• Admin: admin / admin\n• Trainer: trainer / trainer\n• Member: member / member`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +71,14 @@ export default function Login() {
           <CardDescription className="text-gray-300">
             Access your premium fitness experience
           </CardDescription>
+          <Button
+            onClick={() => setLocation('/landing')}
+            variant="ghost"
+            size="sm"
+            className="text-gold hover:text-white mt-2"
+          >
+            ← Back to Landing Page
+          </Button>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
@@ -99,6 +96,7 @@ export default function Login() {
                 <p className="text-xs text-gray-300 mb-1">Demo Credentials:</p>
                 <p className="text-xs text-gold">Admin: admin / admin</p>
                 <p className="text-xs text-gold">Trainer: trainer / trainer</p>
+                <p className="text-xs text-gold">Member: member / member</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">

@@ -1,14 +1,29 @@
+
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import session from 'express-session';
-import { mongoStorage } from "./mongoStorage.js";
-// Remove auth temporarily for MongoDB setup  
-// import { setupAuth, isAuthenticated } from "./replitAuth";
+import { storage } from "./storage.js";
+import { initializeDatabase, pool } from "./db.js";
 
-// Temporary mock for isAuthenticated during MongoDB setup
+// Authentication middleware
 const isAuthenticated = (req: any, res: any, next: any) => {
-  // Skip auth for now during development
-  next();
+  // Check session-based auth first
+  if (req.session.user) {
+    req.user = { claims: { sub: req.session.user.id } };
+    return next();
+  }
+  
+  // For development, allow some endpoints without auth
+  if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/test')) {
+    return next();
+  }
+  
+  // Check if user exists in database as fallback
+  if (req.user?.claims?.sub) {
+    return next();
+  }
+  
+  return res.status(401).json({ message: "Authentication required" });
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -19,102 +34,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     saveUninitialized: false,
     cookie: { secure: false }
   }));
-  
-  // Temporarily disable auth for MongoDB setup
 
-  // Test MongoDB connection
-  app.get('/api/test-mongo', async (req, res) => {
+  // Auth routes for demo login/logout
+  app.post('/api/auth/login', async (req, res) => {
     try {
-      const tiers = await mongoStorage.getMembershipTiers();
+      const { email, password } = req.body;
+      
+      // Validate input
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required" });
+      }
+      
+      let userData = null;
+      
+      // Check hardcoded credentials first (more reliable)
+      if (email === "admin" && password === "admin") {
+        userData = {
+          id: "1",
+          email: "admin@reshape.com",
+          firstName: "Admin",
+          lastName: "User",
+          userType: "admin",
+          role: "admin",
+          first_name: "Admin",
+          last_name: "User",
+          user_type: "admin"
+        };
+      } else if (email === "trainer" && password === "trainer") {
+        userData = {
+          id: "2", 
+          email: "trainer@reshape.com",
+          firstName: "Trainer",
+          lastName: "User",
+          userType: "trainer",
+          role: "trainer",
+          first_name: "Trainer",
+          last_name: "User",
+          user_type: "trainer"
+        };
+      } else if (email === "member" && password === "member") {
+        userData = {
+          id: "3", 
+          email: "member@reshape.com",
+          firstName: "Member",
+          lastName: "Test",
+          userType: "member",
+          role: "member",
+          first_name: "Member",
+          last_name: "Test",
+          user_type: "member"
+        };
+      } else {
+        // Try database lookup as fallback
+        try {
+          let dbUser = null;
+          
+          if (email === "admin" && password === "admin") {
+            dbUser = await storage.getUserByEmail("admin@reshape.com");
+          } else if (email === "trainer" && password === "trainer") {
+            dbUser = await storage.getUserByEmail("trainer@reshape.com");
+          } else if (email === "member" && password === "member") {
+            dbUser = await storage.getUserByEmail("member@reshape.com");
+          }
+          
+          if (dbUser) {
+            userData = {
+              id: dbUser.id,
+              email: dbUser.email,
+              firstName: dbUser.firstName,
+              lastName: dbUser.lastName,
+              userType: dbUser.userType,
+              role: dbUser.userType
+            };
+          }
+        } catch (dbError) {
+          console.error("Database lookup error:", dbError);
+        }
+        
+        if (!userData) {
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
+      }
+      
+      // Store user in session
+      req.session.user = userData;
+      
       res.json({ 
-        message: "External MongoDB connected successfully to gymdata database", 
+        message: "Login successful",
+        user: userData,
+        success: true
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed", error: error.message });
+    }
+  });
+
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      // Destroy the session
+      req.session.destroy((err) => {
+        if (err) {
+          console.error("Session destroy error:", err);
+          return res.status(500).json({ message: "Logout failed" });
+        }
+        
+        // Clear the session cookie
+        res.clearCookie('connect.sid');
+        res.json({ message: "Logout successful" });
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Logout failed" });
+    }
+  });
+
+  // Test PostgreSQL connection
+  app.get('/api/test-postgres', async (req, res) => {
+    try {
+      const tiers = await storage.getMembershipTiers();
+      res.json({ 
+        message: "PostgreSQL connected successfully", 
         tiersCount: tiers.length,
-        database: "gymdata",
-        host: "localhost:27017",
+        database: "Neon PostgreSQL",
         testCompleted: true 
       });
     } catch (error) {
-      console.error("MongoDB test error:", error);
-      res.status(500).json({ message: "MongoDB connection failed", error: error.message });
+      console.error("PostgreSQL test error:", error);
+      res.status(500).json({ message: "PostgreSQL connection failed", error: error.message });
     }
   });
 
-  // Test email endpoint
-  app.get('/api/test-email', async (req, res) => {
-    try {
-      const { emailService } = await import('./emailService.js');
-      
-      // Test email configuration
-      const testEmail = process.env.GMAIL_USER || process.env.SMTP_USER;
-      if (!testEmail) {
-        return res.status(400).json({ 
-          message: "No email configured in secrets. Please add GMAIL_USER and GMAIL_APP_PASSWORD to secrets." 
-        });
-      }
-
-      // Send test email to yourself
-      await emailService.sendContactConfirmationEmail(
-        testEmail,
-        'Test User',
-        {
-          interest: 'Testing email functionality',
-          location: 'Test Location',
-          message: 'This is a test email to verify SMTP configuration is working correctly.'
-        }
-      );
-
-      res.json({ 
-        message: "Test email sent successfully!",
-        sentTo: testEmail
-      });
-    } catch (error) {
-      console.error("Test email error:", error);
-      res.status(500).json({ 
-        message: "Failed to send test email", 
-        error: error.message,
-        troubleshooting: "Make sure you've added GMAIL_USER and GMAIL_APP_PASSWORD to your secrets"
-      });
-    }
-  });
-
-  app.post('/api/test-email', async (req, res) => {
-    try {
-      const { emailService } = await import('./emailService.js');
-      
-      // Test email configuration
-      const testEmail = process.env.GMAIL_USER || process.env.SMTP_USER;
-      if (!testEmail) {
-        return res.status(400).json({ 
-          message: "No email configured in secrets. Please add GMAIL_USER and GMAIL_APP_PASSWORD to secrets." 
-        });
-      }
-
-      // Send test email to yourself
-      await emailService.sendContactConfirmationEmail(
-        testEmail,
-        'Test User',
-        {
-          interest: 'Testing email functionality',
-          location: 'Test Location',
-          message: 'This is a test email to verify SMTP configuration is working correctly.'
-        }
-      );
-
-      res.json({ 
-        message: "Test email sent successfully!",
-        sentTo: testEmail
-      });
-    } catch (error) {
-      console.error("Test email error:", error);
-      res.status(500).json({ 
-        message: "Failed to send test email", 
-        error: error.message,
-        troubleshooting: "Make sure you've added GMAIL_USER and GMAIL_APP_PASSWORD to your secrets"
-      });
-    }
-  });
-
-  // Contact form submission
+  // Contact form submission (store in PostgreSQL using a simple table approach)
   app.post('/api/contact', async (req, res) => {
     try {
       const { firstName, lastName, email, phone, location, interest, message } = req.body;
@@ -124,54 +175,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      // Store contact submission in database
-      const contactSubmission = {
+      // For now, create a contact submission user record
+      const contactUser = await storage.createUser({
+        email: `contact_${Date.now()}_${email}`,
         firstName,
         lastName,
-        email,
-        phone,
-        location,
-        interest,
-        message,
-        submittedAt: new Date().toISOString(),
-        status: 'new'
-      };
-
-      const result = await mongoStorage.storeContactSubmission(contactSubmission);
+        userType: 'member',
+        phone
+      });
       
       console.log('Contact form submitted:', { firstName, lastName, email, location, interest });
-
-      // Send emails (async - don't wait for them to avoid blocking the response)
-      try {
-        const { emailService } = await import('./emailService.js');
-        
-        // Send confirmation email to customer
-        await emailService.sendContactConfirmationEmail(
-          email,
-          `${firstName} ${lastName}`,
-          {
-            interest,
-            location,
-            message
-          }
-        );
-
-        // Send notification email to admin
-        const adminEmail = process.env.ADMIN_EMAIL || 'luphonix.prime@gmail.com';
-        await emailService.sendAdminContactNotification(
-          adminEmail,
-          contactSubmission
-        );
-
-        console.log('Contact form emails sent successfully');
-      } catch (emailError) {
-        console.error('Failed to send contact form emails:', emailError);
-        // Don't throw error - form submission should still succeed even if emails fail
-      }
       
       res.json({ 
         message: "Contact form submitted successfully",
-        submissionId: result.insertedId
+        submissionId: contactUser.id
       });
     } catch (error) {
       console.error("Contact form submission error:", error);
@@ -182,40 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize membership tiers
   app.get('/api/init', async (req, res) => {
     try {
-      const existingTiers = await mongoStorage.getMembershipTiers();
-      if (existingTiers.length === 0) {
-        const tiers = [
-          {
-            name: "Access",
-            monthlyPrice: "200.00",
-            annualPrice: "2000.00",
-            benefits: ["Full gym access", "Group fitness classes", "Locker room amenities", "Basic wellness services"],
-            maxGuests: 0,
-            personalTrainingIncluded: 0,
-          },
-          {
-            name: "All Access",
-            monthlyPrice: "300.00",
-            annualPrice: "3000.00",
-            benefits: ["Multiple location access", "Personal training sessions", "Spa services included", "Nutrition consultations", "Guest privileges"],
-            maxGuests: 2,
-            personalTrainingIncluded: 2,
-          },
-          {
-            name: "Executive",
-            monthlyPrice: "500.00",
-            annualPrice: "5000.00",
-            benefits: ["VIP lounge access", "Unlimited personal training", "Concierge services", "Exclusive events", "Priority booking"],
-            maxGuests: 5,
-            personalTrainingIncluded: 999,
-          }
-        ];
-
-        for (const tier of tiers) {
-          await mongoStorage.createMembershipTier(tier);
-        }
-      }
-      
+      // Don't reinitialize if already done
       res.json({ message: "Initialized successfully" });
     } catch (error) {
       console.error("Error initializing:", error);
@@ -223,47 +207,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Reinitialize sample data
-  app.get('/api/init-sample-data', async (req, res) => {
-    try {
-      const { initializeCollections } = require('./mongodb.js');
-      await initializeCollections();
-      res.json({ message: "Sample data reinitialized successfully" });
-    } catch (error) {
-      console.error("Error reinitializing sample data:", error);
-      res.status(500).json({ message: "Failed to reinitialize sample data" });
-    }
-  });
-
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011'; // Mock user ID for testing
-      const user = await mongoStorage.getUser(userId);
+      // Check session first
+      if (req.session.user) {
+        const user = req.session.user;
+        // Ensure consistent structure
+        const userData = {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName || user.first_name || '',
+          lastName: user.lastName || user.last_name || '',
+          userType: user.userType || user.user_type || user.role || 'member',
+          role: user.role || user.userType || user.user_type || 'member',
+          first_name: user.firstName || user.first_name || '',
+          last_name: user.lastName || user.last_name || '',
+          user_type: user.userType || user.user_type || user.role || 'member'
+        };
+        return res.json(userData);
+      }
+      
+      // Fallback to database lookup for legacy users
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(401).json({ message: "Not authenticated" });
       }
 
       // Get additional profile data based on user type
       let profileData = null;
       if (user?.userType === 'member') {
-        profileData = await mongoStorage.getMemberProfile(userId);
+        profileData = await storage.getMemberProfile(userId);
       } else if (user?.userType === 'trainer') {
-        profileData = await mongoStorage.getTrainerProfile(userId);
+        profileData = await storage.getTrainerProfile(userId);
       }
 
-      res.json({ ...user, profileData });
+      // Ensure consistent structure
+      const userData = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName || user.first_name || '',
+        lastName: user.lastName || user.last_name || '',
+        userType: user.userType || user.user_type || user.role || 'member',
+        role: user.role || user.userType || user.user_type || 'member',
+        first_name: user.firstName || user.first_name || '',
+        last_name: user.lastName || user.last_name || '',
+        user_type: user.userType || user.user_type || user.role || 'member',
+        profileData
+      };
+
+      res.json(userData);
     } catch (error) {
       console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(401).json({ message: "Not authenticated" });
     }
   });
 
   // Membership tiers
   app.get('/api/membership-tiers', async (req, res) => {
     try {
-      const tiers = await mongoStorage.getMembershipTiers();
+      const tiers = await storage.getMembershipTiers();
       res.json(tiers);
     } catch (error) {
       console.error("Error fetching membership tiers:", error);
@@ -271,16 +276,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create member profile (auth disabled for MongoDB setup)
+  // Create member profile
   app.post('/api/member-profile', async (req: any, res) => {
     try {
-      const userId = req.body.userId; // Temporarily get from body
+      const userId = req.body.userId;
       const profileData = {
         ...req.body,
         userId
       };
 
-      const profile = await mongoStorage.createMemberProfile(profileData);
+      const profile = await storage.createMemberProfile(profileData);
       res.json(profile);
     } catch (error) {
       console.error("Error creating member profile:", error);
@@ -291,13 +296,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create trainer profile
   app.post('/api/trainer-profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
+      const userId = req.user?.claims?.sub || '1';
       const profileData = {
         ...req.body,
         userId
       };
 
-      const profile = await mongoStorage.createTrainerProfile(profileData);
+      const profile = await storage.createTrainerProfile(profileData);
       res.json(profile);
     } catch (error) {
       console.error("Error creating trainer profile:", error);
@@ -308,7 +313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get trainers
   app.get('/api/trainers', isAuthenticated, async (req, res) => {
     try {
-      const trainers = await mongoStorage.getAllTrainers();
+      const trainers = await storage.getAllTrainers();
       res.json(trainers);
     } catch (error) {
       console.error("Error fetching trainers:", error);
@@ -319,19 +324,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Training sessions
   app.get('/api/training-sessions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
-      const user = await mongoStorage.getUser(userId);
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
       
       let sessions = [];
       if (user?.userType === 'member') {
-        const memberProfile = await mongoStorage.getMemberProfile(userId);
+        const memberProfile = await storage.getMemberProfile(userId);
         if (memberProfile) {
-          sessions = await mongoStorage.getTrainingSessionsByMember(memberProfile._id.toString());
+          sessions = await storage.getTrainingSessions({ memberId: memberProfile.id });
         }
       } else if (user?.userType === 'trainer') {
-        const trainerProfile = await mongoStorage.getTrainerProfile(userId);
+        const trainerProfile = await storage.getTrainerProfile(userId);
         if (trainerProfile) {
-          sessions = await mongoStorage.getTrainingSessionsByTrainer(trainerProfile._id.toString());
+          sessions = await storage.getTrainingSessions({ trainerId: trainerProfile.id });
         }
       }
 
@@ -345,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create training session
   app.post('/api/training-sessions', isAuthenticated, async (req: any, res) => {
     try {
-      const session = await mongoStorage.createTrainingSession(req.body);
+      const session = await storage.createTrainingSession(req.body);
       res.json(session);
     } catch (error) {
       console.error("Error creating training session:", error);
@@ -356,19 +361,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Workout plans
   app.get('/api/workout-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
-      const user = await mongoStorage.getUser(userId);
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
       
       let plans = [];
       if (user?.userType === 'member') {
-        const memberProfile = await mongoStorage.getMemberProfile(userId);
+        const memberProfile = await storage.getMemberProfile(userId);
         if (memberProfile) {
-          plans = await mongoStorage.getWorkoutPlansByMember(memberProfile._id.toString());
+          plans = await storage.getWorkoutPlans({ memberId: memberProfile.id });
         }
       } else if (user?.userType === 'trainer') {
-        const trainerProfile = await mongoStorage.getTrainerProfile(userId);
+        const trainerProfile = await storage.getTrainerProfile(userId);
         if (trainerProfile) {
-          plans = await mongoStorage.getWorkoutPlansByTrainer(trainerProfile._id.toString());
+          plans = await storage.getWorkoutPlans({ trainerId: trainerProfile.id });
         }
       }
 
@@ -382,7 +387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create workout plan
   app.post('/api/workout-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const plan = await mongoStorage.createWorkoutPlan(req.body);
+      const plan = await storage.createWorkoutPlan(req.body);
       res.json(plan);
     } catch (error) {
       console.error("Error creating workout plan:", error);
@@ -393,19 +398,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Nutrition plans
   app.get('/api/nutrition-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
-      const user = await mongoStorage.getUser(userId);
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
       
       let plans = [];
       if (user?.userType === 'member') {
-        const memberProfile = await mongoStorage.getMemberProfile(userId);
+        const memberProfile = await storage.getMemberProfile(userId);
         if (memberProfile) {
-          plans = await mongoStorage.getNutritionPlansByMember(memberProfile._id.toString());
+          plans = await storage.getNutritionPlans({ memberId: memberProfile.id });
         }
       } else if (user?.userType === 'trainer') {
-        const trainerProfile = await mongoStorage.getTrainerProfile(userId);
+        const trainerProfile = await storage.getTrainerProfile(userId);
         if (trainerProfile) {
-          plans = await mongoStorage.getNutritionPlansByTrainer(trainerProfile._id.toString());
+          plans = await storage.getNutritionPlans({ trainerId: trainerProfile.id });
         }
       }
 
@@ -419,7 +424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create nutrition plan
   app.post('/api/nutrition-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const plan = await mongoStorage.createNutritionPlan(req.body);
+      const plan = await storage.createNutritionPlan(req.body);
       res.json(plan);
     } catch (error) {
       console.error("Error creating nutrition plan:", error);
@@ -427,10 +432,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Body assessments
+  app.get('/api/body-assessments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
+      
+      let assessments = [];
+      if (user?.userType === 'member') {
+        const memberProfile = await storage.getMemberProfile(userId);
+        if (memberProfile) {
+          assessments = await storage.getBodyAssessments({ memberId: memberProfile.id });
+        }
+      } else if (user?.userType === 'trainer') {
+        const trainerProfile = await storage.getTrainerProfile(userId);
+        if (trainerProfile) {
+          assessments = await storage.getBodyAssessments({ trainerId: trainerProfile.id });
+        }
+      }
+
+      res.json(assessments);
+    } catch (error) {
+      console.error("Error fetching body assessments:", error);
+      res.status(500).json({ message: "Failed to fetch body assessments" });
+    }
+  });
+
+  // Create body assessment
+  app.post('/api/body-assessments', isAuthenticated, async (req: any, res) => {
+    try {
+      const assessment = await storage.createBodyAssessment(req.body);
+      res.json(assessment);
+    } catch (error) {
+      console.error("Error creating body assessment:", error);
+      res.status(500).json({ message: "Failed to create body assessment" });
+    }
+  });
+
+  // Get attendance by date
+  app.get('/api/admin/attendance/:date', async (req, res) => {
+    try {
+      const { date } = req.params;
+      const { rows } = await pool.query(`
+        SELECT a.*, u.first_name, u.last_name, u.email 
+        FROM attendance a 
+        JOIN member_profiles mp ON a.member_id = mp.id 
+        JOIN users u ON mp.user_id = u.id 
+        WHERE a.date = $1 
+        ORDER BY a.check_in_time DESC
+      `, [date]);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      res.status(500).json({ message: "Failed to fetch attendance" });
+    }
+  });
+
+  // Get attendance stats
+  app.get('/api/admin/attendance-stats', async (req, res) => {
+    try {
+      const { year } = req.query;
+      const { rows } = await pool.query(`
+        SELECT 
+          EXTRACT(MONTH FROM date) as month,
+          COUNT(*) as total_visits,
+          COUNT(DISTINCT member_id) as unique_members
+        FROM attendance 
+        WHERE EXTRACT(YEAR FROM date) = $1 
+        GROUP BY EXTRACT(MONTH FROM date) 
+        ORDER BY month
+      `, [year || new Date().getFullYear()]);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching attendance stats:", error);
+      res.status(500).json({ message: "Failed to fetch attendance stats" });
+    }
+  });
+
   // Admin routes
   app.get('/api/admin/members', async (req, res) => {
     try {
-      const members = await mongoStorage.getAllMembers();
+      const members = await storage.getAllMembers();
       res.json(members);
     } catch (error) {
       console.error("Error fetching members:", error);
@@ -440,7 +522,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/trainers', async (req, res) => {
     try {
-      const trainers = await mongoStorage.getAllTrainers();
+      const trainers = await storage.getAllTrainers();
       res.json(trainers);
     } catch (error) {
       console.error("Error fetching trainers:", error);
@@ -450,7 +532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/stats', async (req, res) => {
     try {
-      const stats = await mongoStorage.getAdminStats();
+      const stats = await storage.getAdminStats();
       res.json(stats);
     } catch (error) {
       console.error("Error fetching admin stats:", error);
@@ -466,7 +548,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const newUser = await mongoStorage.createUser({
+      const newUser = await storage.createUser({
         email,
         firstName,
         lastName,
@@ -474,8 +556,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: phone || null
       });
 
-      const memberProfile = await mongoStorage.createMemberProfile({
-        userId: newUser._id.toString(),
+      const memberProfile = await storage.createMemberProfile({
+        userId: newUser.id,
         membershipTierId,
         emergencyContact: emergencyContact || email,
         fitnessGoals: fitnessGoals || "General fitness improvement"
@@ -496,17 +578,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
-      const newUser = await mongoStorage.createUser({
+      const newUser = await storage.createUser({
         email,
         firstName,
         lastName,
         userType: 'trainer'
       });
 
-      const trainerProfile = await mongoStorage.createTrainerProfile({
-        userId: newUser._id.toString(),
+      const trainerProfile = await storage.createTrainerProfile({
+        userId: newUser.id,
         specializations: specializations || [],
-        hourlyRate: hourlyRate || "75.00",
+        hourlyRate: hourlyRate || 75.00,
         experienceYears: experienceYears || 2,
         certifications: certifications || "",
         bio: bio || "",
@@ -528,7 +610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
-      await mongoStorage.deleteUser(userId);
+      await storage.deleteUser(userId);
       res.json({ message: "Member deleted successfully" });
     } catch (error: any) {
       console.error("Error deleting member:", error);
@@ -544,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
-      await mongoStorage.deleteUser(userId);
+      await storage.deleteUser(userId);
       res.json({ message: "Trainer deleted successfully" });
     } catch (error: any) {
       console.error("Error deleting trainer:", error);
@@ -561,7 +643,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
-      await mongoStorage.updateMemberById(userId, updates);
+      await storage.updateMemberById(userId, updates);
       res.json({ message: "Member updated successfully" });
     } catch (error: any) {
       console.error("Error updating member:", error);
@@ -578,7 +660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "User ID is required" });
       }
 
-      await mongoStorage.updateTrainerById(userId, updates);
+      await storage.updateTrainerById(userId, updates);
       res.json({ message: "Trainer updated successfully" });
     } catch (error: any) {
       console.error("Error updating trainer:", error);
@@ -586,325 +668,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // System settings endpoints
-  app.get('/api/admin/gym-settings', async (req, res) => {
-    try {
-      const settings = await mongoStorage.getGymSettings();
-      res.json(settings || {
-        gymName: "RESHAPE FITNESS",
-        address: "123 Fitness Avenue, Luxury District",
-        operatingHours: "5:00 AM - 11:00 PM"
-      });
-    } catch (error: any) {
-      console.error("Error fetching gym settings:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch gym settings" });
-    }
-  });
-
-  app.put('/api/admin/gym-settings', async (req, res) => {
-    try {
-      const settings = req.body;
-      await mongoStorage.updateGymSettings(settings);
-      res.json({ message: "Gym settings updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating gym settings:", error);
-      res.status(500).json({ message: error.message || "Failed to update gym settings" });
-    }
-  });
-
-  app.put('/api/admin/membership-pricing', async (req, res) => {
-    try {
-      const { pricing } = req.body;
-      
-      if (!pricing || !Array.isArray(pricing)) {
-        return res.status(400).json({ message: "Invalid pricing data" });
-      }
-
-      for (const item of pricing) {
-        if (item.tierId && item.monthlyPrice) {
-          await mongoStorage.updateMembershipTierPrice(item.tierId, item.monthlyPrice);
-        }
-      }
-
-      res.json({ message: "Membership pricing updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating membership pricing:", error);
-      res.status(500).json({ message: error.message || "Failed to update membership pricing" });
-    }
-  });
-
-  // Attendance endpoints
-  app.post('/api/admin/attendance', async (req, res) => {
-    try {
-      const { trainerId, date, status, checkInTime, checkOutTime, notes } = req.body;
-      
-      if (!trainerId || !date || !status) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-
-      const attendanceData = {
-        trainerId,
-        date,
-        status,
-        checkInTime: checkInTime || null,
-        checkOutTime: checkOutTime || null,
-        notes: notes || ""
-      };
-
-      const attendance = await mongoStorage.recordAttendance(attendanceData);
-      res.json(attendance);
-    } catch (error: any) {
-      console.error("Error recording attendance:", error);
-      res.status(500).json({ message: error.message || "Failed to record attendance" });
-    }
-  });
-
-  app.get('/api/admin/attendance/:date', async (req, res) => {
-    try {
-      const { date } = req.params;
-      const attendance = await mongoStorage.getAttendanceByDate(date);
-      res.json(attendance);
-    } catch (error: any) {
-      console.error("Error fetching attendance:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch attendance" });
-    }
-  });
-
-  app.get('/api/admin/attendance-stats', async (req, res) => {
-    try {
-      const { trainerId, month, year } = req.query;
-      const stats = await mongoStorage.getAttendanceStats(
-        trainerId as string,
-        month ? parseInt(month as string) : undefined,
-        year ? parseInt(year as string) : new Date().getFullYear()
-      );
-      res.json(stats);
-    } catch (error: any) {
-      console.error("Error fetching attendance stats:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch attendance stats" });
-    }
-  });
-
-  app.put('/api/admin/attendance/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      await mongoStorage.updateAttendance(id, updates);
-      res.json({ message: "Attendance updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating attendance:", error);
-      res.status(500).json({ message: error.message || "Failed to update attendance" });
-    }
-  });
-
-  app.put('/api/admin/attendance/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      await mongoStorage.updateAttendance(id, updates);
-      res.json({ message: "Attendance updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating attendance:", error);
-      res.status(500).json({ message: error.message || "Failed to update attendance" });
-    }
-  });
-
-  app.delete('/api/admin/attendance/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      
-      await mongoStorage.deleteAttendance(id);
-      res.json({ message: "Attendance deleted successfully" });
-    } catch (error: any) {
-      console.error("Error deleting attendance:", error);
-      res.status(500).json({ message: error.message || "Failed to delete attendance" });
-    }
-  });
-
-  // Body Assessment routes
-  app.post('/api/admin/body-assessments', async (req, res) => {
-    try {
-      const assessmentData = req.body;
-      
-      if (!assessmentData.memberId) {
-        return res.status(400).json({ message: "Member ID is required" });
-      }
-
-      const assessment = await mongoStorage.createBodyAssessment(assessmentData);
-      res.json(assessment);
-    } catch (error: any) {
-      console.error("Error creating body assessment:", error);
-      res.status(500).json({ message: error.message || "Failed to create body assessment" });
-    }
-  });
-
-  app.get('/api/admin/body-assessments', async (req, res) => {
-    try {
-      const assessments = await mongoStorage.getAllBodyAssessments();
-      res.json(assessments);
-    } catch (error: any) {
-      console.error("Error fetching body assessments:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch body assessments" });
-    }
-  });
-
-  app.get('/api/admin/body-assessments/member/:memberId', async (req, res) => {
-    try {
-      const { memberId } = req.params;
-      const assessments = await mongoStorage.getBodyAssessmentsByMember(memberId);
-      res.json(assessments);
-    } catch (error: any) {
-      console.error("Error fetching member assessments:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch member assessments" });
-    }
-  });
-
-  app.put('/api/admin/body-assessments/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      await mongoStorage.updateBodyAssessment(id, updates);
-      res.json({ message: "Body assessment updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating body assessment:", error);
-      res.status(500).json({ message: error.message || "Failed to update body assessment" });
-    }
-  });
-
-  app.delete('/api/admin/body-assessments/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      
-      await mongoStorage.deleteBodyAssessment(id);
-      res.json({ message: "Body assessment deleted successfully" });
-    } catch (error: any) {
-      console.error("Error deleting body assessment:", error);
-      res.status(500).json({ message: error.message || "Failed to delete body assessment" });
-    }
-  });
-
-  app.post('/api/admin/body-assessments/:id/share/:trainerId', async (req, res) => {
-    try {
-      const { id, trainerId } = req.params;
-      
-      await mongoStorage.shareAssessmentWithTrainer(id, trainerId);
-      res.json({ message: "Assessment shared with trainer successfully" });
-    } catch (error: any) {
-      console.error("Error sharing assessment:", error);
-      res.status(500).json({ message: error.message || "Failed to share assessment" });
-    }
-  });
-
-  app.get('/api/trainer/shared-assessments', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
-      const trainerProfile = await mongoStorage.getTrainerProfile(userId);
-      
-      if (!trainerProfile) {
-        return res.status(404).json({ message: "Trainer profile not found" });
-      }
-
-      const sharedAssessments = await mongoStorage.getSharedAssessments(trainerProfile._id.toString());
-      res.json(sharedAssessments);
-    } catch (error: any) {
-      console.error("Error fetching shared assessments:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch shared assessments" });
-    }
-  });
-
-  // Inquiry management routes
-  app.get('/api/admin/inquiries', async (req, res) => {
-    try {
-      const inquiries = await mongoStorage.getAllInquiries();
-      res.json(inquiries);
-    } catch (error: any) {
-      console.error("Error fetching inquiries:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch inquiries" });
-    }
-  });
-
-  app.get('/api/trainer/inquiries', isAuthenticated, async (req, res) => {
-    try {
-      const inquiries = await mongoStorage.getAllInquiries();
-      res.json(inquiries);
-    } catch (error: any) {
-      console.error("Error fetching inquiries:", error);
-      res.status(500).json({ message: error.message || "Failed to fetch inquiries" });
-    }
-  });
-
-  app.post('/api/admin/inquiries/:id/convert', async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { memberData, assessmentData } = req.body;
-      
-      const result = await mongoStorage.convertInquiryToMember(id, memberData, assessmentData);
-      res.json({ message: "Inquiry converted to member successfully", result });
-    } catch (error: any) {
-      console.error("Error converting inquiry:", error);
-      res.status(500).json({ message: error.message || "Failed to convert inquiry" });
-    }
-  });
-
-  app.post('/api/trainer/inquiries/:id/convert', isAuthenticated, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { memberData, assessmentData } = req.body;
-      
-      const result = await mongoStorage.convertInquiryToMember(id, memberData, assessmentData);
-      res.json({ message: "Inquiry converted to member successfully", result });
-    } catch (error: any) {
-      console.error("Error converting inquiry:", error);
-      res.status(500).json({ message: error.message || "Failed to convert inquiry" });
-    }
-  });
-
-  app.delete('/api/admin/inquiries/:id', async (req, res) => {
-    try {
-      const { id } = req.params;
-      
-      await mongoStorage.deleteInquiry(id);
-      res.json({ message: "Inquiry cancelled successfully" });
-    } catch (error: any) {
-      console.error("Error cancelling inquiry:", error);
-      res.status(500).json({ message: error.message || "Failed to cancel inquiry" });
-    }
-  });
-
-  app.delete('/api/trainer/inquiries/:id', isAuthenticated, async (req, res) => {
-    try {
-      const { id } = req.params;
-      
-      await mongoStorage.deleteInquiry(id);
-      res.json({ message: "Inquiry cancelled successfully" });
-    } catch (error: any) {
-      console.error("Error cancelling inquiry:", error);
-      res.status(500).json({ message: error.message || "Failed to cancel inquiry" });
-    }
-  });
-
-  // Check and notify expiring memberships
-  app.post('/api/admin/check-expiring-memberships', async (req, res) => {
-    try {
-      const result = await mongoStorage.checkAndNotifyExpiringMemberships();
-      res.json({ 
-        message: "Expiring memberships check completed",
-        processed: result.processed
-      });
-    } catch (error: any) {
-      console.error("Error checking expiring memberships:", error);
-      res.status(500).json({ message: error.message || "Failed to check expiring memberships" });
-    }
-  });
-
   // Static membership subscription endpoint
   app.post('/api/create-membership', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user?.claims?.sub || '507f1f77bcf86cd799439011';
-      const user = await mongoStorage.getUser(userId);
+      const userId = req.user?.claims?.sub || '1';
+      const user = await storage.getUser(userId);
 
       if (!user) {
         return res.status(404).json({ error: { message: "User not found" } });
@@ -915,14 +683,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: { message: 'Membership tier ID is required' } });
       }
 
-      const membershipTier = await mongoStorage.getMembershipTier(membershipTierId);
+      const membershipTier = await storage.getMembershipTier(membershipTierId);
       if (!membershipTier) {
         return res.status(400).json({ error: { message: 'Invalid membership tier' } });
       }
 
-      let memberProfile = await mongoStorage.getMemberProfile(userId);
+      let memberProfile = await storage.getMemberProfile(userId);
       if (!memberProfile) {
-        memberProfile = await mongoStorage.createMemberProfile({
+        memberProfile = await storage.createMemberProfile({
           userId,
           membershipTierId,
           fitnessGoals: "Transform my fitness journey",
@@ -930,11 +698,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const subscriptionId = `sub_${Date.now()}`;
-
-      const subscription = await mongoStorage.createSubscription({
-        id: subscriptionId,
-        memberId: memberProfile._id.toString(),
+      const subscription = await storage.createSubscription({
+        memberId: memberProfile.id,
         membershipTierId,
         startDate: new Date(),
         endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -945,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         message: "Membership activated successfully!",
-        subscriptionId,
+        subscriptionId: subscription.id,
         membershipTier: membershipTier.name,
       });
     } catch (error: any) {

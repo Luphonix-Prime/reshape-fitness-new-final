@@ -22,32 +22,20 @@ export const sessions = sqliteTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// Replace imports
-import {
-  pgTable as sqliteTable,
-  text,
-  timestamp,
-  integer,
-  boolean,
-  decimal,
-  jsonb,
-} from 'drizzle-orm/pg-core';
-
-// Update table definitions to use PostgreSQL types
-// Example update for the users table:
+// User storage table for Replit Auth with role support
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey().default(sql`(lower(hex(randomblob(16))))`),
   email: text("email").unique(),
   firstName: text("first_name"),
   lastName: text("last_name"),
   profileImageUrl: text("profile_image_url"),
-  userType: text("user_type").default("member").notNull(),
+  userType: text("user_type", { enum: ["member", "trainer", "admin"] }).default("member").notNull(),
   phone: text("phone"),
   dateOfBirth: text("date_of_birth"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).default(sql`(unixepoch())`),
 });
 
 // Membership tiers

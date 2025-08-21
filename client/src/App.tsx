@@ -22,11 +22,6 @@ import NotFound from "@/pages/not-found";
 function Router() {
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  // Initialize app data
-  useEffect(() => {
-    apiRequest('GET', '/api/init').catch(console.error);
-  }, []);
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -37,7 +32,8 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={!isAuthenticated ? Landing : Home} />
+      <Route path="/" component={!isAuthenticated ? Login : Home} />
+      <Route path="/landing" component={Landing} />
       <Route path="/about" component={About} />
       <Route path="/services" component={Services} />
       <Route path="/contact" component={Contact} />

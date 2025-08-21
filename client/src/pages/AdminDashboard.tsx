@@ -59,7 +59,6 @@ export default function AdminDashboard() {
   const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
-  const [selectedMembershipTier, setSelectedMembershipTier] = useState("");
   const [newAssessment, setNewAssessment] = useState({
     memberId: "",
     dateOfBirth: "",
@@ -711,7 +710,6 @@ export default function AdminDashboard() {
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
-    setSelectedMembershipTier(membershipTiers?.[0]?._id || ""); // Set default selected membership tier
     setShowConvertModal(true);
   };
 
@@ -726,7 +724,7 @@ export default function AdminDashboard() {
     if (!selectedInquiry) return;
 
     const memberData = {
-      membershipTierId: selectedMembershipTier
+      membershipTierId: membershipTiers?.[0]?._id || ""
     };
 
     convertInquiryMutation.mutate({
@@ -1355,27 +1353,6 @@ export default function AdminDashboard() {
                         <span className="text-white ml-2">{selectedInquiry?.message}</span>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Membership Plan Selection */}
-                  <div className="space-y-4 p-4 bg-black rounded-lg">
-                    <h3 className="text-lg font-semibold text-gold">Select Membership Plan</h3>
-                    <Select
-                      value={selectedMembershipTier}
-                      onValueChange={setSelectedMembershipTier}
-                      required
-                    >
-                      <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
-                        <SelectValue placeholder="Select membership plan" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                        {membershipTiers?.map((tier: any) => (
-                          <SelectItem key={tier._id} value={tier._id} className="focus:bg-gold focus:text-black">
-                            {tier.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
 
                   {/* Complete Body Assessment Form */}
@@ -2630,28 +2607,7 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gold">Settings</h2>
-              <Button
-                onClick={() => {
-                  apiRequest('POST', '/api/admin/check-expiring-memberships').then(() => {
-                    toast({
-                      title: "Success",
-                      description: "Expiring memberships check completed successfully"
-                    });
-                  }).catch((error) => {
-                    toast({
-                      title: "Error",
-                      description: error.message || "Failed to check expiring memberships",
-                      variant: "destructive"
-                    });
-                  });
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Check Expiring Memberships
-              </Button>
-            </div>
+            <h2 className="text-2xl font-bold text-gold">System Settings</h2>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-gray-900 border-gray-800">
