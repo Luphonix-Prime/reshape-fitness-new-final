@@ -1,11 +1,33 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Redirect authenticated users to their appropriate dashboard
+  useEffect(() => {
+    if (user && user.userType) {
+      console.log("User detected in Home, redirecting to dashboard for:", user.userType);
+      switch (user.userType) {
+        case 'admin':
+          setLocation('/admin-dashboard');
+          break;
+        case 'trainer':
+          setLocation('/trainer-dashboard');
+          break;
+        case 'member':
+          setLocation('/member-dashboard');
+          break;
+        default:
+          setLocation('/member-dashboard');
+          break;
+      }
+    }
+  }, [user, setLocation]);
 
   const getRoleDisplayName = () => {
     switch (user?.userType) {

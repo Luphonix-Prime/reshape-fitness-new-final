@@ -11,7 +11,22 @@ import Navigation from "@/components/Navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function MemberDashboard() {
-  const { user } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    window.location.href = '/login';
+    return null;
+  }
   const [activeTab, setActiveTab] = useState("overview");
 
   // Mock member data

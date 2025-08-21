@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
+  const { toast } = useToast();
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [signupData, setSignupData] = useState({ 
     name: "", 
@@ -18,34 +20,46 @@ export default function Login() {
     confirmPassword: "" 
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(""); // State to store and display errors
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(""); // Clear previous errors
 
     try {
-      const response = await login(loginData.email, loginData.password);
-      
-      console.log('Login successful:', response); // Debug log
-      
-      // Redirect based on user role
-      if (response.user.userType === 'admin') {
-        setLocation("/admin-dashboard");
-      } else if (response.user.userType === 'trainer') {
-        setLocation("/trainer-dashboard");
+      const result = await login(loginData.email, loginData.password);
+      console.log("Login successful:", result);
+
+      // Get user type from the result for proper routing
+      const userType = result.user?.userType || result.user?.user_type || result.user?.role;
+      console.log("User type:", userType);
+
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${result.user?.firstName || 'User'}!`,
+      });
+
+      // Use window.location for more reliable navigation
+      if (userType === 'admin') {
+        console.log("Redirecting to admin dashboard");
+        window.location.href = '/admin-dashboard';
+      } else if (userType === 'trainer') {
+        console.log("Redirecting to trainer dashboard");
+        window.location.href = '/trainer-dashboard';
       } else {
-        setLocation("/member-dashboard");
+        console.log("Redirecting to member dashboard");
+        window.location.href = '/member-dashboard';
       }
     } catch (error: any) {
       console.error("Login failed:", error);
-      const errorMessage = error?.message || "Login failed. Please check your credentials.";
-      
-      // Show a more user-friendly error
-      if (errorMessage.includes('Invalid response from server')) {
-        alert('Login failed: Server communication error. Please try again.\n\nDemo Credentials:\n• Admin: admin / admin\n• Trainer: trainer / trainer\n• Member: member / member');
-      } else {
-        alert(`${errorMessage}\n\nDemo Credentials:\n• Admin: admin / admin\n• Trainer: trainer / trainer\n• Member: member / member`);
-      }
+      const errorMessage = error?.message || "Login failed. Please check your credentials and try again.";
+      setError(errorMessage); // Set the error message state
+      toast({
+        title: "Login Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -124,6 +138,7 @@ export default function Login() {
                     required
                   />
                 </div>
+                {error && <p className="text-red-500 text-sm">{error}</p>} {/* Display error message */}
                 <Button 
                   type="submit" 
                   className="w-full bg-gold text-black hover:bg-gold/90 font-semibold"

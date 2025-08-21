@@ -6,24 +6,32 @@ import { storage } from "./storage.js";
 import { initializeDatabase, pool } from "./db.js";
 
 // Authentication middleware
-const isAuthenticated = (req: any, res: any, next: any) => {
-  // Check session-based auth first
-  if (req.session.user) {
-    req.user = { claims: { sub: req.session.user.id } };
-    return next();
+const isAuthenticated = async (req: any, res: any, next: any) => {
+  try {
+    // Check session-based auth first
+    if (req.session.user) {
+      req.user = { claims: { sub: req.session.user.id } };
+      return next();
+    }
+    
+    // For development, allow some endpoints without auth
+    if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/test') || req.path.startsWith('/api/contact')) {
+      return next();
+    }
+    
+    // Check if user exists in database as fallback
+    if (req.user?.claims?.sub) {
+      const user = await storage.getUser(req.user.claims.sub);
+      if (user) {
+        return next();
+      }
+    }
+    
+    return res.status(401).json({ message: "Authentication required" });
+  } catch (error) {
+    console.error("Authentication middleware error:", error);
+    return res.status(401).json({ message: "Authentication required" });
   }
-  
-  // For development, allow some endpoints without auth
-  if (req.path.startsWith('/api/admin') || req.path.startsWith('/api/test')) {
-    return next();
-  }
-  
-  // Check if user exists in database as fallback
-  if (req.user?.claims?.sub) {
-    return next();
-  }
-  
-  return res.status(401).json({ message: "Authentication required" });
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -32,7 +40,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     secret: 'reshape-fitness-dev-secret-key',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: { 
+      secure: false,
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'lax'
+    }
   }));
 
   // Auth routes for demo login/logout
@@ -47,73 +60,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       let userData = null;
       
-      // Check hardcoded credentials first (more reliable)
+      // Check demo credentials first (no database password validation needed)
       if (email === "admin" && password === "admin") {
-        userData = {
-          id: "1",
-          email: "admin@reshape.com",
-          firstName: "Admin",
-          lastName: "User",
-          userType: "admin",
-          role: "admin",
-          first_name: "Admin",
-          last_name: "User",
-          user_type: "admin"
-        };
-      } else if (email === "trainer" && password === "trainer") {
-        userData = {
-          id: "2", 
-          email: "trainer@reshape.com",
-          firstName: "Trainer",
-          lastName: "User",
-          userType: "trainer",
-          role: "trainer",
-          first_name: "Trainer",
-          last_name: "User",
-          user_type: "trainer"
-        };
-      } else if (email === "member" && password === "member") {
-        userData = {
-          id: "3", 
-          email: "member@reshape.com",
-          firstName: "Member",
-          lastName: "Test",
-          userType: "member",
-          role: "member",
-          first_name: "Member",
-          last_name: "Test",
-          user_type: "member"
-        };
-      } else {
-        // Try database lookup as fallback
+        // Try to get from database, fallback to hardcoded
         try {
-          let dbUser = null;
-          
-          if (email === "admin" && password === "admin") {
-            dbUser = await storage.getUserByEmail("admin@reshape.com");
-          } else if (email === "trainer" && password === "trainer") {
-            dbUser = await storage.getUserByEmail("trainer@reshape.com");
-          } else if (email === "member" && password === "member") {
-            dbUser = await storage.getUserByEmail("member@reshape.com");
-          }
-          
+          const dbUser = await storage.getUserByEmail("admin@reshape.com");
           if (dbUser) {
             userData = {
-              id: dbUser.id,
+              id: dbUser.id.toString(),
               email: dbUser.email,
-              firstName: dbUser.firstName,
-              lastName: dbUser.lastName,
-              userType: dbUser.userType,
-              role: dbUser.userType
+              firstName: dbUser.firstName || dbUser.first_name || 'Admin',
+              lastName: dbUser.lastName || dbUser.last_name || 'User',
+              userType: dbUser.userType || dbUser.user_type || 'admin',
+              role: dbUser.userType || dbUser.user_type || 'admin',
+              first_name: dbUser.firstName || dbUser.first_name || 'Admin',
+              last_name: dbUser.lastName || dbUser.last_name || 'User',
+              user_type: dbUser.userType || dbUser.user_type || 'admin'
             };
           }
         } catch (dbError) {
-          console.error("Database lookup error:", dbError);
+          console.error("Database lookup error for admin:", dbError);
         }
         
+        // Fallback to hardcoded admin
         if (!userData) {
-          return res.status(401).json({ message: "Invalid credentials" });
+          userData = {
+            id: "1",
+            email: "admin@reshape.com",
+            firstName: "Admin",
+            lastName: "User",
+            userType: "admin",
+            role: "admin",
+            first_name: "Admin",
+            last_name: "User",
+            user_type: "admin"
+          };
         }
+      } else if (email === "trainer" && password === "trainer") {
+        // Try to get trainer from database, fallback to hardcoded
+        try {
+          const dbUser = await storage.getUserByEmail("trainer@reshape.com");
+          if (dbUser) {
+            userData = {
+              id: dbUser.id.toString(),
+              email: dbUser.email,
+              firstName: dbUser.firstName || dbUser.first_name || 'Trainer',
+              lastName: dbUser.lastName || dbUser.last_name || 'User',
+              userType: dbUser.userType || dbUser.user_type || 'trainer',
+              role: dbUser.userType || dbUser.user_type || 'trainer',
+              first_name: dbUser.firstName || dbUser.first_name || 'Trainer',
+              last_name: dbUser.lastName || dbUser.last_name || 'User',
+              user_type: dbUser.userType || dbUser.user_type || 'trainer'
+            };
+          }
+        } catch (dbError) {
+          console.error("Database lookup error for trainer:", dbError);
+        }
+        
+        // Fallback to hardcoded trainer
+        if (!userData) {
+          userData = {
+            id: "2",
+            email: "trainer@reshape.com",
+            firstName: "Trainer",
+            lastName: "User",
+            userType: "trainer",
+            role: "trainer",
+            first_name: "Trainer",
+            last_name: "User",
+            user_type: "trainer"
+          };
+        }
+      } else if (email === "member" && password === "member") {
+        // Try to get member from database, fallback to hardcoded
+        try {
+          const dbUser = await storage.getUserByEmail("member@reshape.com");
+          if (dbUser) {
+            userData = {
+              id: dbUser.id.toString(),
+              email: dbUser.email,
+              firstName: dbUser.firstName || dbUser.first_name || 'Member',
+              lastName: dbUser.lastName || dbUser.last_name || 'User',
+              userType: dbUser.userType || dbUser.user_type || 'member',
+              role: dbUser.userType || dbUser.user_type || 'member',
+              first_name: dbUser.firstName || dbUser.first_name || 'Member',
+              last_name: dbUser.lastName || dbUser.last_name || 'User',
+              user_type: dbUser.userType || dbUser.user_type || 'member'
+            };
+          }
+        } catch (dbError) {
+          console.error("Database lookup error for member:", dbError);
+        }
+        
+        // Fallback to hardcoded member
+        if (!userData) {
+          userData = {
+            id: "3",
+            email: "member@reshape.com",
+            firstName: "Member",
+            lastName: "User",
+            userType: "member",
+            role: "member",
+            first_name: "Member",
+            last_name: "User",
+            user_type: "member"
+          };
+        }
+      }
+      
+      if (!userData) {
+        return res.status(401).json({ message: "Invalid credentials. Use demo credentials: admin/admin, trainer/trainer, or member/member" });
       }
       
       // Store user in session
@@ -215,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const user = req.session.user;
         // Ensure consistent structure
         const userData = {
-          id: user.id,
+          id: user.id.toString(),
           email: user.email,
           firstName: user.firstName || user.first_name || '',
           lastName: user.lastName || user.last_name || '',
@@ -229,7 +285,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Fallback to database lookup for legacy users
-      const userId = req.user?.claims?.sub || '1';
+      const userId = req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -238,15 +298,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get additional profile data based on user type
       let profileData = null;
-      if (user?.userType === 'member') {
-        profileData = await storage.getMemberProfile(userId);
-      } else if (user?.userType === 'trainer') {
-        profileData = await storage.getTrainerProfile(userId);
+      try {
+        if (user?.userType === 'member') {
+          profileData = await storage.getMemberProfile(userId);
+        } else if (user?.userType === 'trainer') {
+          profileData = await storage.getTrainerProfile(userId);
+        }
+      } catch (profileError) {
+        console.error("Error fetching profile data:", profileError);
+        // Continue without profile data
       }
 
       // Ensure consistent structure
       const userData = {
-        id: user.id,
+        id: user.id.toString(),
         email: user.email,
         firstName: user.firstName || user.first_name || '',
         lastName: user.lastName || user.last_name || '',

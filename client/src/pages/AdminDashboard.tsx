@@ -14,8 +14,38 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Users, Activity, Settings, BarChart, Plus, Edit, Trash2, Phone, Calendar, Target } from "lucide-react";
 import Navigation from "@/components/Navigation";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function AdminDashboard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin w-12 h-12 border-4 border-gold border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    window.location.href = '/login';
+    return null;
+  }
+
+  // Check if user has admin role
+  if (user?.userType !== 'admin' && user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl font-bold text-gold mb-4">Access Denied</h1>
+          <p className="text-gray-300">You don't have permission to access this page.</p>
+        </div>
+      </div>
+    );
+  }
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("members");

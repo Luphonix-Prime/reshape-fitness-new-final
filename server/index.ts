@@ -1,10 +1,19 @@
-
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic } from "./vite";
 import { initializeDatabase, closeDatabase } from "./db";
 
 const app = express();
+
+// Enable CORS for all origins in development
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -43,7 +52,7 @@ app.use((req, res, next) => {
     // Initialize PostgreSQL database
     await initializeDatabase();
     console.log('PostgreSQL database initialized successfully');
-    
+
     const server = await registerRoutes(app);
 
     // importantly only setup vite in development and after routes are registered

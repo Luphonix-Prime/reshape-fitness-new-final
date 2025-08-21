@@ -27,7 +27,7 @@ export const useAuth = () => {
       if (response && response.id) {
         // Ensure we have the proper user structure
         const userData = {
-          id: response.id,
+          id: response.id.toString(),
           firstName: response.firstName || response.first_name || '',
           lastName: response.lastName || response.last_name || '',
           email: response.email || '',
@@ -35,15 +35,18 @@ export const useAuth = () => {
           role: response.role || response.userType || response.user_type || 'member'
         };
         setUser(userData);
-        setIsAuthenticated(true); // Set isAuthenticated to true if user data is found
+        setIsAuthenticated(true);
       } else {
         setUser(null);
-        setIsAuthenticated(false); // Set isAuthenticated to false if no user data
+        setIsAuthenticated(false);
       }
-    } catch (error) {
-      console.error('Auth check error:', error);
+    } catch (error: any) {
+      // Only log actual errors, not 401s which are expected when not logged in
+      if (!error?.message?.includes('401')) {
+        console.error('Auth check error:', error);
+      }
       setUser(null);
-      setIsAuthenticated(false); // Set isAuthenticated to false on error
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -59,15 +62,13 @@ export const useAuth = () => {
         password,
       });
 
-      console.log('Login response:', response); // Debug log
-
-      if (response && (response.user || response.success)) {
+      if (response && response.success && response.user) {
         // Handle the user data from response
-        const userFromResponse = response.user || response;
+        const userFromResponse = response.user;
         
         // Ensure we have the proper user structure
         const userData = {
-          id: userFromResponse.id || '1',
+          id: userFromResponse.id.toString(),
           firstName: userFromResponse.firstName || userFromResponse.first_name || '',
           lastName: userFromResponse.lastName || userFromResponse.last_name || '',
           email: userFromResponse.email || '',
@@ -75,17 +76,24 @@ export const useAuth = () => {
           role: userFromResponse.role || userFromResponse.userType || userFromResponse.user_type || 'member'
         };
         
+        console.log('Setting user data:', userData);
         setUser(userData);
-        setIsAuthenticated(true); // Set isAuthenticated to true after successful login
+        setIsAuthenticated(true);
+        
+        // Store in localStorage for persistence
+        localStorage.setItem('user', JSON.stringify(userData));
+        
         return { ...response, user: userData };
       } else {
-        throw new Error('Invalid response from server');
+        throw new Error(response?.message || 'Invalid response from server');
       }
     } catch (error: any) {
       console.error('Login error:', error);
       setUser(null);
-      setIsAuthenticated(false); // Set isAuthenticated to false on login error
-      throw new Error(error?.message || 'Login failed. Please check your credentials.');
+      setIsAuthenticated(false);
+      // Extract meaningful error message
+      const errorMessage = error?.message || 'Login failed. Please check your credentials.';
+      throw new Error(errorMessage);
     }
   };
 

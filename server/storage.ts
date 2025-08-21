@@ -1,4 +1,3 @@
-
 import { pool } from './db.js';
 
 interface User {
@@ -55,15 +54,54 @@ export const storage = {
   },
 
   async getUser(id: string): Promise<User | null> {
-    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
-    if (rows.length === 0) return null;
-    return this.mapUserFromDb(rows[0]);
+    try {
+      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+      const user = rows[0];
+      if (user) {
+        return {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          userType: user.user_type,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          user_type: user.user_type,
+          phone: user.phone
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return null;
+    }
   },
 
   async getUserByEmail(email: string): Promise<User | null> {
-    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (rows.length === 0) return null;
-    return this.mapUserFromDb(rows[0]);
+    try {
+      const { rows } = await pool.query(
+        'SELECT * FROM users WHERE email = $1',
+        [email]
+      );
+      const user = rows[0];
+      if (user) {
+        return {
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          userType: user.user_type,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          user_type: user.user_type,
+          phone: user.phone
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting user by email:', error);
+      return null;
+    }
   },
 
   async deleteUser(id: string): Promise<void> {
@@ -106,9 +144,9 @@ export const storage = {
       WHERE u.user_type = 'member'
       ORDER BY u.created_at DESC
     `);
-    
+
     if (rows.length === 0) return [];
-    
+
     return rows.map(row => {
       const user = this.mapUserFromDb(row);
       if (!user) return null;
@@ -204,9 +242,9 @@ export const storage = {
       WHERE u.user_type = 'trainer'
       ORDER BY u.created_at DESC
     `);
-    
+
     if (rows.length === 0) return [];
-    
+
     return rows.map(row => {
       const user = this.mapUserFromDb(row);
       if (!user) return null;

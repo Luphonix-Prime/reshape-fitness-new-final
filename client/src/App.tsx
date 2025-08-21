@@ -32,7 +32,6 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/" component={!isAuthenticated ? Login : Home} />
       <Route path="/landing" component={Landing} />
       <Route path="/about" component={About} />
       <Route path="/services" component={Services} />
@@ -41,15 +40,14 @@ function Router() {
       <Route path="/subscribe" component={Subscribe} />
       <Route path="/membership" component={Subscribe} />
       
-      {/* Protected routes - redirect to login if not authenticated */}
-      <Route path="/member-dashboard">
-        {!isAuthenticated ? <Login /> : <MemberDashboard />}
-      </Route>
-      <Route path="/trainer-dashboard">
-        {!isAuthenticated ? <Login /> : <TrainerDashboard />}
-      </Route>
-      <Route path="/admin-dashboard">
-        {!isAuthenticated ? <Login /> : <AdminDashboard />}
+      {/* Dashboard routes - accessible when authenticated */}
+      <Route path="/member-dashboard" component={MemberDashboard} />
+      <Route path="/trainer-dashboard" component={TrainerDashboard} />
+      <Route path="/admin-dashboard" component={AdminDashboard} />
+      
+      {/* Default route - redirect based on authentication and user type */}
+      <Route path="/">
+        {!isAuthenticated ? <Login /> : <Home />}
       </Route>
       
       <Route component={NotFound} />
