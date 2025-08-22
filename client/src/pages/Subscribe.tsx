@@ -222,8 +222,13 @@ export default function Subscribe() {
   React.useEffect(() => {
     const storedTier = localStorage.getItem('selectedMembershipTier');
     if (storedTier) {
-      setSelectedTier(JSON.parse(storedTier));
-      setShowPaymentForm(true);
+      try {
+        setSelectedTier(JSON.parse(storedTier));
+        setShowPaymentForm(true);
+      } catch (error) {
+        console.error('Failed to parse stored tier:', error);
+        localStorage.removeItem('selectedMembershipTier');
+      }
     }
   }, []);
 
@@ -373,42 +378,129 @@ export default function Subscribe() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {membershipTiers?.map((tier: any, index: number) => (
-              <Card
-                key={tier.id}
-                className="bg-white/5 backdrop-blur-sm border border-white/10 hover:border-gold/50 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20 animate-fade-in"
-                style={{animationDelay: `${index * 200}ms`}}
-                onClick={() => handleTierSelect(tier)}
-              >
-                <CardContent className="p-8 relative">
-                  <div className="absolute inset-0 bg-gradient-to-b from-gold/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 rounded-lg"></div>
-                  <div className="relative z-10">
-                    <h3 className="text-2xl font-medium mb-2 tracking-wider text-gold group-hover:text-white transition-colors duration-300">
-                      {tier.name.toUpperCase()}
-                    </h3>
-                    <div className="mb-8 group-hover:scale-110 transition-transform duration-300">
-                      <span className="text-5xl font-light">${tier.monthlyPrice}</span>
-                      <span className="text-gray-400">/month</span>
-                    </div>
-                    <ul className="space-y-4 mb-8">
-                      {tier.benefits?.map((benefit: string, idx: number) => (
-                        <li key={idx} className="flex items-center text-gray-300 group-hover:text-white transition-colors duration-300">
-                          <CheckCircle className="w-5 h-5 text-gold mr-3 flex-shrink-0 group-hover:scale-110 transition-transform duration-300" />
-                          <span>{benefit}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Button
-                      className="w-full py-4 tracking-widest uppercase transition-all duration-300 bg-gold text-black hover:bg-white font-medium relative overflow-hidden group"
-                    >
-                      <span className="relative z-10">Select {tier.name}</span>
-                      <div className="absolute inset-0 bg-gradient-to-r from-gold via-yellow-300 to-gold opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="space-y-12 max-w-7xl mx-auto">
+            {/* One on One Section */}
+            <div className="text-center">
+              <h3 className="text-4xl font-bold text-gold mb-8">ONE ON ONE TRAINING</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {membershipTiers?.filter((tier: any) => tier.name.includes('ONE_ON_ONE')).map((tier: any, index: number) => (
+                  <Card
+                    key={tier.id}
+                    className="bg-white/5 backdrop-blur-sm border border-gold/30 hover:border-gold/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20"
+                    onClick={() => handleTierSelect(tier)}
+                  >
+                    <CardContent className="p-6 relative">
+                      <div className="text-center">
+                        <h4 className="text-xl font-bold text-white mb-2">
+                          {tier.name.includes('_12_') ? '12 Sessions' : 
+                           tier.name.includes('_24_') ? '24 Sessions' : 
+                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        </h4>
+                        <p className="text-sm text-gray-400 mb-4">
+                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
+                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        </p>
+                        <div className="mb-4">
+                          <span className="text-3xl font-bold text-gold">₹{tier.price?.toLocaleString()}</span>
+                        </div>
+                        <div className="text-sm text-gray-300 mb-4">
+                          (₹{tier.name.includes('_12_') ? '1500' : 
+                              tier.name.includes('_24_') ? '1425' : 
+                              tier.name.includes('_36_') ? '1350' : '1200'} per session)
+                        </div>
+                        <ul className="space-y-2 text-sm">
+                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
+                            <li key={idx} className="text-gray-300">{feature}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* 2 People Section */}
+            <div className="text-center">
+              <h3 className="text-4xl font-bold text-gray-300 mb-8">2 PEOPLE TRAINING</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {membershipTiers?.filter((tier: any) => tier.name.includes('TWO_PEOPLE')).map((tier: any, index: number) => (
+                  <Card
+                    key={tier.id}
+                    className="bg-white/5 backdrop-blur-sm border border-gray-400/30 hover:border-gray-400/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gray-400/20"
+                    onClick={() => handleTierSelect(tier)}
+                  >
+                    <CardContent className="p-6 relative">
+                      <div className="text-center">
+                        <h4 className="text-xl font-bold text-white mb-2">
+                          {tier.name.includes('_12_') ? '12 Sessions' : 
+                           tier.name.includes('_24_') ? '24 Sessions' : 
+                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        </h4>
+                        <p className="text-sm text-gray-400 mb-4">
+                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
+                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        </p>
+                        <div className="mb-4">
+                          <span className="text-3xl font-bold text-gray-300">₹{tier.price?.toLocaleString()}</span>
+                        </div>
+                        <div className="text-sm text-gray-300 mb-4">
+                          (₹{tier.name.includes('_12_') ? '1200' : 
+                              tier.name.includes('_24_') ? '1140' : 
+                              tier.name.includes('_36_') ? '1080' : '960'} per session)
+                        </div>
+                        <ul className="space-y-2 text-sm">
+                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
+                            <li key={idx} className="text-gray-300">{feature}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* 3 People Section */}
+            <div className="text-center">
+              <h3 className="text-4xl font-bold text-yellow-600 mb-8">3 PEOPLE TRAINING</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {membershipTiers?.filter((tier: any) => tier.name.includes('THREE_PEOPLE')).map((tier: any, index: number) => (
+                  <Card
+                    key={tier.id}
+                    className="bg-white/5 backdrop-blur-sm border border-yellow-600/30 hover:border-yellow-600/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-yellow-600/20"
+                    onClick={() => handleTierSelect(tier)}
+                  >
+                    <CardContent className="p-6 relative">
+                      <div className="text-center">
+                        <h4 className="text-xl font-bold text-white mb-2">
+                          {tier.name.includes('_12_') ? '12 Sessions' : 
+                           tier.name.includes('_24_') ? '24 Sessions' : 
+                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        </h4>
+                        <p className="text-sm text-gray-400 mb-4">
+                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
+                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        </p>
+                        <div className="mb-4">
+                          <span className="text-3xl font-bold text-yellow-600">₹{tier.price?.toLocaleString()}</span>
+                        </div>
+                        <div className="text-sm text-gray-300 mb-4">
+                          (₹{tier.name.includes('_12_') ? '1000' : 
+                              tier.name.includes('_24_') ? '950' : 
+                              tier.name.includes('_36_') ? '900' : '800'} per session)
+                        </div>
+                        <ul className="space-y-2 text-sm">
+                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
+                            <li key={idx} className="text-gray-300">{feature}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>

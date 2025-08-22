@@ -66,6 +66,7 @@ async function createTables() {
       membership_tier_id INTEGER REFERENCES membership_tiers(id),
       fitness_goals TEXT,
       emergency_contact VARCHAR(255),
+      tier_category VARCHAR(20),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -240,6 +241,38 @@ async function createTables() {
     );
   `;
 
+  const createMemberSessionAttendanceTable = `
+    CREATE TABLE IF NOT EXISTS member_session_attendance (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE,
+      trainer_id INTEGER REFERENCES trainer_profiles(id) ON DELETE CASCADE,
+      session_date DATE NOT NULL,
+      session_time TIME,
+      session_type VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'attended',
+      notes TEXT,
+      member_name VARCHAR(255),
+      trainer_name VARCHAR(255),
+      duration_minutes INTEGER DEFAULT 60,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createMemberTrainerAssignmentsTable = `
+    CREATE TABLE IF NOT EXISTS member_trainer_assignments (
+      id SERIAL PRIMARY KEY,
+      member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE,
+      trainer_id INTEGER REFERENCES trainer_profiles(id) ON DELETE CASCADE,
+      assigned_date DATE DEFAULT CURRENT_DATE,
+      is_active BOOLEAN DEFAULT true,
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(member_id, trainer_id)
+    );
+  `;
+
   const tables = [
     createUsersTable,
     createMembershipTiersTable,
@@ -253,7 +286,9 @@ async function createTables() {
     createAttendanceTable,
     createTrainerAttendanceTable,
     createMemberSessionsTable,
-    createInquiriesTable
+    createInquiriesTable,
+    createMemberSessionAttendanceTable,
+    createMemberTrainerAssignmentsTable
   ];
 
   for (const table of tables) {
@@ -266,28 +301,82 @@ async function insertSampleData() {
     // Insert membership tiers (always check/insert these)
     const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
     if (parseInt(existingTiers[0].count) === 0) {
-      const tierInserts = [
+      const tiers = [
         {
-          name: 'BRONZE',
-          price: 199,
-          features: ['Access to gym equipment', 'Locker room access', 'Basic fitness assessment'],
-          description: 'Perfect for getting started on your fitness journey'
+          name: 'TIER 1',
+          price: 18000,
+          duration: '1 month',
+          sessions: 12,
+          oneOnOnePrice: 1500,
+          twoPeoplePrice: 1200,
+          threePeoplePrice: 1000,
+          description: '12 sessions in 1 month',
+          features: JSON.stringify([
+            '12 Personal Training Sessions',
+            'Body Composition Analysis',
+            'Customized Workout Plans',
+            'Nutrition Guidance',
+            'Progress Tracking'
+          ])
         },
         {
-          name: 'SILVER',
-          price: 299,
-          features: ['Everything in Bronze', '2 personal training sessions/month', 'Nutrition consultation', 'Group classes'],
-          description: 'Enhanced experience with personal guidance'
+          name: 'TIER 2',
+          price: 34200,
+          duration: '1 month',
+          sessions: 24,
+          oneOnOnePrice: 1425,
+          twoPeoplePrice: 1140,
+          threePeoplePrice: 950,
+          description: '24 sessions in 1 month',
+          features: JSON.stringify([
+            '24 Personal Training Sessions',
+            'Advanced Body Analysis',
+            'Personalized Meal Plans',
+            'Weekly Progress Reviews',
+            'Priority Booking',
+            'Supplement Guidance'
+          ])
         },
         {
-          name: 'GOLD',
-          price: 499,
-          features: ['Everything in Silver', 'Unlimited personal training', 'Custom meal plans', 'Recovery services', '24/7 gym access'],
-          description: 'The ultimate luxury fitness experience'
+          name: 'TIER 3',
+          price: 48600,
+          duration: '3 months',
+          sessions: 36,
+          oneOnOnePrice: 1350,
+          twoPeoplePrice: 1080,
+          threePeoplePrice: 900,
+          description: '36 sessions in 3 months',
+          features: JSON.stringify([
+            '36 Personal Training Sessions',
+            'Comprehensive Health Assessment',
+            'Custom Nutrition & Meal Planning',
+            'Bi-weekly Progress Evaluations',
+            'VIP Access to Equipment',
+            'Recovery & Mobility Sessions'
+          ])
+        },
+        {
+          name: 'TIER 4',
+          price: 86400,
+          duration: '6 months',
+          sessions: 72,
+          oneOnOnePrice: 1200,
+          twoPeoplePrice: 960,
+          threePeoplePrice: 800,
+          description: '72 sessions in 6 months',
+          features: JSON.stringify([
+            '72 Personal Training Sessions',
+            'Complete Transformation Program',
+            'Advanced Nutritional Coaching',
+            'Monthly Body Composition Analysis',
+            'Lifestyle & Habit Coaching',
+            'Exclusive Member Events',
+            'Long-term Health Planning'
+          ])
         }
       ];
 
-      for (const tier of tierInserts) {
+      for (const tier of tiers) {
         await pool.query(
           'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
           [tier.name, tier.price, tier.features, tier.description]
@@ -337,13 +426,13 @@ async function insertSampleData() {
         [memberEmail, 'Member', 'Test', 'member']
       );
 
-      // Create member profile with a membership tier
+      // Create member profile with a membership tier and category
       if (memberRows[0]) {
-        const { rows: tierRows } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['BRONZE']);
-        if (tierRows[0]) {
+        const { rows: tierRowsBronze } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['TIER 1']);
+        if (tierRowsBronze[0]) {
           await pool.query(
-            'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact) VALUES ($1, $2, $3, $4)',
-            [memberRows[0].id, tierRows[0].id, 'General fitness and health improvement', memberEmail]
+            'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact, tier_category) VALUES ($1, $2, $3, $4, $5)',
+            [memberRows[0].id, tierRowsBronze[0].id, 'General fitness and health improvement', memberEmail, 'Tier 1']
           );
         }
       }

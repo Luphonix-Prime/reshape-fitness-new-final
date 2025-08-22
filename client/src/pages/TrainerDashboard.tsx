@@ -112,119 +112,41 @@ export default function TrainerDashboard() {
     meals: ""
   });
 
-  // Mock data for development
-  const trainerStats = {
-    totalClients: 12,
-    todaySessions: 4,
-    weeklyHours: 32,
-    avgRating: 4.8
-  };
+  // Fetch real data from the API
+  const { data: trainerStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['/api/trainer/stats'],
+    queryFn: () => apiRequest('GET', '/api/trainer/stats'),
+  });
 
-  const upcomingSessions = [
-    {
-      id: 1,
-      clientName: "Sarah Johnson",
-      sessionType: "Strength Training",
-      date: "2024-01-15",
-      time: "09:00 AM",
-      duration: 60,
-      status: "Confirmed",
-      notes: "Focus on upper body strength"
-    },
-    {
-      id: 2,
-      clientName: "Mike Chen",
-      sessionType: "HIIT",
-      date: "2024-01-15",
-      time: "11:00 AM",
-      duration: 45,
-      status: "Confirmed",
-      notes: "High intensity cardio session"
-    },
-    {
-      id: 3,
-      clientName: "Emma Davis",
-      sessionType: "Yoga",
-      date: "2024-01-15",
-      time: "02:00 PM",
-      duration: 60,
-      status: "Pending",
-      notes: "Flexibility and relaxation focus"
-    },
-    {
-      id: 4,
-      clientName: "David Wilson",
-      sessionType: "Cardio",
-      date: "2024-01-15",
-      time: "04:00 PM",
-      duration: 30,
-      status: "Confirmed",
-      notes: "Endurance building session"
-    },
-  ];
+  const { data: upcomingSessions = [], isLoading: sessionsLoading } = useQuery({
+    queryKey: ['/api/trainer/sessions'],
+    queryFn: () => apiRequest('GET', '/api/trainer/sessions'),
+  });
 
-  const clients = [
-    { id: 1, name: "Sarah Johnson", email: "sarah@email.com", joinDate: "2024-01-01", sessionsCompleted: 24 },
-    { id: 2, name: "Mike Chen", email: "mike@email.com", joinDate: "2024-01-05", sessionsCompleted: 18 },
-    { id: 3, name: "Emma Davis", email: "emma@email.com", joinDate: "2024-01-10", sessionsCompleted: 12 },
-    { id: 4, name: "David Wilson", email: "david@email.com", joinDate: "2024-01-12", sessionsCompleted: 8 },
-  ];
+  const { data: clients = [], isLoading: clientsLoading } = useQuery({
+    queryKey: ['/api/trainer/clients'],
+    queryFn: () => apiRequest('GET', '/api/trainer/clients'),
+  });
 
-  const workoutPlans = [
-    { id: 1, clientName: "Sarah Johnson", planName: "Upper Body Strength", createdDate: "2024-01-10", exercises: 8 },
-    { id: 2, clientName: "Mike Chen", planName: "HIIT Circuit", createdDate: "2024-01-08", exercises: 6 },
-    { id: 3, clientName: "Emma Davis", planName: "Flexibility Routine", createdDate: "2024-01-12", exercises: 10 },
-  ];
+  const { data: workoutPlans = [], isLoading: workoutPlansLoading } = useQuery({
+    queryKey: ['/api/trainer/workout-plans'],
+    queryFn: () => apiRequest('GET', '/api/trainer/workout-plans'),
+  });
 
-  const nutritionPlans = [
-    { id: 1, clientName: "Sarah Johnson", planName: "Muscle Gain Diet", createdDate: "2024-01-10", calories: 2200 },
-    { id: 2, clientName: "Mike Chen", planName: "Performance Nutrition", createdDate: "2024-01-08", calories: 2500 },
-    { id: 3, clientName: "Emma Davis", planName: "Wellness Plan", createdDate: "2024-01-12", calories: 1800 },
-  ];
+  const { data: nutritionPlans = [], isLoading: nutritionPlansLoading } = useQuery({
+    queryKey: ['/api/trainer/nutrition-plans'],
+    queryFn: () => apiRequest('GET', '/api/trainer/nutrition-plans'),
+  });
 
-  // Mock data for assessments
-  const assessments = [
-    {
-      id: 1,
-      clientName: "Keval Patel",
-      date: "2024-01-14",
-      trainerName: "Coach Alex"
-    },
-    {
-      id: 2,
-      clientName: "Sarah Johnson",
-      date: "2024-01-13",
-      trainerName: "Coach Alex"
-    }
-  ];
+  const { data: assessments = [], isLoading: assessmentsLoading } = useQuery({
+    queryKey: ['/api/trainer/assessments'],
+    queryFn: () => apiRequest('GET', '/api/trainer/assessments'),
+  });
 
-  // Mock inquiries data - in real app this would come from API
-  const inquiries = [
-    {
-      _id: "1",
-      firstName: "John",
-      lastName: "Doe",
-      email: "john@example.com",
-      phone: "555-0123",
-      interest: "Personal Training",
-      location: "Manhattan",
-      message: "Interested in strength training and muscle gain",
-      submittedAt: new Date().toISOString(),
-      status: "new"
-    },
-    {
-      _id: "2",
-      firstName: "Jane",
-      lastName: "Smith",
-      email: "jane@example.com",
-      phone: "555-0124",
-      interest: "Group Classes",
-      location: "Beverly Hills",
-      message: "Looking for yoga and flexibility classes",
-      submittedAt: new Date().toISOString(),
-      status: "new"
-    }
-  ];
+  const { data: inquiries = [], isLoading: inquiriesLoading } = useQuery({
+    queryKey: ['/api/trainer/inquiries'],
+    queryFn: () => apiRequest('GET', '/api/trainer/inquiries'),
+  });
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
@@ -453,7 +375,13 @@ export default function TrainerDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Active Clients</p>
-                  <p className="text-2xl font-bold text-gold">{trainerStats.totalClients}</p>
+                  <p className="text-2xl font-bold text-gold">
+                    {statsLoading ? (
+                      <div className="animate-pulse bg-gray-700 h-8 w-12 rounded"></div>
+                    ) : (
+                      trainerStats?.totalClients || 0
+                    )}
+                  </p>
                 </div>
                 <Users className="h-8 w-8 text-gold" />
               </div>
@@ -465,7 +393,13 @@ export default function TrainerDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Today's Sessions</p>
-                  <p className="text-2xl font-bold text-green-400">{trainerStats.todaySessions}</p>
+                  <p className="text-2xl font-bold text-green-400">
+                    {statsLoading ? (
+                      <div className="animate-pulse bg-gray-700 h-8 w-12 rounded"></div>
+                    ) : (
+                      trainerStats?.todaySessions || 0
+                    )}
+                  </p>
                 </div>
                 <Calendar className="h-8 w-8 text-green-400" />
               </div>
@@ -477,7 +411,13 @@ export default function TrainerDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Weekly Hours</p>
-                  <p className="text-2xl font-bold text-blue-400">{trainerStats.weeklyHours}</p>
+                  <p className="text-2xl font-bold text-blue-400">
+                    {statsLoading ? (
+                      <div className="animate-pulse bg-gray-700 h-8 w-12 rounded"></div>
+                    ) : (
+                      trainerStats?.weeklyHours || 0
+                    )}
+                  </p>
                 </div>
                 <Clock className="h-8 w-8 text-blue-400" />
               </div>
@@ -489,7 +429,13 @@ export default function TrainerDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-gray-400 text-sm">Avg Rating</p>
-                  <p className="text-2xl font-bold text-purple-400">{trainerStats.avgRating}</p>
+                  <p className="text-2xl font-bold text-purple-400">
+                    {statsLoading ? (
+                      <div className="animate-pulse bg-gray-700 h-8 w-12 rounded"></div>
+                    ) : (
+                      trainerStats?.avgRating || 0
+                    )}
+                  </p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-purple-400" />
               </div>
@@ -636,58 +582,73 @@ export default function TrainerDashboard() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {upcomingSessions.map((session) => (
-                        <div key={session.id} className="bg-black rounded-lg p-4 border border-gray-800">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-3">
-                              <User className="h-5 w-5 text-gold" />
-                              <div>
-                                <h3 className="text-white font-semibold">{session.clientName}</h3>
-                                <p className="text-gray-400 text-sm">{session.sessionType}</p>
+                    {sessionsLoading ? (
+                      <div className="space-y-4">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="animate-pulse bg-gray-800 rounded-lg p-4 h-24"></div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {upcomingSessions?.length > 0 ? (
+                          upcomingSessions.map((session) => (
+                            <div key={session.id} className="bg-black rounded-lg p-4 border border-gray-800">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center space-x-3">
+                                  <User className="h-5 w-5 text-gold" />
+                                  <div>
+                                    <h3 className="text-white font-semibold">{session.clientName}</h3>
+                                    <p className="text-gray-400 text-sm">{session.sessionType}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-gold font-semibold">{session.time}</p>
+                                  <p className="text-gray-400 text-sm">{session.duration} min</p>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-gold font-semibold">{session.time}</p>
-                              <p className="text-gray-400 text-sm">{session.duration} min</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            {getStatusBadge(session.status)}
-                            <div className="flex space-x-2">
-                              {session.status === "Pending" && (
-                                <>
+                              <div className="flex items-center justify-between">
+                                {getStatusBadge(session.status)}
+                                <div className="flex space-x-2">
+                                  {session.status === "Pending" && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                        onClick={() => updateSessionStatus(session.id, "Confirmed")}
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => updateSessionStatus(session.id, "Cancelled")}
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </Button>
+                                    </>
+                                  )}
                                   <Button
                                     size="sm"
-                                    className="bg-green-600 hover:bg-green-700 text-white"
-                                    onClick={() => updateSessionStatus(session.id, "Confirmed")}
+                                    variant="ghost"
+                                    className="text-gold hover:bg-gold hover:text-black"
                                   >
-                                    <CheckCircle className="h-4 w-4" />
+                                    <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => updateSessionStatus(session.id, "Cancelled")}
-                                  >
-                                    <XCircle className="h-4 w-4" />
-                                  </Button>
-                                </>
+                                </div>
+                              </div>
+                              {session.notes && (
+                                <p className="text-gray-400 text-sm mt-2 italic">{session.notes}</p>
                               )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-gold hover:bg-gold hover:text-black"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
                             </div>
+                          ))
+                        ) : (
+                          <div className="text-center text-gray-400 py-8">
+                            <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                            <p>No upcoming sessions scheduled</p>
                           </div>
-                          {session.notes && (
-                            <p className="text-gray-400 text-sm mt-2 italic">{session.notes}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -738,44 +699,53 @@ export default function TrainerDashboard() {
                 <CardTitle className="text-gold">Your Clients ({clients.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Name</TableHead>
-                      <TableHead className="text-gray-400">Email</TableHead>
-                      <TableHead className="text-gray-400">Join Date</TableHead>
-                      <TableHead className="text-gray-400">Sessions Completed</TableHead>
-                      <TableHead className="text-gray-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {clients.map((client) => (
-                      <TableRow key={client.id} className="border-gray-800">
-                        <TableCell className="text-white">{client.name}</TableCell>
-                        <TableCell className="text-gray-400">{client.email}</TableCell>
-                        <TableCell className="text-gray-400">{new Date(client.joinDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-gray-400">{client.sessionsCompleted}</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
-                              View Profile
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                              Schedule Session
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                {clientsLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-gray-800 rounded h-12"></div>
                     ))}
-                    {(!Array.isArray(clients) || clients.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-gray-400">
-                          No clients found
-                        </TableCell>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-800">
+                        <TableHead className="text-gray-400">Name</TableHead>
+                        <TableHead className="text-gray-400">Email</TableHead>
+                        <TableHead className="text-gray-400">Join Date</TableHead>
+                        <TableHead className="text-gray-400">Sessions Completed</TableHead>
+                        <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {clients?.length > 0 ? (
+                        clients.map((client) => (
+                          <TableRow key={client.id} className="border-gray-800">
+                            <TableCell className="text-white">{client.name}</TableCell>
+                            <TableCell className="text-gray-400">{client.email}</TableCell>
+                            <TableCell className="text-gray-400">{new Date(client.joinDate).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-gray-400">{client.sessionsCompleted}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                  View Profile
+                                </Button>
+                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
+                                  Schedule Session
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-gray-400">
+                            No clients assigned yet
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1670,48 +1640,58 @@ export default function TrainerDashboard() {
 
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader>
-                <CardTitle className="text-gold">Assessments ({assessments.length})</CardTitle>
+                <CardTitle className="text-gold">Assessments ({assessments?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Client Name</TableHead>
-                      <TableHead className="text-gray-400">Date</TableHead>
-                      <TableHead className="text-gray-400">Trainer</TableHead>
-                      <TableHead className="text-gray-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assessments.map((assessment) => (
-                      <TableRow key={assessment.id} className="border-gray-800">
-                        <TableCell className="text-white">{assessment.clientName}</TableCell>
-                        <TableCell className="text-gray-400">{assessment.date}</TableCell>
-                        <TableCell className="text-gray-400">{assessment.trainerName}</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                              Share
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-green-400 hover:bg-green-400 hover:text-white">
-                              Export
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                {assessmentsLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-gray-800 rounded h-12"></div>
                     ))}
-                    {(!Array.isArray(assessments) || assessments.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center text-gray-400">
-                          No assessments found
-                        </TableCell>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-800">
+                        <TableHead className="text-gray-400">Client Name</TableHead>
+                        <TableHead className="text-gray-400">Date</TableHead>
+                        <TableHead className="text-gray-400">Trainer</TableHead>
+                        <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {assessments?.length > 0 ? (
+                        assessments.map((assessment) => (
+                          <TableRow key={assessment.id} className="border-gray-800">
+                            <TableCell className="text-white">{assessment.clientName}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.date}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.trainerName}</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
+                                  Share
+                                </Button>
+                                <Button size="sm" variant="ghost" className="text-green-400 hover:bg-green-400 hover:text-white">
+                                  Export
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-gray-400 py-8">
+                            <Target className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                            <p>No assessments available</p>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1803,44 +1783,54 @@ export default function TrainerDashboard() {
 
             <Card className="bg-gray-900 border-gray-800">
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Client</TableHead>
-                      <TableHead className="text-gray-400">Plan Name</TableHead>
-                      <TableHead className="text-gray-400">Created</TableHead>
-                      <TableHead className="text-gray-400">Exercises</TableHead>
-                      <TableHead className="text-gray-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {workoutPlans.map((plan) => (
-                      <TableRow key={plan.id} className="border-gray-800">
-                        <TableCell className="text-white">{plan.clientName}</TableCell>
-                        <TableCell className="text-white">{plan.planName}</TableCell>
-                        <TableCell className="text-gray-400">{new Date(plan.createdDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-gray-400">{plan.exercises} exercises</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                              View
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                {workoutPlansLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-gray-800 rounded h-12"></div>
                     ))}
-                    {(!Array.isArray(workoutPlans) || workoutPlans.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-gray-400">
-                          No workout plans found
-                        </TableCell>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-800">
+                        <TableHead className="text-gray-400">Client</TableHead>
+                        <TableHead className="text-gray-400">Plan Name</TableHead>
+                        <TableHead className="text-gray-400">Created</TableHead>
+                        <TableHead className="text-gray-400">Exercises</TableHead>
+                        <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {workoutPlans?.length > 0 ? (
+                        workoutPlans.map((plan) => (
+                          <TableRow key={plan.id} className="border-gray-800">
+                            <TableCell className="text-white">{plan.clientName}</TableCell>
+                            <TableCell className="text-white">{plan.planName}</TableCell>
+                            <TableCell className="text-gray-400">{new Date(plan.createdDate).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-gray-400">{plan.exercises} exercises</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
+                                  View
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-gray-400 py-8">
+                            <Dumbbell className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                            <p>No workout plans created yet</p>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1932,44 +1922,54 @@ export default function TrainerDashboard() {
 
             <Card className="bg-gray-900 border-gray-800">
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Client</TableHead>
-                      <TableHead className="text-gray-400">Plan Name</TableHead>
-                      <TableHead className="text-gray-400">Created</TableHead>
-                      <TableHead className="text-gray-400">Daily Calories</TableHead>
-                      <TableHead className="text-gray-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {nutritionPlans.map((plan) => (
-                      <TableRow key={plan.id} className="border-gray-800">
-                        <TableCell className="text-white">{plan.clientName}</TableCell>
-                        <TableCell className="text-white">{plan.planName}</TableCell>
-                        <TableCell className="text-gray-400">{new Date(plan.createdDate).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-gray-400">{plan.calories} cal</TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                              View
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                {nutritionPlansLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-gray-800 rounded h-12"></div>
                     ))}
-                    {(!Array.isArray(nutritionPlans) || nutritionPlans.length === 0) && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-gray-400">
-                          No nutrition plans found
-                        </TableCell>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-gray-800">
+                        <TableHead className="text-gray-400">Client</TableHead>
+                        <TableHead className="text-gray-400">Plan Name</TableHead>
+                        <TableHead className="text-gray-400">Created</TableHead>
+                        <TableHead className="text-gray-400">Daily Calories</TableHead>
+                        <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {nutritionPlans?.length > 0 ? (
+                        nutritionPlans.map((plan) => (
+                          <TableRow key={plan.id} className="border-gray-800">
+                            <TableCell className="text-white">{plan.clientName}</TableCell>
+                            <TableCell className="text-white">{plan.planName}</TableCell>
+                            <TableCell className="text-gray-400">{new Date(plan.createdDate).toLocaleDateString()}</TableCell>
+                            <TableCell className="text-gray-400">{plan.calories} cal</TableCell>
+                            <TableCell>
+                              <div className="flex space-x-2">
+                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
+                                  View
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-gray-400 py-8">
+                            <Apple className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                            <p>No nutrition plans created yet</p>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

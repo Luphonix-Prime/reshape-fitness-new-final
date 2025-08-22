@@ -1,4 +1,3 @@
-
 import nodemailer from 'nodemailer';
 
 interface EmailOptions {
@@ -15,21 +14,41 @@ class EmailService {
     console.log('Email service initialization:');
     console.log('GMAIL_USER available:', !!(process.env.GMAIL_USER || process.env.SMTP_USER));
     console.log('GMAIL_APP_PASSWORD available:', !!(process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS));
-    
-    // Configure Gmail SMTP with proper settings
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER || process.env.GMAIL_USER || 'your-email@gmail.com',
-        pass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || 'your-app-password'
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+
+    // Check if email credentials are available
+    const hasEmailCredentials = !!(process.env.SMTP_USER || process.env.GMAIL_USER) && 
+                               !!(process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD);
+
+    if (hasEmailCredentials) {
+      // Configure Gmail SMTP with proper settings
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: process.env.SMTP_USER || process.env.GMAIL_USER,
+          pass: process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    } else {
+      // Create a mock transporter for development
+      console.log('Email credentials not configured - using mock transporter');
+      this.transporter = {
+        verify: async () => true,
+        sendMail: async (options: any) => {
+          console.log('Mock email sent:', {
+            to: options.to,
+            subject: options.subject,
+            from: options.from
+          });
+          return { messageId: 'mock-' + Date.now() };
+        }
+      } as any;
+    }
   }
 
   async sendWelcomeEmail(memberEmail: string, memberName: string, membershipTier: string) {
@@ -199,7 +218,7 @@ class EmailService {
 
   async sendPasswordResetEmail(userEmail: string, userName: string, resetToken: string) {
     const resetUrl = `${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}`;
-    
+
     const resetTemplate = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #fff; border-radius: 10px; overflow: hidden;">
       <div style="background: #d4af37; padding: 20px; text-align: center;">
@@ -242,7 +261,7 @@ class EmailService {
 
   async sendEmailChangeConfirmation(newEmail: string, userName: string, changeToken: string, oldEmail: string) {
     const confirmUrl = `${process.env.APP_URL || 'http://localhost:5000'}/confirm-email-change?token=${changeToken}`;
-    
+
     const confirmTemplate = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #fff; border-radius: 10px; overflow: hidden;">
       <div style="background: #d4af37; padding: 20px; text-align: center;">
@@ -299,7 +318,7 @@ class EmailService {
         <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
           A body assessment has been shared with you for review and training guidance.
         </p>
-        
+
         <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="color: #d4af37; margin-top: 0;">Client Information:</h3>
           <p style="margin: 10px 0;"><strong>Client Name:</strong> ${assessmentDetails.memberName || assessmentDetails.clientName}</p>
@@ -393,14 +412,14 @@ class EmailService {
       // Verify transporter configuration
       await this.transporter.verify();
       console.log('SMTP server is ready to take our messages');
-      
+
       const info = await this.transporter.sendMail({
         from: `"RESHAPE FITNESS" <${process.env.SMTP_USER || process.env.GMAIL_USER || 'noreply@reshape.fitness'}>`,
         to: options.to,
         subject: options.subject,
         html: options.html
       });
-      
+
       console.log('Email sent successfully:', {
         messageId: info.messageId,
         to: options.to,

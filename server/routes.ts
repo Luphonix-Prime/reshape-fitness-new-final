@@ -41,7 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     secret: 'reshape-fitness-dev-secret-key',
     resave: false,
     saveUninitialized: false,
-    cookie: { 
+    cookie: {
       secure: false,
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
@@ -59,7 +59,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await authService.createPasswordResetToken(email);
-      
+
       if (result.success) {
         res.json({ message: result.message });
       } else {
@@ -75,7 +75,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { token } = req.params;
       const result = await authService.verifyPasswordResetToken(token);
-      
+
       if (result.valid) {
         res.json({ valid: true, message: result.message });
       } else {
@@ -100,7 +100,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await authService.resetPassword(token, newPassword);
-      
+
       if (result.success) {
         res.json({ message: result.message });
       } else {
@@ -127,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await authService.createEmailChangeToken(userId, newEmail);
-      
+
       if (result.success) {
         res.json({ message: result.message });
       } else {
@@ -143,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { token } = req.params;
       const result = await authService.confirmEmailChange(token);
-      
+
       if (result.success) {
         res.json({ message: result.message });
       } else {
@@ -175,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get user's current password hash
       const { rows: userRows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
-      
+
       if (userRows.length === 0) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -185,21 +185,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For demo users without passwords, allow any current password
       if (!user.password_hash) {
         const hashedPassword = await authService.hashPassword(newPassword);
-        await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', 
+        await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           [hashedPassword, userId]);
         return res.json({ message: "Password set successfully" });
       }
 
       // Verify current password
       const isCurrentPasswordValid = await authService.verifyPassword(currentPassword, user.password_hash);
-      
+
       if (!isCurrentPasswordValid) {
         return res.status(400).json({ message: "Current password is incorrect" });
       }
 
       // Hash and update new password
       const hashedPassword = await authService.hashPassword(newPassword);
-      await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', 
+      await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [hashedPassword, userId]);
 
       res.json({ message: "Password changed successfully" });
@@ -300,7 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store user in session
       req.session.user = userData;
 
-      res.json({ 
+      res.json({
         message: "Login successful",
         user: userData,
         success: true
@@ -334,11 +334,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/test-postgres', async (req, res) => {
     try {
       const tiers = await storage.getMembershipTiers();
-      res.json({ 
-        message: "PostgreSQL connected successfully", 
+      res.json({
+        message: "PostgreSQL connected successfully",
         tiersCount: tiers.length,
         database: "Neon PostgreSQL",
-        testCompleted: true 
+        testCompleted: true
       });
     } catch (error) {
       console.error("PostgreSQL test error:", error);
@@ -400,7 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the request if email fails, just log it
       }
 
-      res.json({ 
+      res.json({
         message: "Contact form submitted successfully and confirmation email sent",
         submissionId: inquiry.id
       });
@@ -535,6 +535,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get trainers
   app.get('/api/trainers', isAuthenticated, async (req, res) => {
+    try {
+      const trainers = await storage.getAllTrainers();
+      res.json(trainers);
+    } catch (error) {
+      console.error("Error fetching trainers:", error);
+      res.status(500).json({ message: "Failed to fetch trainers" });
+    }
+  });
+
+  // Get all trainers for admin
+  app.get('/api/admin/trainers', async (req, res) => {
     try {
       const trainers = await storage.getAllTrainers();
       res.json(trainers);
@@ -699,9 +710,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { rows } = await pool.query(`
         SELECT ta.*, u.first_name, u.last_name, u.email,
                CONCAT(u.first_name, ' ', u.last_name) as trainerName
-        FROM trainer_attendance ta 
-        JOIN users u ON ta.trainer_id = u.id 
-        WHERE ta.date = $1 
+        FROM trainer_attendance ta
+        JOIN users u ON ta.trainer_id = u.id
+        WHERE ta.date = $1
         ORDER BY ta.check_in_time DESC NULLS LAST
       `, [date]);
       res.json(rows.map(row => ({
@@ -727,13 +738,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { year } = req.query;
       const { rows } = await pool.query(`
-        SELECT 
+        SELECT
           EXTRACT(MONTH FROM date) as month,
           COUNT(*) as total_visits,
           COUNT(DISTINCT member_id) as unique_members
-        FROM attendance 
-        WHERE EXTRACT(YEAR FROM date) = $1 
-        GROUP BY EXTRACT(MONTH FROM date) 
+        FROM attendance
+        WHERE EXTRACT(YEAR FROM date) = $1
+        GROUP BY EXTRACT(MONTH FROM date)
         ORDER BY month
       `, [year || new Date().getFullYear()]);
       res.json(rows);
@@ -744,19 +755,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Trainer routes
-  app.get('/api/trainer/stats', async (req, res) => {
+  app.get('/api/trainer/stats', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock stats for now - implement with real database queries
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get real stats from database
+      const { rows: clientStats } = await pool.query(`
+        SELECT COUNT(DISTINCT mta.member_id) as total_clients
+        FROM member_trainer_assignments mta
+        WHERE mta.trainer_id = $1 AND mta.is_active = true
+      `, [trainerId]);
+
+      const { rows: sessionStats } = await pool.query(`
+        SELECT COUNT(*) as today_sessions
+        FROM member_sessions ms
+        WHERE ms.trainer_id = $1 AND DATE(ms.scheduled_date) = CURRENT_DATE
+      `, [trainerId]);
+
+      const { rows: weeklyStats } = await pool.query(`
+        SELECT COALESCE(SUM(ms.duration), 0) as weekly_minutes
+        FROM member_sessions ms
+        WHERE ms.trainer_id = $1 
+        AND ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+        AND ms.scheduled_date <= CURRENT_DATE
+      `, [trainerId]);
+
       const stats = {
-        totalClients: 12,
-        todaySessions: 4,
-        weeklyHours: 32,
-        avgRating: 4.8
+        totalClients: parseInt(clientStats[0]?.total_clients) || 0,
+        todaySessions: parseInt(sessionStats[0]?.today_sessions) || 0,
+        weeklyHours: Math.round((parseInt(weeklyStats[0]?.weekly_minutes) || 0) / 60),
+        avgRating: 4.8 // This would need a ratings system implementation
       };
 
       res.json(stats);
@@ -766,26 +804,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/sessions', async (req, res) => {
+  app.get('/api/trainer/sessions', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock sessions for now - implement with real database queries
-      const sessions = [
-        {
-          id: 1,
-          clientName: "Sarah Johnson",
-          sessionType: "Strength Training",
-          date: "2024-01-15",
-          time: "09:00 AM",
-          duration: 60,
-          status: "Confirmed",
-          notes: "Focus on upper body strength"
-        }
-      ];
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get upcoming sessions from database
+      const { rows } = await pool.query(`
+        SELECT ms.*, 
+               CONCAT(mp.first_name, ' ', mp.last_name) as client_name,
+               ms.session_type,
+               ms.scheduled_date::date as date,
+               ms.scheduled_time as time,
+               ms.duration,
+               CASE 
+                 WHEN ms.status IS NULL THEN 'Pending'
+                 ELSE INITCAP(ms.status)
+               END as status,
+               ms.notes
+        FROM member_sessions ms
+        JOIN member_profiles mp ON ms.member_id = mp.id
+        WHERE ms.trainer_id = $1 
+        AND ms.scheduled_date >= CURRENT_DATE
+        ORDER BY ms.scheduled_date, ms.scheduled_time
+        LIMIT 10
+      `, [trainerId]);
+
+      const sessions = rows.map(row => ({
+        id: row.id,
+        clientName: row.client_name,
+        sessionType: row.session_type || 'Training Session',
+        date: new Date(row.date).toISOString().split('T')[0],
+        time: row.time || 'TBD',
+        duration: row.duration || 60,
+        status: row.status || 'Pending',
+        notes: row.notes || ''
+      }));
 
       res.json(sessions);
     } catch (error: any) {
@@ -794,17 +857,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/clients', async (req, res) => {
+  app.get('/api/trainer/clients', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock clients for now - implement with real database queries
-      const clients = [
-        { id: 1, name: "Sarah Johnson", email: "sarah@email.com", joinDate: "2024-01-01", sessionsCompleted: 24 }
-      ];
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get assigned clients from database
+      const { rows } = await pool.query(`
+        SELECT mp.id, 
+               CONCAT(mp.first_name, ' ', mp.last_name) as name,
+               mp.email,
+               mp.created_at as join_date,
+               COUNT(ms.id) as sessions_completed
+        FROM member_profiles mp
+        JOIN member_trainer_assignments mta ON mp.id = mta.member_id
+        LEFT JOIN member_sessions ms ON mp.id = ms.member_id AND ms.trainer_id = $1
+        WHERE mta.trainer_id = $1 AND mta.is_active = true
+        GROUP BY mp.id, mp.first_name, mp.last_name, mp.email, mp.created_at
+        ORDER BY mp.first_name, mp.last_name
+      `, [trainerId]);
+
+      const clients = rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        joinDate: row.join_date,
+        sessionsCompleted: parseInt(row.sessions_completed) || 0
+      }));
 
       res.json(clients);
     } catch (error: any) {
@@ -813,17 +901,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/workout-plans', async (req, res) => {
+  app.get('/api/trainer/workout-plans', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock workout plans for now - implement with real database queries
-      const workoutPlans = [
-        { id: 1, clientName: "Sarah Johnson", planName: "Upper Body Strength", createdDate: "2024-01-10", exercises: 8 }
-      ];
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get workout plans created by this trainer
+      const { rows } = await pool.query(`
+        SELECT wp.*, 
+               CONCAT(mp.first_name, ' ', mp.last_name) as client_name
+        FROM workout_plans wp
+        JOIN member_profiles mp ON wp.member_id = mp.id
+        WHERE wp.trainer_id = $1
+        ORDER BY wp.created_at DESC
+      `, [trainerId]);
+
+      const workoutPlans = rows.map(row => ({
+        id: row.id,
+        clientName: row.client_name,
+        planName: row.name,
+        createdDate: row.created_at,
+        exercises: 8 // This would need to be calculated from exercises table
+      }));
 
       res.json(workoutPlans);
     } catch (error: any) {
@@ -832,17 +940,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/nutrition-plans', async (req, res) => {
+  app.get('/api/trainer/nutrition-plans', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock nutrition plans for now - implement with real database queries
-      const nutritionPlans = [
-        { id: 1, clientName: "Sarah Johnson", planName: "Muscle Gain Diet", createdDate: "2024-01-10", calories: 2200 }
-      ];
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get nutrition plans created by this trainer
+      const { rows } = await pool.query(`
+        SELECT np.*, 
+               CONCAT(mp.first_name, ' ', mp.last_name) as client_name
+        FROM nutrition_plans np
+        JOIN member_profiles mp ON np.member_id = mp.id
+        WHERE np.trainer_id = $1
+        ORDER BY np.created_at DESC
+      `, [trainerId]);
+
+      const nutritionPlans = rows.map(row => ({
+        id: row.id,
+        clientName: row.client_name,
+        planName: row.name,
+        createdDate: row.created_at,
+        calories: row.daily_calories || 2000
+      }));
 
       res.json(nutritionPlans);
     } catch (error: any) {
@@ -851,17 +979,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/assessments', async (req, res) => {
+  app.get('/api/trainer/assessments', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Mock assessments for now - implement with real database queries
-      const assessments = [
-        { id: 1, clientName: "Keval Patel", date: "2024-01-14", trainerName: "Coach Alex" }
-      ];
+      // Get trainer profile ID from user ID
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE user_id = $1', [userId]);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer profile not found" });
+      }
+      const trainerId = trainerRows[0].id;
+
+      // Get body assessments for this trainer's clients
+      const { rows } = await pool.query(`
+        SELECT ba.*, 
+               COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name)) as client_name,
+               CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name
+        FROM body_assessments ba
+        LEFT JOIN member_profiles mp ON ba.member_id = mp.id
+        LEFT JOIN trainer_profiles tp ON tp.id = $1
+        LEFT JOIN member_trainer_assignments mta ON mp.id = mta.member_id AND mta.trainer_id = $1
+        WHERE mta.trainer_id = $1 OR ba.trainer_id = $1
+        ORDER BY ba.created_at DESC
+      `, [trainerId]);
+
+      const assessments = rows.map(row => ({
+        id: row.id,
+        clientName: row.client_name,
+        date: new Date(row.created_at).toISOString().split('T')[0],
+        trainerName: row.trainer_name
+      }));
 
       res.json(assessments);
     } catch (error: any) {
@@ -870,14 +1020,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/trainer/inquiries', async (req, res) => {
+  app.get('/api/trainer/inquiries', async (req: any, res) => {
     try {
-      const trainerId = req.user?.id;
-      if (!trainerId) {
+      const userId = req.session.user?.id;
+      if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Fetch inquiries from database
+      // Trainers can see inquiries but not manage them like admins
       const inquiries = await storage.getContactSubmissions();
       res.json(inquiries || []);
     } catch (error: any) {
@@ -945,7 +1095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trainerName
       });
 
-      res.json({ 
+      res.json({
         message: "Session scheduled successfully",
         session
       });
@@ -1119,12 +1269,217 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create trainer route
+  app.post('/api/admin/create-trainer', async (req, res) => {
+    try {
+      const trainerData = req.body;
+      
+      // Validate required fields
+      if (!trainerData.firstName || !trainerData.lastName || !trainerData.email) {
+        return res.status(400).json({ message: "First name, last name, and email are required" });
+      }
+
+      console.log('Creating trainer with data:', trainerData);
+
+      // Check if trainer with this email already exists
+      const { rows: existingTrainer } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [trainerData.email]);
+      if (existingTrainer.length > 0) {
+        return res.status(400).json({ message: "A trainer with this email already exists" });
+      }
+
+      // Create trainer profile directly in trainer_profiles table (without user_id)
+      const { rows } = await pool.query(`
+        INSERT INTO trainer_profiles (first_name, last_name, email, phone, specializations, hourly_rate, experience_years, certifications, bio, is_available)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `, [
+        trainerData.firstName,
+        trainerData.lastName,
+        trainerData.email,
+        trainerData.phone || null,
+        Array.isArray(trainerData.specializations) ? trainerData.specializations : [],
+        trainerData.hourlyRate ? parseFloat(trainerData.hourlyRate) : 75.00,
+        trainerData.experienceYears ? parseInt(trainerData.experienceYears) : 2,
+        trainerData.certifications || '',
+        trainerData.bio || '',
+        true
+      ]);
+
+      const trainer = rows[0];
+      console.log('Trainer created successfully:', trainer);
+
+      res.json({
+        message: "Trainer created successfully",
+        trainer: {
+          userId: trainer.id.toString(),
+          firstName: trainer.first_name,
+          lastName: trainer.last_name,
+          email: trainer.email,
+          phone: trainer.phone,
+          specializations: trainer.specializations || [],
+          hourlyRate: trainer.hourly_rate || 75,
+          experienceYears: trainer.experience_years || 2,
+          certifications: trainer.certifications || '',
+          bio: trainer.bio || '',
+          isAvailable: trainer.is_available !== false
+        }
+      });
+    } catch (error: any) {
+      console.error("Error creating trainer:", error);
+      res.status(500).json({ message: error.message || "Failed to create trainer" });
+    }
+  });
+
+  // Update trainer route
+  app.put('/api/admin/update-trainer/:trainerId', async (req, res) => {
+    try {
+      const { trainerId } = req.params;
+      const updates = req.body;
+
+      // Build dynamic update query
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      if (updates.firstName) {
+        fields.push(`first_name = $${paramIndex++}`);
+        values.push(updates.firstName);
+      }
+      if (updates.lastName) {
+        fields.push(`last_name = $${paramIndex++}`);
+        values.push(updates.lastName);
+      }
+      if (updates.email) {
+        fields.push(`email = $${paramIndex++}`);
+        values.push(updates.email);
+      }
+      if (updates.phone !== undefined) {
+        fields.push(`phone = $${paramIndex++}`);
+        values.push(updates.phone);
+      }
+      if (updates.specializations) {
+        fields.push(`specializations = $${paramIndex++}`);
+        values.push(updates.specializations);
+      }
+      if (updates.hourlyRate) {
+        fields.push(`hourly_rate = $${paramIndex++}`);
+        values.push(parseFloat(updates.hourlyRate));
+      }
+      if (updates.experienceYears) {
+        fields.push(`experience_years = $${paramIndex++}`);
+        values.push(parseInt(updates.experienceYears));
+      }
+      if (updates.certifications !== undefined) {
+        fields.push(`certifications = $${paramIndex++}`);
+        values.push(updates.certifications);
+      }
+      if (updates.bio !== undefined) {
+        fields.push(`bio = $${paramIndex++}`);
+        values.push(updates.bio);
+      }
+      if (updates.isAvailable !== undefined) {
+        fields.push(`is_available = $${paramIndex++}`);
+        values.push(updates.isAvailable);
+      }
+
+      if (fields.length > 0) {
+        fields.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(trainerId);
+
+        await pool.query(
+          `UPDATE trainer_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+          values
+        );
+      }
+
+      res.json({ message: "Trainer updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating trainer:", error);
+      res.status(500).json({ message: error.message || "Failed to update trainer" });
+    }
+  });
+
+  // Delete trainer route
+  app.delete('/api/admin/delete-trainer/:trainerId', async (req, res) => {
+    try {
+      const { trainerId } = req.params;
+      
+      const { rows } = await pool.query('DELETE FROM trainer_profiles WHERE id = $1 RETURNING *', [trainerId]);
+      
+      if (rows.length === 0) {
+        return res.status(404).json({ message: "Trainer not found" });
+      }
+
+      res.json({ message: "Trainer deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting trainer:", error);
+      res.status(500).json({ message: error.message || "Failed to delete trainer" });
+    }
+  });
+
+  // Create member route
+  app.post('/api/admin/create-member', async (req, res) => {
+    try {
+      const memberData = req.body;
+      
+      // Validate required fields
+      if (!memberData.firstName || !memberData.lastName || !memberData.email) {
+        return res.status(400).json({ message: "First name, last name, and email are required" });
+      }
+
+      // Create member profile
+      const member = await storage.createMemberProfile({
+        firstName: memberData.firstName,
+        lastName: memberData.lastName,
+        email: memberData.email,
+        phone: memberData.phone || null,
+        membershipTierId: memberData.membershipTierId || null,
+        emergencyContact: memberData.emergencyContact || memberData.email,
+        fitnessGoals: memberData.fitnessGoals || 'General fitness improvement'
+      });
+
+      res.json({
+        message: "Member created successfully",
+        member
+      });
+    } catch (error: any) {
+      console.error("Error creating member:", error);
+      res.status(500).json({ message: error.message || "Failed to create member" });
+    }
+  });
+
+  // Update member route
+  app.put('/api/admin/update-member/:memberId', async (req, res) => {
+    try {
+      const { memberId } = req.params;
+      const updates = req.body;
+
+      await storage.updateMemberById(memberId, updates);
+      res.json({ message: "Member updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating member:", error);
+      res.status(500).json({ message: error.message || "Failed to update member" });
+    }
+  });
+
+  // Delete member route
+  app.delete('/api/admin/delete-member/:memberId', async (req, res) => {
+    try {
+      const { memberId } = req.params;
+      await storage.deleteUser(memberId);
+      res.json({ message: "Member deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting member:", error);
+      res.status(500).json({ message: error.message || "Failed to delete member" });
+    }
+  });
+
   // Body assessments routes
   // Get body assessments for admin
   app.get('/api/admin/body-assessments', async (req, res) => {
     try {
       const { rows } = await pool.query(`
-        SELECT ba.*, 
+        SELECT ba.*,
                COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name), CONCAT(u.first_name, ' ', u.last_name)) as memberName,
                JSON_BUILD_OBJECT(
                  'bmi', ba.bmi,
@@ -1152,7 +1507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                  )
                ) as posturalAssessment,
                ba.circumference_measurements as circumferenceMeasurements
-        FROM body_assessments ba 
+        FROM body_assessments ba
         LEFT JOIN member_profiles mp ON ba.member_id = mp.id
         LEFT JOIN users u ON ba.member_id = u.id
         ORDER BY ba.created_at DESC
@@ -1196,7 +1551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Update the assessment in the database
       await storage.updateBodyAssessment(assessmentId, updates);
-      
+
       res.json({ message: "Assessment updated successfully" });
     } catch (error: any) {
       console.error("Error updating body assessment:", error);
@@ -1210,7 +1565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get the assessment details
       const { rows: assessmentRows } = await pool.query(`
-        SELECT ba.*, 
+        SELECT ba.*,
                COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name), CONCAT(u.first_name, ' ', u.last_name)) as memberName,
                JSON_BUILD_OBJECT(
                  'bmi', ba.bmi,
@@ -1233,7 +1588,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                  'spinalMobility', ba.spinal_mobility
                ) as posturalAssessment,
                ba.circumference_measurements as circumferenceMeasurements
-        FROM body_assessments ba 
+        FROM body_assessments ba
         LEFT JOIN member_profiles mp ON ba.member_id = mp.id
         LEFT JOIN users u ON ba.member_id = u.id
         WHERE ba.id = $1
@@ -1245,9 +1600,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get trainer details
       const { rows: trainerRows } = await pool.query(`
-        SELECT tp.first_name, tp.last_name, tp.email
-        FROM trainer_profiles tp 
-        WHERE tp.id = $1
+        SELECT first_name, last_name, email
+        FROM trainer_profiles
+        WHERE id = $1
       `, [trainerId]);
 
       if (trainerRows.length === 0) {
@@ -1309,13 +1664,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get the inquiry details from inquiries table
       const { rows: inquiryRows } = await pool.query('SELECT * FROM inquiries WHERE id = $1', [inquiryId]);
-      
+
       if (inquiryRows.length === 0) {
         return res.status(404).json({ message: "Inquiry not found" });
       }
 
       const inquiry = inquiryRows[0];
-      
+
       // Create member profile
       const memberProfile = await storage.createMemberProfile({
         firstName: inquiry.first_name,
@@ -1359,7 +1714,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete the inquiry from inquiries table
       await pool.query('DELETE FROM inquiries WHERE id = $1', [inquiryId]);
 
-      res.json({ 
+      res.json({
         message: "Inquiry converted successfully",
         member: memberProfile
       });
@@ -1372,17 +1727,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/inquiries/:inquiryId', async (req, res) => {
     try {
       const { inquiryId } = req.params;
-      
+
       // Check if inquiry exists
       const { rows: existingRows } = await pool.query('SELECT * FROM inquiries WHERE id = $1', [inquiryId]);
-      
+
       if (existingRows.length === 0) {
         return res.status(404).json({ message: "Inquiry not found" });
       }
 
       // Delete the inquiry from inquiries table
       await pool.query('DELETE FROM inquiries WHERE id = $1', [inquiryId]);
-      
+
       res.json({ message: "Inquiry deleted successfully" });
     } catch (error) {
       console.error("Error deleting inquiry:", error);
@@ -1411,7 +1766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Handle 12-hour format (HH:MM AM/PM)
         const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = time12Pattern.match(time12Pattern);
+        const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -1448,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: notes || null
       });
 
-      res.json({ 
+      res.json({
         message: "Attendance recorded successfully",
         attendance
       });
@@ -1458,329 +1813,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/trainers', async (req, res) => {
+  // Member session attendance routes
+  app.post('/api/admin/member-session-attendance', async (req, res) => {
     try {
-      // Exclude demo users from management lists
-      const trainers = await storage.getAllTrainers({ excludeDemo: true });
-      res.json(trainers);
-    } catch (error) {
-      console.error("Error fetching trainers:", error);
-      res.status(500).json({ message: "Failed to fetch trainers" });
-    }
-  });
+      const { memberId, trainerId, sessionDate, sessionTime, sessionType, status, notes, memberName, trainerName, durationMinutes } = req.body;
 
-  app.get('/api/admin/stats', async (req, res) => {
-    try {
-      const stats = await storage.getAdminStats();
-      res.json(stats);
-    } catch (error) {
-      console.error("Error fetching admin stats:", error);
-      res.status(500).json({ message: "Failed to fetch admin stats" });
-    }
-  });
-
-  app.post('/api/admin/create-member', async (req, res) => {
-    try {
-      const { firstName, lastName, email, membershipTierId, phone, emergencyContact, fitnessGoals } = req.body;
-
-      console.log('Creating member with data:', req.body);
-
-      if (!firstName || !lastName || !email) {
-        return res.status(400).json({ message: "Missing required fields: firstName, lastName, email" });
+      if (!memberId || !trainerId || !sessionDate) {
+        return res.status(400).json({ message: "Missing required fields: memberId, trainerId, sessionDate" });
       }
 
-      // Check if email already exists in member_profiles
-      const { rows: existingMembers } = await pool.query('SELECT * FROM member_profiles WHERE email = $1', [email]);
-      if (existingMembers.length > 0) {
-        return res.status(400).json({ message: "Member with this email already exists" });
-      }
-
-      // Create member profile directly (no user creation)
-      const memberProfile = await storage.createMemberProfile({
-        firstName,
-        lastName,
-        email,
-        phone: phone || null,
-        membershipTierId: membershipTierId || null,
-        emergencyContact: emergencyContact || email,
-        fitnessGoals: fitnessGoals || "General fitness improvement"
-      });
-
-      console.log('Created member profile:', memberProfile);
-
-      res.json({ 
-        message: "Member created successfully",
-        profile: memberProfile 
-      });
-    } catch (error: any) {
-      console.error("Error creating member:", error);
-      res.status(500).json({ message: error.message || "Failed to create member" });
-    }
-  });
-
-  app.post('/api/admin/create-trainer', async (req, res) => {
-    try {
-      const { firstName, lastName, email, phone, specializations, hourlyRate, experienceYears, certifications, bio } = req.body;
-
-      if (!firstName || !lastName || !email) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-
-      // Check if email already exists in trainer_profiles
-      const { rows: existingTrainers } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [email]);
-      if (existingTrainers.length > 0) {
-        return res.status(400).json({ message: "Trainer with this email already exists" });
-      }
-
-      // Create trainer profile directly (no user creation)
-      const trainerProfile = await storage.createTrainerProfile({
-        firstName,
-        lastName,
-        email,
-        phone: phone || null,
-        specializations: specializations || [],
-        hourlyRate: hourlyRate || 75.00,
-        experienceYears: experienceYears || 2,
-        certifications: certifications || "",
-        bio: bio || "",
-        isAvailable: true
-      });
-
-      res.json({ profile: trainerProfile });
-    } catch (error: any) {
-      console.error("Error creating trainer:", error);
-      res.status(500).json({ message: error.message || "Failed to create trainer" });
-    }
-  });
-
-  app.delete('/api/admin/delete-member/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-
-      if (!userId) {
-        return res.status(400).json({ message: "Profile ID is required" });
-      }
-
-      console.log(`Attempting to delete member profile with ID: ${userId}`);
-
-      // Delete from member_profiles table
-      const { rows } = await pool.query('DELETE FROM member_profiles WHERE id = $1 RETURNING *', [userId]);
-
-      if (rows.length === 0) {
-        return res.status(404).json({ message: "Member profile not found" });
-      }
-
-      console.log(`Successfully deleted member profile with ID: ${userId}`);
-      res.json({ message: "Member deleted successfully", success: true });
-    } catch (error: any) {
-      console.error("Error deleting member:", error);
-      res.status(500).json({ message: error.message || "Failed to delete member" });
-    }
-  });
-
-  app.delete('/api/admin/delete-trainer/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-
-      if (!userId) {
-        return res.status(400).json({ message: "Profile ID is required" });
-      }
-
-      console.log(`Attempting to delete trainer profile with ID: ${userId}`);
-
-      // Delete from trainer_profiles table
-      const { rows } = await pool.query('DELETE FROM trainer_profiles WHERE id = $1 RETURNING *', [userId]);
-
-      if (rows.length === 0) {
-        return res.status(404).json({ message: "Trainer profile not found" });
-      }
-
-      console.log(`Successfully deleted trainer profile with ID: ${userId}`);
-      res.json({ message: "Trainer deleted successfully", success: true });
-    } catch (error: any) {
-      console.error("Error deleting trainer:", error);
-      res.status(500).json({ message: error.message || "Failed to delete trainer" });
-    }
-  });
-
-  app.put('/api/admin/update-member/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const updates = req.body;
-
-      if (!userId) {
-        return res.status(400).json({ message: "Profile ID is required" });
-      }
-
-      // Update member profile directly
-      const fields = [];
-      const values = [];
-      let paramIndex = 1;
-
-      if (updates.firstName) {
-        fields.push(`first_name = $${paramIndex++}`);
-        values.push(updates.firstName);
-      }
-      if (updates.lastName) {
-        fields.push(`last_name = $${paramIndex++}`);
-        values.push(updates.lastName);
-      }
-      if (updates.email) {
-        fields.push(`email = $${paramIndex++}`);
-        values.push(updates.email);
-      }
-      if (updates.phone) {
-        fields.push(`phone = $${paramIndex++}`);
-        values.push(updates.phone);
-      }
-      if (updates.membershipTierId) {
-        fields.push(`membership_tier_id = $${paramIndex++}`);
-        values.push(updates.membershipTierId);
-      }
-      if (updates.fitnessGoals) {
-        fields.push(`fitness_goals = $${paramIndex++}`);
-        values.push(updates.fitnessGoals);
-      }
-      if (updates.emergencyContact) {
-        fields.push(`emergency_contact = $${paramIndex++}`);
-        values.push(updates.emergencyContact);
-      }
-
-      if (fields.length > 0) {
-        fields.push(`updated_at = CURRENT_TIMESTAMP`);
-        values.push(userId);
-        await pool.query(
-          `UPDATE member_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
-          values
-        );
-      }
-
-      res.json({ message: "Member updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating member:", error);
-      res.status(500).json({ message: error.message || "Failed to update member" });
-    }
-  });
-
-  app.put('/api/admin/update-trainer/:userId', async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const updates = req.body;
-
-      if (!userId) {
-        return res.status(400).json({ message: "Profile ID is required" });
-      }
-
-      // Update trainer profile directly
-      const fields = [];
-      const values = [];
-      let paramIndex = 1;
-
-      if (updates.firstName) {
-        fields.push(`first_name = $${paramIndex++}`);
-        values.push(updates.firstName);
-      }
-      if (updates.lastName) {
-        fields.push(`last_name = $${paramIndex++}`);
-        values.push(updates.lastName);
-      }
-      if (updates.email) {
-        fields.push(`email = $${paramIndex++}`);
-        values.push(updates.email);
-      }
-      if (updates.phone) {
-        fields.push(`phone = $${paramIndex++}`);
-        values.push(updates.phone);
-      }
-      if (updates.specializations) {
-        fields.push(`specializations = $${paramIndex++}`);
-        values.push(updates.specializations);
-      }
-      if (updates.hourlyRate) {
-        fields.push(`hourly_rate = $${paramIndex++}`);
-        values.push(updates.hourlyRate);
-      }
-      if (updates.experienceYears) {
-        fields.push(`experience_years = $${paramIndex++}`);
-        values.push(updates.experienceYears);
-      }
-      if (updates.certifications) {
-        fields.push(`certifications = $${paramIndex++}`);
-        values.push(updates.certifications);
-      }
-      if (updates.bio !== undefined) {
-        fields.push(`bio = $${paramIndex++}`);
-        values.push(updates.bio);
-      }
-      if (updates.isAvailable !== undefined) {
-        fields.push(`is_available = $${paramIndex++}`);
-        values.push(updates.isAvailable);
-      }
-
-      if (fields.length > 0) {
-        fields.push(`updated_at = CURRENT_TIMESTAMP`);
-        values.push(userId);
-        await pool.query(
-          `UPDATE trainer_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
-          values
-        );
-      }
-
-      res.json({ message: "Trainer updated successfully" });
-    } catch (error: any) {
-      console.error("Error updating trainer:", error);
-      res.status(500).json({ message: error.message || "Failed to update trainer" });
-    }
-  });
-
-  // Static membership subscription endpoint
-  app.post('/api/create-membership', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user?.claims?.sub || '1';
-      const user = await storage.getUser(userId);
-
-      if (!user) {
-        return res.status(404).json({ error: { message: "User not found" } });
-      }
-
-      const { membershipTierId } = req.body;
-      if (!membershipTierId) {
-        return res.status(400).json({ error: { message: 'Membership tier ID is required' } });
-      }
-
-      const membershipTier = await storage.getMembershipTier(membershipTierId);
-      if (!membershipTier) {
-        return res.status(400).json({ error: { message: 'Invalid membership tier' } });
-      }
-
-      let memberProfile = await storage.getMemberProfile(userId);
-      if (!memberProfile) {
-        memberProfile = await storage.createMemberProfile({
-          userId,
-          membershipTierId,
-          fitnessGoals: "Transform my fitness journey",
-          emergencyContact: user.email || "",
-        });
-      }
-
-      const subscription = await storage.createSubscription({
-        memberId: memberProfile.id,
-        membershipTierId,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        isActive: true,
-        autoRenew: true,
+      const attendance = await storage.recordMemberSessionAttendance({
+        memberId,
+        trainerId,
+        sessionDate,
+        sessionTime,
+        sessionType: sessionType || 'Training Session',
+        status: status || 'attended',
+        notes,
+        memberName,
+        trainerName,
+        durationMinutes: durationMinutes || 60
       });
 
       res.json({
-        success: true,
-        message: "Membership activated successfully!",
-        subscriptionId: subscription.id,
-        membershipTier: membershipTier.name,
+        message: "Member session attendance recorded successfully",
+        attendance
       });
     } catch (error: any) {
-      console.error("Membership creation error:", error);
-      return res.status(400).json({ error: { message: error.message } });
+      console.error("Error recording member session attendance:", error);
+      res.status(500).json({ message: error.message || "Failed to record member session attendance" });
+    }
+  });
+
+  app.get('/api/admin/member-session-attendance', async (req, res) => {
+    try {
+      const { memberId, trainerId, sessionDate, startDate, endDate } = req.query;
+      const filters: any = {};
+
+      if (memberId) filters.memberId = memberId;
+      if (trainerId) filters.trainerId = trainerId;
+      if (sessionDate) filters.sessionDate = sessionDate;
+      if (startDate && endDate) {
+        filters.dateRange = { start: startDate, end: endDate };
+      }
+
+      const attendance = await storage.getMemberSessionAttendance(filters);
+      res.json(attendance);
+    } catch (error: any) {
+      console.error("Error fetching member session attendance:", error);
+      res.status(500).json({ message: "Failed to fetch member session attendance" });
+    }
+  });
+
+  app.put('/api/admin/member-session-attendance/:attendanceId', async (req, res) => {
+    try {
+      const { attendanceId } = req.params;
+      const updates = req.body;
+
+      await storage.updateMemberSessionAttendance(attendanceId, updates);
+      res.json({ message: "Member session attendance updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating member session attendance:", error);
+      res.status(500).json({ message: error.message || "Failed to update member session attendance" });
+    }
+  });
+
+  app.delete('/api/admin/member-session-attendance/:attendanceId', async (req, res) => {
+    try {
+      const { attendanceId } = req.params;
+      await storage.deleteMemberSessionAttendance(attendanceId);
+      res.json({ message: "Member session attendance deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting member session attendance:", error);
+      res.status(500).json({ message: error.message || "Failed to delete member session attendance" });
+    }
+  });
+
+  // Member trainer assignment routes
+  app.post('/api/admin/assign-trainer', async (req, res) => {
+    try {
+      const { memberId, trainerId, assignedDate, notes } = req.body;
+
+      if (!memberId || !trainerId) {
+        return res.status(400).json({ message: "Missing required fields: memberId, trainerId" });
+      }
+
+      const assignment = await storage.assignTrainerToMember({
+        memberId,
+        trainerId,
+        assignedDate,
+        notes
+      });
+
+      res.json({
+        message: "Trainer assigned to member successfully",
+        assignment
+      });
+    } catch (error: any) {
+      console.error("Error assigning trainer to member:", error);
+      res.status(500).json({ message: error.message || "Failed to assign trainer to member" });
+    }
+  });
+
+  app.get('/api/admin/trainer-assignments', async (req, res) => {
+    try {
+      const { memberId, trainerId } = req.query;
+      const filters: any = {};
+
+      if (memberId) filters.memberId = memberId;
+      if (trainerId) filters.trainerId = trainerId;
+
+      const assignments = await storage.getMemberTrainerAssignments(filters);
+      res.json(assignments);
+    } catch (error: any) {
+      console.error("Error fetching trainer assignments:", error);
+      res.status(500).json({ message: "Failed to fetch trainer assignments" });
+    }
+  });
+
+  app.delete('/api/admin/remove-trainer/:memberId/:trainerId', async (req, res) => {
+    try {
+      const { memberId, trainerId } = req.params;
+      await storage.removeTrainerFromMember(memberId, trainerId);
+      res.json({ message: "Trainer removed from member successfully" });
+    } catch (error: any) {
+      console.error("Error removing trainer from member:", error);
+      res.status(500).json({ message: error.message || "Failed to remove trainer from member" });
     }
   });
 
