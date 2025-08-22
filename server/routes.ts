@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import session from 'express-session';
 import { storage } from "./storage.js";
 import { initializeDatabase, pool } from "./db.js";
+import { emailService } from "./emailService.js";
 
 // Authentication middleware
 const isAuthenticated = async (req: any, res: any, next: any) => {
@@ -184,7 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contact form submission (store in PostgreSQL using a simple table approach)
+  // Contact form submission (store in PostgreSQL and send emails)
   app.post('/api/contact', async (req, res) => {
     try {
       const { firstName, lastName, email, phone, location, interest, message } = req.body;
@@ -194,7 +195,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "All fields are required" });
       }
 
-      // For now, create a contact submission user record
+      // Create inquiry details object
+      const inquiryDetails = {
+        firstName,
+        lastName,
+        email,
+        phone,
+        location,
+        interest,
+        message,
+        submittedAt: new Date().toISOString()
+      };
+
+      // Save to database
       const contactUser = await storage.createUser({
         email: `contact_${Date.now()}_${email}`,
         firstName,
@@ -205,8 +218,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Contact form submitted:', { firstName, lastName, email, location, interest });
 
+      // Send confirmation email to customer
+      try {
+        await emailService.sendContactConfirmationEmail(email, firstName, inquiryDetails);
+        console.log('Confirmation email sent to customer:', email);
+      } catch (emailError) {
+        console.error('Failed to send confirmation email to customer:', emailError);
+        // Don't fail the request if email fails, just log it
+      }
+
+      // Send notification email to admin
+      try {
+        const adminEmail = 'admin@reshape.com'; // You can make this configurable
+        await emailService.sendAdminContactNotification(adminEmail, inquiryDetails);
+        console.log('Admin notification email sent');
+      } catch (emailError) {
+        console.error('Failed to send admin notification email:', emailError);
+        // Don't fail the request if email fails, just log it
+      }
+
       res.json({ 
-        message: "Contact form submitted successfully",
+        message: "Contact form submitted successfully and confirmation email sent",
         submissionId: contactUser.id
       });
     } catch (error) {
