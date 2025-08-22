@@ -454,42 +454,216 @@ export const storage = {
   },
 
   // Body assessments
-  async createBodyAssessment(assessmentData: any): Promise<any> {
-    // Get member info to set client name
-    const memberQuery = await pool.query(
-      'SELECT u.first_name, u.last_name FROM users u WHERE u.id = $1',
-      [assessmentData.memberId]
-    );
+  async createBodyAssessment(assessmentData: any) {
+    try {
+      const {
+        memberId, dateOfBirth, age, height, bloodPressure, afterTreadmillBP,
+        emergencyContact, bodyComposition, posturalAssessment,
+        circumferenceMeasurements, advice
+      } = assessmentData;
 
-    const clientName = memberQuery.rows[0] 
-      ? `${memberQuery.rows[0].first_name} ${memberQuery.rows[0].last_name}`
-      : 'Unknown Client';
+      // Get member name for the assessment
+      let clientName = 'Unknown Client';
+      if (memberId) {
+        const { rows: memberRows } = await pool.query('SELECT first_name, last_name FROM member_profiles WHERE id = $1', [memberId]);
+        if (memberRows.length > 0) {
+          clientName = `${memberRows[0].first_name} ${memberRows[0].last_name}`;
+        }
+      }
 
-    const { rows } = await pool.query(
-      `INSERT INTO body_assessments (
-        member_id, trainer_id, client_name, date_of_birth, age, height, bp, bp_after_treadmill,
-        emergency_contact, bmi, weight, muscle, fat, saturated_fat, visceral_fat, bmr, body_age,
-        postural_assessment, head_neck_alignment, shoulder_alignment, upper_back_alignment,
-        lower_back_alignment, pelvic_alignment, hip_knee_alignment, ankle_alignment, spinal_mobility,
-        recommendations, circumference_measurements, advice
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
-      [
-        assessmentData.memberId, assessmentData.trainerId || null, clientName,
-        assessmentData.dateOfBirth, assessmentData.age, assessmentData.height, 
-        assessmentData.bloodPressure, assessmentData.afterTreadmillBP, assessmentData.emergencyContact,
-        assessmentData.bodyComposition?.bmi, assessmentData.bodyComposition?.weight, 
-        assessmentData.bodyComposition?.muscle, assessmentData.bodyComposition?.fat, 
-        assessmentData.bodyComposition?.saturatedFat, assessmentData.bodyComposition?.visceralFat, 
-        assessmentData.bodyComposition?.bmr, assessmentData.bodyComposition?.bodyAge,
-        JSON.stringify(assessmentData.posturalAssessment), assessmentData.posturalAssessment?.headNeckAlignment,
-        assessmentData.posturalAssessment?.shoulderAlignment, assessmentData.posturalAssessment?.upperBackAlignment,
-        assessmentData.posturalAssessment?.lowerBackAlignment, assessmentData.posturalAssessment?.pelvicAlignment,
-        assessmentData.posturalAssessment?.hipKneeAlignment, assessmentData.posturalAssessment?.ankleAlignment, 
-        assessmentData.posturalAssessment?.spinalMobility, JSON.stringify(assessmentData.posturalAssessment?.recommendations),
-        JSON.stringify(assessmentData.circumferenceMeasurements), assessmentData.advice
-      ]
-    );
-    return rows[0];
+      // Helper function to convert empty strings to null
+      const toNullIfEmpty = (value: any): any => {
+        if (value === '' || value === undefined) return null;
+        return value;
+      };
+
+      // Helper function to convert empty strings to null for numbers
+      const toNumberOrNull = (value: any): number | null => {
+        if (value === '' || value === undefined || value === null) return null;
+        const parsed = typeof value === 'string' ? parseFloat(value) : value;
+        return isNaN(parsed) ? null : parsed;
+      };
+
+      const { rows } = await pool.query(`
+        INSERT INTO body_assessments (
+          member_id, client_name, date_of_birth, age, height, bp, bp_after_treadmill,
+          emergency_contact, bmi, weight, muscle, fat, saturated_fat, visceral_fat,
+          bmr, body_age, head_neck_alignment, shoulder_alignment,
+          upper_back_alignment, lower_back_alignment, pelvic_alignment,
+          hip_knee_alignment, ankle_alignment, spinal_mobility,
+          recommendations, circumference_measurements, advice
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27
+        ) RETURNING *
+      `, [
+        memberId, clientName, toNullIfEmpty(dateOfBirth), toNumberOrNull(age), toNumberOrNull(height), 
+        toNullIfEmpty(bloodPressure), toNullIfEmpty(afterTreadmillBP), toNullIfEmpty(emergencyContact), 
+        toNumberOrNull(bodyComposition?.bmi), toNumberOrNull(bodyComposition?.weight),
+        toNumberOrNull(bodyComposition?.muscle), toNumberOrNull(bodyComposition?.fat), 
+        toNumberOrNull(bodyComposition?.saturatedFat), toNumberOrNull(bodyComposition?.visceralFat), 
+        toNumberOrNull(bodyComposition?.bmr), toNumberOrNull(bodyComposition?.bodyAge),
+        toNullIfEmpty(posturalAssessment?.headNeckAlignment), toNullIfEmpty(posturalAssessment?.shoulderAlignment),
+        toNullIfEmpty(posturalAssessment?.upperBackAlignment), toNullIfEmpty(posturalAssessment?.lowerBackAlignment),
+        toNullIfEmpty(posturalAssessment?.pelvicAlignment), toNullIfEmpty(posturalAssessment?.hipKneeAlignment),
+        toNullIfEmpty(posturalAssessment?.ankleAlignment), toNullIfEmpty(posturalAssessment?.spinalMobility),
+        toNullIfEmpty(posturalAssessment?.recommendations?.stretching),
+        JSON.stringify(circumferenceMeasurements || {}), toNullIfEmpty(advice)
+      ]);
+
+      return rows[0];
+    } catch (error) {
+      console.error("Error creating body assessment:", error);
+      throw error;
+    }
+  },
+
+  async updateBodyAssessment(assessmentId: string, updates: any) {
+    try {
+      const {
+        memberId, dateOfBirth, age, height, bloodPressure, afterTreadmillBP,
+        emergencyContact, bodyComposition, posturalAssessment,
+        circumferenceMeasurements, advice
+      } = updates;
+
+      // Get member name if memberId is provided
+      let clientName;
+      if (memberId) {
+        const { rows: memberRows } = await pool.query('SELECT first_name, last_name FROM member_profiles WHERE id = $1', [memberId]);
+        if (memberRows.length > 0) {
+          clientName = `${memberRows[0].first_name} ${memberRows[0].last_name}`;
+        }
+      }
+
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
+
+      if (memberId !== undefined) {
+        fields.push(`member_id = $${paramIndex++}`);
+        values.push(memberId);
+      }
+      if (clientName !== undefined) {
+        fields.push(`client_name = $${paramIndex++}`);
+        values.push(clientName);
+      }
+      if (dateOfBirth !== undefined) {
+        fields.push(`date_of_birth = $${paramIndex++}`);
+        values.push(dateOfBirth);
+      }
+      if (age !== undefined) {
+        fields.push(`age = $${paramIndex++}`);
+        values.push(age);
+      }
+      if (height !== undefined) {
+        fields.push(`height = $${paramIndex++}`);
+        values.push(height);
+      }
+      if (bloodPressure !== undefined) {
+        fields.push(`bp = $${paramIndex++}`);
+        values.push(bloodPressure);
+      }
+      if (afterTreadmillBP !== undefined) {
+        fields.push(`bp_after_treadmill = $${paramIndex++}`);
+        values.push(afterTreadmillBP);
+      }
+      if (emergencyContact !== undefined) {
+        fields.push(`emergency_contact = $${paramIndex++}`);
+        values.push(emergencyContact);
+      }
+      if (bodyComposition?.bmi !== undefined) {
+        fields.push(`bmi = $${paramIndex++}`);
+        values.push(bodyComposition.bmi);
+      }
+      if (bodyComposition?.weight !== undefined) {
+        fields.push(`weight = $${paramIndex++}`);
+        values.push(bodyComposition.weight);
+      }
+      if (bodyComposition?.muscle !== undefined) {
+        fields.push(`muscle = $${paramIndex++}`);
+        values.push(bodyComposition.muscle);
+      }
+      if (bodyComposition?.fat !== undefined) {
+        fields.push(`fat = $${paramIndex++}`);
+        values.push(bodyComposition.fat);
+      }
+      if (bodyComposition?.saturatedFat !== undefined) {
+        fields.push(`saturated_fat = $${paramIndex++}`);
+        values.push(bodyComposition.saturatedFat);
+      }
+      if (bodyComposition?.visceralFat !== undefined) {
+        fields.push(`visceral_fat = $${paramIndex++}`);
+        values.push(bodyComposition.visceralFat);
+      }
+      if (bodyComposition?.bmr !== undefined) {
+        fields.push(`bmr = $${paramIndex++}`);
+        values.push(bodyComposition.bmr);
+      }
+      if (bodyComposition?.bodyAge !== undefined) {
+        fields.push(`body_age = $${paramIndex++}`);
+        values.push(bodyComposition.bodyAge);
+      }
+      if (posturalAssessment?.headNeckAlignment !== undefined) {
+        fields.push(`head_neck_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.headNeckAlignment);
+      }
+      if (posturalAssessment?.shoulderAlignment !== undefined) {
+        fields.push(`shoulder_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.shoulderAlignment);
+      }
+      if (posturalAssessment?.upperBackAlignment !== undefined) {
+        fields.push(`upper_back_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.upperBackAlignment);
+      }
+      if (posturalAssessment?.lowerBackAlignment !== undefined) {
+        fields.push(`lower_back_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.lowerBackAlignment);
+      }
+      if (posturalAssessment?.pelvicAlignment !== undefined) {
+        fields.push(`pelvic_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.pelvicAlignment);
+      }
+      if (posturalAssessment?.hipKneeAlignment !== undefined) {
+        fields.push(`hip_knee_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.hipKneeAlignment);
+      }
+      if (posturalAssessment?.ankleAlignment !== undefined) {
+        fields.push(`ankle_alignment = $${paramIndex++}`);
+        values.push(posturalAssessment.ankleAlignment);
+      }
+      if (posturalAssessment?.spinalMobility !== undefined) {
+        fields.push(`spinal_mobility = $${paramIndex++}`);
+        values.push(posturalAssessment.spinalMobility);
+      }
+      if (posturalAssessment?.recommendations?.stretching !== undefined) {
+        fields.push(`recommendations = $${paramIndex++}`);
+        values.push(posturalAssessment.recommendations.stretching);
+      }
+      if (circumferenceMeasurements !== undefined) {
+        fields.push(`circumference_measurements = $${paramIndex++}`);
+        values.push(JSON.stringify(circumferenceMeasurements));
+      }
+      if (advice !== undefined) {
+        fields.push(`advice = $${paramIndex++}`);
+        values.push(advice);
+      }
+
+      if (fields.length > 0) {
+        values.push(assessmentId);
+
+        const { rows } = await pool.query(
+          `UPDATE body_assessments SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+          values
+        );
+
+        return rows[0];
+      }
+
+      return null;
+    } catch (error) {
+      console.error("Error updating body assessment:", error);
+      throw error;
+    }
   },
 
   async getBodyAssessments(filters: any): Promise<any[]> {
@@ -574,25 +748,32 @@ export const storage = {
     }
   },
 
-  // Contact submissions
+  // Inquiry management methods
+  async createInquiry(inquiryData: any): Promise<any> {
+    const { rows } = await pool.query(
+      'INSERT INTO inquiries (first_name, last_name, email, phone, location, interest, message) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [inquiryData.firstName, inquiryData.lastName, inquiryData.email, inquiryData.phone, inquiryData.location, inquiryData.interest, inquiryData.message]
+    );
+    return rows[0];
+  },
+
   async getContactSubmissions(): Promise<any[]> {
     try {
       const { rows } = await pool.query(`
-        SELECT u.*, 'contact' as inquiry_type 
-        FROM users u 
-        WHERE u.email LIKE 'contact_%'
-        ORDER BY u.created_at DESC
+        SELECT * FROM inquiries 
+        WHERE status != 'converted' AND status != 'cancelled'
+        ORDER BY created_at DESC
       `);
 
       return rows.map(row => ({
         _id: row.id,
         firstName: row.first_name,
         lastName: row.last_name,
-        email: row.email.replace(/^contact_\d+_/, ''),
+        email: row.email,
         phone: row.phone,
-        location: 'Unknown',
-        interest: 'General Fitness',
-        message: 'Contact form submission',
+        location: row.location || 'Unknown',
+        interest: row.interest || 'General Fitness',
+        message: row.message || 'Contact form submission',
         submittedAt: row.created_at
       }));
     } catch (error) {

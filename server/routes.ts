@@ -4,6 +4,7 @@ import session from 'express-session';
 import { storage } from "./storage.js";
 import { initializeDatabase, pool } from "./db.js";
 import { emailService } from "./emailService.js";
+import { authService } from "./authService.js";
 
 // Authentication middleware
 const isAuthenticated = async (req: any, res: any, next: any) => {
@@ -47,6 +48,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sameSite: 'lax'
     }
   }));
+
+  // Password reset routes
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const result = await authService.createPasswordResetToken(email);
+      
+      if (result.success) {
+        res.json({ message: result.message });
+      } else {
+        res.status(400).json({ message: result.message });
+      }
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Failed to process password reset request" });
+    }
+  });
+
+  app.get('/api/auth/verify-reset-token/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = await authService.verifyPasswordResetToken(token);
+      
+      if (result.valid) {
+        res.json({ valid: true, message: result.message });
+      } else {
+        res.status(400).json({ valid: false, message: result.message });
+      }
+    } catch (error) {
+      console.error("Token verification error:", error);
+      res.status(500).json({ valid: false, message: "Failed to verify token" });
+    }
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      }
+
+      const result = await authService.resetPassword(token, newPassword);
+      
+      if (result.success) {
+        res.json({ message: result.message });
+      } else {
+        res.status(400).json({ message: result.message });
+      }
+    } catch (error) {
+      console.error("Password reset error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Email change routes
+  app.post('/api/auth/change-email', isAuthenticated, async (req: any, res) => {
+    try {
+      const { newEmail } = req.body;
+      const userId = req.session.user?.id;
+
+      if (!newEmail) {
+        return res.status(400).json({ message: "New email is required" });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const result = await authService.createEmailChangeToken(userId, newEmail);
+      
+      if (result.success) {
+        res.json({ message: result.message });
+      } else {
+        res.status(400).json({ message: result.message });
+      }
+    } catch (error) {
+      console.error("Email change error:", error);
+      res.status(500).json({ message: "Failed to process email change request" });
+    }
+  });
+
+  app.get('/api/auth/confirm-email-change/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = await authService.confirmEmailChange(token);
+      
+      if (result.success) {
+        res.json({ message: result.message });
+      } else {
+        res.status(400).json({ message: result.message });
+      }
+    } catch (error) {
+      console.error("Email change confirmation error:", error);
+      res.status(500).json({ message: "Failed to confirm email change" });
+    }
+  });
+
+  // Change password (authenticated users)
+  app.post('/api/auth/change-password', isAuthenticated, async (req: any, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const userId = req.session.user?.id;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current password and new password are required" });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "New password must be at least 8 characters long" });
+      }
+
+      // Get user's current password hash
+      const { rows: userRows } = await pool.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+      
+      if (userRows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const user = userRows[0];
+
+      // For demo users without passwords, allow any current password
+      if (!user.password_hash) {
+        const hashedPassword = await authService.hashPassword(newPassword);
+        await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', 
+          [hashedPassword, userId]);
+        return res.json({ message: "Password set successfully" });
+      }
+
+      // Verify current password
+      const isCurrentPasswordValid = await authService.verifyPassword(currentPassword, user.password_hash);
+      
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({ message: "Current password is incorrect" });
+      }
+
+      // Hash and update new password
+      const hashedPassword = await authService.hashPassword(newPassword);
+      await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', 
+        [hashedPassword, userId]);
+
+      res.json({ message: "Password changed successfully" });
+    } catch (error) {
+      console.error("Change password error:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
 
   // Auth routes for demo login/logout
   app.post('/api/auth/login', async (req, res) => {
@@ -207,13 +368,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         submittedAt: new Date().toISOString()
       };
 
-      // Save to database
-      const contactUser = await storage.createUser({
-        email: `contact_${Date.now()}_${email}`,
+      // Save to inquiries table
+      const inquiry = await storage.createInquiry({
         firstName,
         lastName,
-        userType: 'member',
-        phone
+        email,
+        phone,
+        location,
+        interest,
+        message
       });
 
       console.log('Contact form submitted:', { firstName, lastName, email, location, interest });
@@ -239,7 +402,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         message: "Contact form submitted successfully and confirmation email sent",
-        submissionId: contactUser.id
+        submissionId: inquiry.id
       });
     } catch (error) {
       console.error("Contact form submission error:", error);
@@ -732,10 +895,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields: memberId, trainerId, sessionType, scheduledDate" });
       }
 
-      // Validate time format if provided
-      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (scheduledTime && scheduledTime.trim() !== '' && !timePattern.test(scheduledTime)) {
-        return res.status(400).json({ message: "Invalid time format. Use HH:MM format." });
+      // Validate and convert time format if provided
+      const validateAndConvertTime = (timeStr: string): string | null => {
+        if (!timeStr || timeStr.trim() === '') return null;
+
+        // Handle 24-hour format (HH:MM)
+        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (time24Pattern.test(timeStr)) {
+          return timeStr;
+        }
+
+        // Handle 12-hour format (HH:MM AM/PM)
+        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = timeStr.match(time12Pattern);
+        if (match) {
+          let [, hour, ampm] = match;
+          let hourNum = parseInt(hour);
+
+          if (ampm.toLowerCase() === 'pm' && hourNum !== 12) {
+            hourNum += 12;
+          } else if (ampm.toLowerCase() === 'am' && hourNum === 12) {
+            hourNum = 0;
+          }
+
+          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+        }
+
+        return null;
+      };
+
+      let convertedScheduledTime = scheduledTime;
+      if (scheduledTime && scheduledTime.trim() !== '') {
+        const converted = validateAndConvertTime(scheduledTime);
+        if (converted === null) {
+          return res.status(400).json({ message: "Invalid time format. Use HH:MM or HH:MM AM/PM format." });
+        }
+        convertedScheduledTime = converted;
       }
 
       const session = await storage.createMemberSession({
@@ -743,7 +938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         trainerId,
         sessionType,
         scheduledDate,
-        scheduledTime,
+        scheduledTime: convertedScheduledTime,
         duration: duration || 60,
         notes,
         memberName,
@@ -776,10 +971,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { sessionId } = req.params;
       const updates = req.body;
 
-      // Validate time format if provided
-      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      if (updates.scheduledTime && updates.scheduledTime.trim() !== '' && !timePattern.test(updates.scheduledTime)) {
-        return res.status(400).json({ message: "Invalid time format. Use HH:MM format." });
+      // Validate and convert time format if provided
+      const validateAndConvertTime = (timeStr: string): string | null => {
+        if (!timeStr || timeStr.trim() === '') return null;
+
+        // Handle 24-hour format (HH:MM)
+        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (time24Pattern.test(timeStr)) {
+          return timeStr;
+        }
+
+        // Handle 12-hour format (HH:MM AM/PM)
+        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = timeStr.match(time12Pattern);
+        if (match) {
+          let [, hour, ampm] = match;
+          let hourNum = parseInt(hour);
+
+          if (ampm.toLowerCase() === 'pm' && hourNum !== 12) {
+            hourNum += 12;
+          } else if (ampm.toLowerCase() === 'am' && hourNum === 12) {
+            hourNum = 0;
+          }
+
+          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+        }
+
+        return null;
+      };
+
+      if (updates.scheduledTime && updates.scheduledTime.trim() !== '') {
+        const convertedTime = validateAndConvertTime(updates.scheduledTime);
+        if (convertedTime === null) {
+          return res.status(400).json({ message: "Invalid time format. Use HH:MM or HH:MM AM/PM format." });
+        }
+        updates.scheduledTime = convertedTime;
       }
 
       await storage.updateMemberSession(sessionId, updates);
@@ -894,11 +1120,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Body assessments routes
+  // Get body assessments for admin
   app.get('/api/admin/body-assessments', async (req, res) => {
     try {
-      const assessments = await storage.getBodyAssessments({});
+      const { rows } = await pool.query(`
+        SELECT ba.*, 
+               COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name), CONCAT(u.first_name, ' ', u.last_name)) as memberName,
+               JSON_BUILD_OBJECT(
+                 'bmi', ba.bmi,
+                 'weight', ba.weight,
+                 'muscle', ba.muscle,
+                 'fat', ba.fat,
+                 'saturatedFat', ba.saturated_fat,
+                 'visceralFat', ba.visceral_fat,
+                 'bmr', ba.bmr,
+                 'bodyAge', ba.body_age
+               ) as bodyComposition,
+               JSON_BUILD_OBJECT(
+                 'asymmetrical', false,
+                 'headNeckAlignment', ba.head_neck_alignment,
+                 'shoulderAlignment', ba.shoulder_alignment,
+                 'upperBackAlignment', ba.upper_back_alignment,
+                 'lowerBackAlignment', ba.lower_back_alignment,
+                 'pelvicAlignment', ba.pelvic_alignment,
+                 'hipKneeAlignment', ba.hip_knee_alignment,
+                 'ankleAlignment', ba.ankle_alignment,
+                 'spinalMobility', ba.spinal_mobility,
+                 'recommendations', JSON_BUILD_OBJECT(
+                   'stretching', ba.recommendations,
+                   'strengthening', ''
+                 )
+               ) as posturalAssessment,
+               ba.circumference_measurements as circumferenceMeasurements
+        FROM body_assessments ba 
+        LEFT JOIN member_profiles mp ON ba.member_id = mp.id
+        LEFT JOIN users u ON ba.member_id = u.id
+        ORDER BY ba.created_at DESC
+      `);
+
+      const assessments = rows.map(row => ({
+        ...row,
+        _id: row.id,
+        memberName: row.membername,
+        bodyComposition: row.bodycomposition,
+        posturalAssessment: row.posturalassessment,
+        circumferenceMeasurements: row.circumference_measurements,
+        createdAt: row.created_at,
+        dateOfBirth: row.date_of_birth,
+        emergencyContact: row.emergency_contact,
+        bloodPressure: row.bp,
+        afterTreadmillBP: row.bp_after_treadmill
+      }));
+
       res.json(assessments);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching body assessments:", error);
       res.status(500).json({ message: "Failed to fetch body assessments" });
     }
@@ -914,13 +1189,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.put('/api/admin/body-assessments/:assessmentId', async (req, res) => {
+    try {
+      const { assessmentId } = req.params;
+      const updates = req.body;
+
+      // Update the assessment in the database
+      await storage.updateBodyAssessment(assessmentId, updates);
+      
+      res.json({ message: "Assessment updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating body assessment:", error);
+      res.status(500).json({ message: error.message || "Failed to update body assessment" });
+    }
+  });
+
   app.post('/api/admin/body-assessments/:assessmentId/share/:trainerId', async (req, res) => {
     try {
-      // Mock sharing functionality
-      res.json({ message: "Assessment shared successfully" });
-    } catch (error) {
+      const { assessmentId, trainerId } = req.params;
+
+      // Get the assessment details
+      const { rows: assessmentRows } = await pool.query(`
+        SELECT ba.*, 
+               COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name), CONCAT(u.first_name, ' ', u.last_name)) as memberName,
+               JSON_BUILD_OBJECT(
+                 'bmi', ba.bmi,
+                 'weight', ba.weight,
+                 'muscle', ba.muscle,
+                 'fat', ba.fat,
+                 'saturatedFat', ba.saturated_fat,
+                 'visceralFat', ba.visceral_fat,
+                 'bmr', ba.bmr,
+                 'bodyAge', ba.body_age
+               ) as bodyComposition,
+               JSON_BUILD_OBJECT(
+                 'headNeckAlignment', ba.head_neck_alignment,
+                 'shoulderAlignment', ba.shoulder_alignment,
+                 'upperBackAlignment', ba.upper_back_alignment,
+                 'lowerBackAlignment', ba.lower_back_alignment,
+                 'pelvicAlignment', ba.pelvic_alignment,
+                 'hipKneeAlignment', ba.hip_knee_alignment,
+                 'ankleAlignment', ba.ankle_alignment,
+                 'spinalMobility', ba.spinal_mobility
+               ) as posturalAssessment,
+               ba.circumference_measurements as circumferenceMeasurements
+        FROM body_assessments ba 
+        LEFT JOIN member_profiles mp ON ba.member_id = mp.id
+        LEFT JOIN users u ON ba.member_id = u.id
+        WHERE ba.id = $1
+      `, [assessmentId]);
+
+      if (assessmentRows.length === 0) {
+        return res.status(404).json({ message: "Assessment not found" });
+      }
+
+      // Get trainer details
+      const { rows: trainerRows } = await pool.query(`
+        SELECT tp.first_name, tp.last_name, tp.email
+        FROM trainer_profiles tp 
+        WHERE tp.id = $1
+      `, [trainerId]);
+
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer not found" });
+      }
+
+      const assessment = assessmentRows[0];
+      const trainer = trainerRows[0];
+
+      // Prepare assessment data for email
+      const assessmentData = {
+        memberName: assessment.membername || assessment.client_name,
+        clientName: assessment.client_name,
+        age: assessment.age,
+        height: assessment.height,
+        dateOfBirth: assessment.date_of_birth,
+        emergencyContact: assessment.emergency_contact,
+        bloodPressure: assessment.bp,
+        afterTreadmillBP: assessment.bp_after_treadmill,
+        bodyComposition: assessment.bodycomposition,
+        posturalAssessment: assessment.posturalassessment,
+        circumferenceMeasurements: assessment.circumference_measurements,
+        advice: assessment.advice,
+        createdAt: assessment.created_at
+      };
+
+      // Send email to trainer
+      const trainerName = `${trainer.first_name} ${trainer.last_name}`;
+      await emailService.sendBodyAssessmentToTrainer(
+        trainer.email,
+        trainerName,
+        assessmentData
+      );
+
+      console.log(`Body assessment shared with trainer: ${trainerName} (${trainer.email})`);
+
+      res.json({ message: "Assessment shared successfully and email sent to trainer" });
+    } catch (error: any) {
       console.error("Error sharing assessment:", error);
-      res.status(500).json({ message: "Failed to share assessment" });
+      res.status(500).json({ message: error.message || "Failed to share assessment" });
     }
   });
 
@@ -940,8 +1307,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { inquiryId } = req.params;
       const { memberData, assessmentData } = req.body;
 
-      // Mock conversion functionality
-      res.json({ message: "Inquiry converted successfully" });
+      // Get the inquiry details from inquiries table
+      const { rows: inquiryRows } = await pool.query('SELECT * FROM inquiries WHERE id = $1', [inquiryId]);
+      
+      if (inquiryRows.length === 0) {
+        return res.status(404).json({ message: "Inquiry not found" });
+      }
+
+      const inquiry = inquiryRows[0];
+      
+      // Create member profile
+      const memberProfile = await storage.createMemberProfile({
+        firstName: inquiry.first_name,
+        lastName: inquiry.last_name,
+        email: inquiry.email,
+        phone: inquiry.phone,
+        membershipTierId: memberData?.membershipTierId || null,
+        emergencyContact: inquiry.phone || inquiry.email,
+        fitnessGoals: "Converted from inquiry - General fitness improvement"
+      });
+
+      // Create body assessment if provided with proper validation
+      if (assessmentData && Object.keys(assessmentData).length > 0) {
+        // Clean and validate assessment data
+        const cleanedAssessmentData = {
+          memberId: memberProfile.id,
+          dateOfBirth: assessmentData.dateOfBirth || null,
+          age: assessmentData.age && assessmentData.age.toString().trim() !== '' ? parseInt(assessmentData.age) : null,
+          height: assessmentData.height && assessmentData.height.toString().trim() !== '' ? parseFloat(assessmentData.height) : null,
+          bloodPressure: assessmentData.bloodPressure || null,
+          afterTreadmillBP: assessmentData.afterTreadmillBP || null,
+          emergencyContact: assessmentData.emergencyContact || inquiry.phone || inquiry.email,
+          bodyComposition: {
+            bmi: assessmentData.bodyComposition?.bmi && assessmentData.bodyComposition.bmi.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.bmi) : null,
+            weight: assessmentData.bodyComposition?.weight && assessmentData.bodyComposition.weight.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.weight) : null,
+            muscle: assessmentData.bodyComposition?.muscle && assessmentData.bodyComposition.muscle.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.muscle) : null,
+            fat: assessmentData.bodyComposition?.fat && assessmentData.bodyComposition.fat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.fat) : null,
+            saturatedFat: assessmentData.bodyComposition?.saturatedFat && assessmentData.bodyComposition.saturatedFat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.saturatedFat) : null,
+            visceralFat: assessmentData.bodyComposition?.visceralFat && assessmentData.bodyComposition.visceralFat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.visceralFat) : null,
+            bmr: assessmentData.bodyComposition?.bmr && assessmentData.bodyComposition.bmr.toString().trim() !== '' ? parseInt(assessmentData.bodyComposition.bmr) : null,
+            bodyAge: assessmentData.bodyComposition?.bodyAge && assessmentData.bodyComposition.bodyAge.toString().trim() !== '' ? parseInt(assessmentData.bodyComposition.bodyAge) : null
+          },
+          posturalAssessment: assessmentData.posturalAssessment || {},
+          circumferenceMeasurements: assessmentData.circumferenceMeasurements || {},
+          advice: assessmentData.advice || null
+        };
+
+        await storage.createBodyAssessment(cleanedAssessmentData);
+      }
+
+      // Delete the inquiry from inquiries table
+      await pool.query('DELETE FROM inquiries WHERE id = $1', [inquiryId]);
+
+      res.json({ 
+        message: "Inquiry converted successfully",
+        member: memberProfile
+      });
     } catch (error) {
       console.error("Error converting inquiry:", error);
       res.status(500).json({ message: "Failed to convert inquiry" });
@@ -951,7 +1372,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/inquiries/:inquiryId', async (req, res) => {
     try {
       const { inquiryId } = req.params;
-      // Mock deletion functionality
+      
+      // Check if inquiry exists
+      const { rows: existingRows } = await pool.query('SELECT * FROM inquiries WHERE id = $1', [inquiryId]);
+      
+      if (existingRows.length === 0) {
+        return res.status(404).json({ message: "Inquiry not found" });
+      }
+
+      // Delete the inquiry from inquiries table
+      await pool.query('DELETE FROM inquiries WHERE id = $1', [inquiryId]);
+      
       res.json({ message: "Inquiry deleted successfully" });
     } catch (error) {
       console.error("Error deleting inquiry:", error);
@@ -968,23 +1399,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Missing required fields: trainerId, status, date" });
       }
 
-      // Validate time format if provided
-      const timePattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-      
-      if (checkInTime && checkInTime.trim() !== '' && !timePattern.test(checkInTime)) {
-        return res.status(400).json({ message: "Invalid check-in time format. Use HH:MM format." });
+      // Validate and convert time format if provided
+      const validateAndConvertTime = (timeStr: string): string | null => {
+        if (!timeStr || timeStr.trim() === '') return null;
+
+        // Handle 24-hour format (HH:MM)
+        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (time24Pattern.test(timeStr)) {
+          return timeStr;
+        }
+
+        // Handle 12-hour format (HH:MM AM/PM)
+        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = time12Pattern.match(time12Pattern);
+        if (match) {
+          let [, hour, ampm] = match;
+          let hourNum = parseInt(hour);
+
+          if (ampm.toLowerCase() === 'pm' && hourNum !== 12) {
+            hourNum += 12;
+          } else if (ampm.toLowerCase() === 'am' && hourNum === 12) {
+            hourNum = 0;
+          }
+
+          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+        }
+
+        return null;
+      };
+
+      const convertedCheckInTime = checkInTime ? validateAndConvertTime(checkInTime) : null;
+      const convertedCheckOutTime = checkOutTime ? validateAndConvertTime(checkOutTime) : null;
+
+      if (checkInTime && checkInTime.trim() !== '' && convertedCheckInTime === null) {
+        return res.status(400).json({ message: "Invalid check-in time format. Use HH:MM or HH:MM AM/PM format." });
       }
-      
-      if (checkOutTime && checkOutTime.trim() !== '' && !timePattern.test(checkOutTime)) {
-        return res.status(400).json({ message: "Invalid check-out time format. Use HH:MM format." });
+
+      if (checkOutTime && checkOutTime.trim() !== '' && convertedCheckOutTime === null) {
+        return res.status(400).json({ message: "Invalid check-out time format. Use HH:MM or HH:MM AM/PM format." });
       }
 
       const attendance = await storage.recordTrainerAttendance({
         trainerId,
         date,
         status,
-        checkInTime: checkInTime || null,
-        checkOutTime: checkOutTime || null,
+        checkInTime: convertedCheckInTime,
+        checkOutTime: convertedCheckOutTime,
         notes: notes || null
       });
 

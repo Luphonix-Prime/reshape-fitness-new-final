@@ -1,4 +1,3 @@
-
 import { Pool } from 'pg';
 
 const connectionString = 'postgresql://neondb_owner:npg_JKfVe1Scpz7R@ep-proud-resonance-afmhcyuk-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
@@ -13,7 +12,7 @@ export const pool = new Pool({
 export async function initializeDatabase() {
   try {
     console.log('Connecting to PostgreSQL...');
-    
+
     // Test connection
     const client = await pool.connect();
     console.log('Connected to PostgreSQL successfully');
@@ -22,7 +21,7 @@ export async function initializeDatabase() {
     // Create tables if they don't exist
     await createTables();
     await insertSampleData();
-    
+
     console.log('Database initialized successfully');
   } catch (error) {
     console.error('Database initialization error:', error);
@@ -225,6 +224,22 @@ async function createTables() {
     );
   `;
 
+  const createInquiriesTable = `
+    CREATE TABLE IF NOT EXISTS inquiries (
+      id SERIAL PRIMARY KEY,
+      first_name VARCHAR(255) NOT NULL,
+      last_name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      phone VARCHAR(20),
+      location VARCHAR(255),
+      interest VARCHAR(255),
+      message TEXT,
+      status VARCHAR(50) DEFAULT 'new',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
   const tables = [
     createUsersTable,
     createMembershipTiersTable,
@@ -237,7 +252,8 @@ async function createTables() {
     createBodyAssessmentsTable,
     createAttendanceTable,
     createTrainerAttendanceTable,
-    createMemberSessionsTable
+    createMemberSessionsTable,
+    createInquiriesTable
   ];
 
   for (const table of tables) {
@@ -302,7 +318,7 @@ async function insertSampleData() {
         'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4) RETURNING id',
         [trainerEmail, 'Trainer', 'Pro', 'trainer']
       );
-      
+
       // Create trainer profile
       if (trainerRows[0]) {
         await pool.query(
@@ -320,7 +336,7 @@ async function insertSampleData() {
         'INSERT INTO users (email, first_name, last_name, user_type) VALUES ($1, $2, $3, $4) RETURNING id',
         [memberEmail, 'Member', 'Test', 'member']
       );
-      
+
       // Create member profile with a membership tier
       if (memberRows[0]) {
         const { rows: tierRows } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['BRONZE']);

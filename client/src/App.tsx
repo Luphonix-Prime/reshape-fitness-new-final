@@ -17,6 +17,9 @@ import MemberDashboard from "@/pages/MemberDashboard";
 import TrainerDashboard from "@/pages/TrainerDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Subscribe from "@/pages/Subscribe";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -39,17 +42,20 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/subscribe" component={Subscribe} />
       <Route path="/membership" component={Subscribe} />
-      
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/confirm-email-change" component={ConfirmEmailChange} />
+
       {/* Dashboard routes - accessible when authenticated */}
       <Route path="/member-dashboard" component={MemberDashboard} />
       <Route path="/trainer-dashboard" component={TrainerDashboard} />
       <Route path="/admin-dashboard" component={AdminDashboard} />
-      
+
       {/* Default route - redirect based on authentication and user type */}
       <Route path="/">
         {!isAuthenticated ? <Login /> : <Home />}
       </Route>
-      
+
       <Route component={NotFound} />
     </Switch>
   );

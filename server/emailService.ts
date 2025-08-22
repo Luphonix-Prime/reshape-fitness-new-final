@@ -197,6 +197,197 @@ class EmailService {
     });
   }
 
+  async sendPasswordResetEmail(userEmail: string, userName: string, resetToken: string) {
+    const resetUrl = `${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}`;
+    
+    const resetTemplate = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #fff; border-radius: 10px; overflow: hidden;">
+      <div style="background: #d4af37; padding: 20px; text-align: center;">
+        <h1 style="margin: 0; color: #000; font-size: 24px;">Password Reset Request</h1>
+      </div>
+      <div style="padding: 30px;">
+        <h2 style="color: #d4af37; margin-bottom: 20px;">Hello ${userName}!</h2>
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          We received a request to reset your password for your RESHAPE FITNESS account.
+        </p>
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d4af37;">
+          <h3 style="color: #d4af37; margin-top: 0;">Important Security Notice:</h3>
+          <p style="margin: 10px 0;">• This link will expire in 15 minutes</p>
+          <p style="margin: 10px 0;">• This link can only be used once</p>
+          <p style="margin: 10px 0;">• If you didn't request this reset, please ignore this email</p>
+        </div>
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          Click the button below to reset your password:
+        </p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background: #d4af37; color: #000; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+        </div>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 20px; color: #888;">
+          If the button doesn't work, copy and paste this link into your browser:
+          <br><a href="${resetUrl}" style="color: #d4af37; word-break: break-all;">${resetUrl}</a>
+        </p>
+      </div>
+      <div style="background: #1a1a1a; padding: 20px; text-align: center; border-top: 1px solid #333;">
+        <p style="margin: 0; color: #888; font-size: 14px;">RESHAPE FITNESS | Secure Account Management</p>
+      </div>
+    </div>
+    `;
+
+    await this.sendEmail({
+      to: userEmail,
+      subject: '🔒 Password Reset Request - RESHAPE FITNESS',
+      html: resetTemplate
+    });
+  }
+
+  async sendEmailChangeConfirmation(newEmail: string, userName: string, changeToken: string, oldEmail: string) {
+    const confirmUrl = `${process.env.APP_URL || 'http://localhost:5000'}/confirm-email-change?token=${changeToken}`;
+    
+    const confirmTemplate = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #fff; border-radius: 10px; overflow: hidden;">
+      <div style="background: #d4af37; padding: 20px; text-align: center;">
+        <h1 style="margin: 0; color: #000; font-size: 24px;">Email Change Confirmation</h1>
+      </div>
+      <div style="padding: 30px;">
+        <h2 style="color: #d4af37; margin-bottom: 20px;">Hello ${userName}!</h2>
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          We received a request to change your email address for your RESHAPE FITNESS account.
+        </p>
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Email Change Details:</h3>
+          <p style="margin: 10px 0;"><strong>Current Email:</strong> ${oldEmail}</p>
+          <p style="margin: 10px 0;"><strong>New Email:</strong> ${newEmail}</p>
+        </div>
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d4af37;">
+          <h3 style="color: #d4af37; margin-top: 0;">Important Security Notice:</h3>
+          <p style="margin: 10px 0;">• This link will expire in 30 minutes</p>
+          <p style="margin: 10px 0;">• This link can only be used once</p>
+          <p style="margin: 10px 0;">• If you didn't request this change, please ignore this email</p>
+        </div>
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          Click the button below to confirm your new email address:
+        </p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${confirmUrl}" style="background: #d4af37; color: #000; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Confirm Email Change</a>
+        </div>
+        <p style="font-size: 14px; line-height: 1.6; margin-bottom: 20px; color: #888;">
+          If the button doesn't work, copy and paste this link into your browser:
+          <br><a href="${confirmUrl}" style="color: #d4af37; word-break: break-all;">${confirmUrl}</a>
+        </p>
+      </div>
+      <div style="background: #1a1a1a; padding: 20px; text-align: center; border-top: 1px solid #333;">
+        <p style="margin: 0; color: #888; font-size: 14px;">RESHAPE FITNESS | Secure Account Management</p>
+      </div>
+    </div>
+    `;
+
+    await this.sendEmail({
+      to: newEmail,
+      subject: '✉️ Confirm Email Change - RESHAPE FITNESS',
+      html: confirmTemplate
+    });
+  }
+
+  async sendBodyAssessmentToTrainer(trainerEmail: string, trainerName: string, assessmentDetails: any) {
+    const assessmentTemplate = `
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: #fff; border-radius: 10px; overflow: hidden;">
+      <div style="background: #d4af37; padding: 20px; text-align: center;">
+        <h1 style="margin: 0; color: #000; font-size: 24px;">Body Assessment Shared with You</h1>
+      </div>
+      <div style="padding: 30px;">
+        <h2 style="color: #d4af37; margin-bottom: 20px;">Hello ${trainerName}!</h2>
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          A body assessment has been shared with you for review and training guidance.
+        </p>
+        
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Client Information:</h3>
+          <p style="margin: 10px 0;"><strong>Client Name:</strong> ${assessmentDetails.memberName || assessmentDetails.clientName}</p>
+          <p style="margin: 10px 0;"><strong>Age:</strong> ${assessmentDetails.age} years</p>
+          <p style="margin: 10px 0;"><strong>Date of Birth:</strong> ${assessmentDetails.dateOfBirth ? new Date(assessmentDetails.dateOfBirth).toLocaleDateString() : 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Emergency Contact:</strong> ${assessmentDetails.emergencyContact || 'N/A'}</p>
+        </div>
+
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Physical Measurements:</h3>
+          <p style="margin: 10px 0;"><strong>Height:</strong> ${assessmentDetails.height} cm</p>
+          <p style="margin: 10px 0;"><strong>Weight:</strong> ${assessmentDetails.bodyComposition?.weight || 'N/A'} kg</p>
+          <p style="margin: 10px 0;"><strong>BMI:</strong> ${assessmentDetails.bodyComposition?.bmi || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Blood Pressure:</strong> ${assessmentDetails.bloodPressure || assessmentDetails.bp || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>BP After Treadmill:</strong> ${assessmentDetails.afterTreadmillBP || assessmentDetails.bp_after_treadmill || 'N/A'}</p>
+        </div>
+
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Body Composition:</h3>
+          <p style="margin: 10px 0;"><strong>Muscle Mass:</strong> ${assessmentDetails.bodyComposition?.muscle || 'N/A'}%</p>
+          <p style="margin: 10px 0;"><strong>Body Fat:</strong> ${assessmentDetails.bodyComposition?.fat || 'N/A'}%</p>
+          <p style="margin: 10px 0;"><strong>Visceral Fat:</strong> ${assessmentDetails.bodyComposition?.visceralFat || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>BMR:</strong> ${assessmentDetails.bodyComposition?.bmr || 'N/A'} calories</p>
+          <p style="margin: 10px 0;"><strong>Body Age:</strong> ${assessmentDetails.bodyComposition?.bodyAge || 'N/A'} years</p>
+        </div>
+
+        ${assessmentDetails.posturalAssessment ? `
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Postural Assessment:</h3>
+          <p style="margin: 10px 0;"><strong>Head/Neck Alignment:</strong> ${assessmentDetails.posturalAssessment.headNeckAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Shoulder Alignment:</strong> ${assessmentDetails.posturalAssessment.shoulderAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Upper Back:</strong> ${assessmentDetails.posturalAssessment.upperBackAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Lower Back:</strong> ${assessmentDetails.posturalAssessment.lowerBackAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Pelvic Alignment:</strong> ${assessmentDetails.posturalAssessment.pelvicAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Hip/Knee Alignment:</strong> ${assessmentDetails.posturalAssessment.hipKneeAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Ankle Alignment:</strong> ${assessmentDetails.posturalAssessment.ankleAlignment || 'N/A'}</p>
+          <p style="margin: 10px 0;"><strong>Spinal Mobility:</strong> ${assessmentDetails.posturalAssessment.spinalMobility || 'N/A'}</p>
+        </div>
+        ` : ''}
+
+        ${assessmentDetails.circumferenceMeasurements ? `
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Circumference Measurements:</h3>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <p style="margin: 5px 0;"><strong>Neck:</strong> ${assessmentDetails.circumferenceMeasurements.neck || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Shoulders:</strong> ${assessmentDetails.circumferenceMeasurements.shoulders || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Chest:</strong> ${assessmentDetails.circumferenceMeasurements.chest || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Upper Arm:</strong> ${assessmentDetails.circumferenceMeasurements.upperArm || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Waist:</strong> ${assessmentDetails.circumferenceMeasurements.waist || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Hip:</strong> ${assessmentDetails.circumferenceMeasurements.hip || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Thighs:</strong> ${assessmentDetails.circumferenceMeasurements.thighs || 'N/A'} cm</p>
+            <p style="margin: 5px 0;"><strong>Calf:</strong> ${assessmentDetails.circumferenceMeasurements.calf || 'N/A'} cm</p>
+          </div>
+        </div>
+        ` : ''}
+
+        ${assessmentDetails.advice ? `
+        <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <h3 style="color: #d4af37; margin-top: 0;">Additional Notes/Advice:</h3>
+          <p style="margin: 10px 0; line-height: 1.6;">${assessmentDetails.advice}</p>
+        </div>
+        ` : ''}
+
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          <strong>Assessment Date:</strong> ${new Date(assessmentDetails.createdAt || Date.now()).toLocaleDateString()}
+        </p>
+
+        <p style="font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+          Please review this assessment and provide appropriate training recommendations for this client.
+        </p>
+
+        <div style="text-align: center; margin-top: 30px;">
+          <a href="#" style="background: #d4af37; color: #000; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">View in Trainer Dashboard</a>
+        </div>
+      </div>
+      <div style="background: #1a1a1a; padding: 20px; text-align: center; border-top: 1px solid #333;">
+        <p style="margin: 0; color: #888; font-size: 14px;">RESHAPE FITNESS | Body Assessment Sharing</p>
+      </div>
+    </div>
+    `;
+
+    await this.sendEmail({
+      to: trainerEmail,
+      subject: `📊 Body Assessment Shared - ${assessmentDetails.memberName || assessmentDetails.clientName} | RESHAPE FITNESS`,
+      html: assessmentTemplate
+    });
+  }
+
   private async sendEmail(options: EmailOptions) {
     try {
       // Verify transporter configuration

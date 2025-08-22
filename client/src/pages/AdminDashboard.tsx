@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("members");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set());
   const [newAttendance, setNewAttendance] = useState({
     trainerId: "",
     status: "present",
@@ -62,6 +63,7 @@ export default function AdminDashboard() {
   const [selectedAssessment, setSelectedAssessment] = useState<any>(null);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [selectedAssessmentIds, setSelectedAssessmentIds] = useState<Set<string>>(new Set());
   const [newAssessment, setNewAssessment] = useState({
     memberId: "",
     dateOfBirth: "",
@@ -337,6 +339,28 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to share assessment",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateAssessmentMutation = useMutation({
+    mutationFn: ({ id, assessmentData }: { id: string, assessmentData: any }) => 
+      apiRequest('PUT', `/api/admin/body-assessments/${id}`, assessmentData),
+    onSuccess: () => {
+      toast({
+        title: "Assessment Updated",
+        description: "Assessment has been updated successfully."
+      });
+      setShowAssessmentModal(false);
+      setEditingAssessment(null);
+      refetchAssessments();
+      closeAssessmentModal();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update assessment",
         variant: "destructive"
       });
     }
@@ -656,6 +680,9 @@ export default function AdminDashboard() {
       };
 
       await recordAttendanceMutation.mutateAsync(attendanceData);
+      
+      // Add trainer to marked set to disable buttons
+      setMarkedTrainers(prev => new Set(prev).add(trainerId));
     } catch (error: any) {
       toast({
         title: "Error",
@@ -691,7 +718,11 @@ export default function AdminDashboard() {
       return;
     }
 
-    createAssessmentMutation.mutate(newAssessment);
+    if (editingAssessment) {
+      updateAssessmentMutation.mutate({ id: editingAssessment._id, assessmentData: newAssessment });
+    } else {
+      createAssessmentMutation.mutate(newAssessment);
+    }
   };
 
   const closeAssessmentModal = () => {
@@ -752,6 +783,59 @@ export default function AdminDashboard() {
     setShowShareModal(true);
   };
 
+  const handleEditAssessment = (assessment: any) => {
+    setEditingAssessment(assessment);
+    setNewAssessment({
+      memberId: assessment.memberId || assessment.member_id || "",
+      dateOfBirth: assessment.dateOfBirth || assessment.date_of_birth || "",
+      age: assessment.age || "",
+      height: assessment.height || "",
+      bloodPressure: assessment.bloodPressure || assessment.bp || "",
+      afterTreadmillBP: assessment.afterTreadmillBP || assessment.bp_after_treadmill || "",
+      emergencyContact: assessment.emergencyContact || assessment.emergency_contact || "",
+      bodyComposition: {
+        bmi: assessment.bodyComposition?.bmi || assessment.bmi || "",
+        weight: assessment.bodyComposition?.weight || assessment.weight || "",
+        muscle: assessment.bodyComposition?.muscle || assessment.muscle || "",
+        fat: assessment.bodyComposition?.fat || assessment.fat || "",
+        saturatedFat: assessment.bodyComposition?.saturatedFat || assessment.saturated_fat || "",
+        visceralFat: assessment.bodyComposition?.visceralFat || assessment.visceral_fat || "",
+        bmr: assessment.bodyComposition?.bmr || assessment.bmr || "",
+        bodyAge: assessment.bodyComposition?.bodyAge || assessment.body_age || ""
+      },
+      posturalAssessment: {
+        asymmetrical: assessment.posturalAssessment?.asymmetrical || false,
+        headNeckAlignment: assessment.posturalAssessment?.headNeckAlignment || assessment.head_neck_alignment || "",
+        shoulderAlignment: assessment.posturalAssessment?.shoulderAlignment || assessment.shoulder_alignment || "",
+        upperBackAlignment: assessment.posturalAssessment?.upperBackAlignment || assessment.upper_back_alignment || "",
+        lowerBackAlignment: assessment.posturalAssessment?.lowerBackAlignment || assessment.lower_back_alignment || "",
+        pelvicAlignment: assessment.posturalAssessment?.pelvicAlignment || assessment.pelvic_alignment || "",
+        hipKneeAlignment: assessment.posturalAssessment?.hipKneeAlignment || assessment.hip_knee_alignment || "",
+        ankleAlignment: assessment.posturalAssessment?.ankleAlignment || assessment.ankle_alignment || "",
+        spinalMobility: assessment.posturalAssessment?.spinalMobility || assessment.spinal_mobility || "",
+        recommendations: {
+          stretching: assessment.posturalAssessment?.recommendations?.stretching || assessment.recommendations || "",
+          strengthening: assessment.posturalAssessment?.recommendations?.strengthening || ""
+        }
+      },
+      circumferenceMeasurements: {
+        neck: assessment.circumferenceMeasurements?.neck || "",
+        shoulders: assessment.circumferenceMeasurements?.shoulders || "",
+        chest: assessment.circumferenceMeasurements?.chest || "",
+        upperArm: assessment.circumferenceMeasurements?.upperArm || "",
+        forearms: assessment.circumferenceMeasurements?.forearms || "",
+        wrist: assessment.circumferenceMeasurements?.wrist || "",
+        waist: assessment.circumferenceMeasurements?.waist || "",
+        hip: assessment.circumferenceMeasurements?.hip || "",
+        thighs: assessment.circumferenceMeasurements?.thighs || "",
+        calf: assessment.circumferenceMeasurements?.calf || "",
+        ankle: assessment.circumferenceMeasurements?.ankle || ""
+      },
+      advice: assessment.advice || ""
+    });
+    setShowAssessmentModal(true);
+  };
+
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
     setShowConvertModal(true);
@@ -760,6 +844,25 @@ export default function AdminDashboard() {
   const handleDeleteInquiry = (inquiryId: string) => {
     if (confirm('Are you sure you want to cancel this inquiry?')) {
       deleteInquiryMutation.mutate(inquiryId);
+    }
+  };
+
+  const handleSelectAssessment = (assessmentId: string, checked: boolean) => {
+    const newSelected = new Set(selectedAssessmentIds);
+    if (checked) {
+      newSelected.add(assessmentId);
+    } else {
+      newSelected.delete(assessmentId);
+    }
+    setSelectedAssessmentIds(newSelected);
+  };
+
+  const handleSelectAllAssessments = (checked: boolean) => {
+    if (checked && bodyAssessments) {
+      const allIds = bodyAssessments.map((assessment: any) => assessment._id || assessment.id);
+      setSelectedAssessmentIds(new Set(allIds));
+    } else {
+      setSelectedAssessmentIds(new Set());
     }
   };
 
@@ -788,6 +891,20 @@ export default function AdminDashboard() {
       return;
     }
 
+    // Filter assessments based on selection
+    const assessmentsToExport = selectedAssessmentIds.size > 0 
+      ? bodyAssessments.filter((assessment: any) => selectedAssessmentIds.has(assessment._id || assessment.id))
+      : bodyAssessments;
+
+    if (assessmentsToExport.length === 0) {
+      toast({
+        title: "No Data Selected",
+        description: "Please select assessments to export",
+        variant: "destructive"
+      });
+      return;
+    }
+
     // Create CSV content
     const headers = [
       "Member Name", "Date of Birth", "Age", "Height", "Blood Pressure", "Emergency Contact",
@@ -800,30 +917,30 @@ export default function AdminDashboard() {
 
     const csvContent = [
       headers.join(","),
-      ...bodyAssessments.map((assessment: any) => [
-        assessment.memberName || "",
-        assessment.dateOfBirth || "",
+      ...assessmentsToExport.map((assessment: any) => [
+        assessment.memberName || assessment.client_name || "",
+        assessment.dateOfBirth || assessment.date_of_birth || "",
         assessment.age || "",
         assessment.height || "",
-        assessment.bloodPressure || "",
-        assessment.emergencyContact || "",
-        assessment.bodyComposition?.bmi || "",
-        assessment.bodyComposition?.weight || "",
-        assessment.bodyComposition?.muscle || "",
-        assessment.bodyComposition?.fat || "",
-        assessment.bodyComposition?.saturatedFat || "",
-        assessment.bodyComposition?.visceralFat || "",
-        assessment.bodyComposition?.bmr || "",
-        assessment.bodyComposition?.bodyAge || "",
-        assessment.posturalAssessment?.headNeckAlignment || "",
-        assessment.posturalAssessment?.shoulderAlignment || "",
-        assessment.posturalAssessment?.upperBackAlignment || "",
-        assessment.posturalAssessment?.lowerBackAlignment || "",
-        assessment.posturalAssessment?.pelvicAlignment || "",
-        assessment.posturalAssessment?.hipKneeAlignment || "",
-        assessment.posturalAssessment?.ankleAlignment || "",
-        assessment.posturalAssessment?.spinalMobility || "",
-        assessment.posturalAssessment?.recommendations?.stretching || "",
+        assessment.bloodPressure || assessment.bp || "",
+        assessment.emergencyContact || assessment.emergency_contact || "",
+        assessment.bodyComposition?.bmi || assessment.bmi || "",
+        assessment.bodyComposition?.weight || assessment.weight || "",
+        assessment.bodyComposition?.muscle || assessment.muscle || "",
+        assessment.bodyComposition?.fat || assessment.fat || "",
+        assessment.bodyComposition?.saturatedFat || assessment.saturated_fat || "",
+        assessment.bodyComposition?.visceralFat || assessment.visceral_fat || "",
+        assessment.bodyComposition?.bmr || assessment.bmr || "",
+        assessment.bodyComposition?.bodyAge || assessment.body_age || "",
+        assessment.posturalAssessment?.headNeckAlignment || assessment.head_neck_alignment || "",
+        assessment.posturalAssessment?.shoulderAlignment || assessment.shoulder_alignment || "",
+        assessment.posturalAssessment?.upperBackAlignment || assessment.upper_back_alignment || "",
+        assessment.posturalAssessment?.lowerBackAlignment || assessment.lower_back_alignment || "",
+        assessment.posturalAssessment?.pelvicAlignment || assessment.pelvic_alignment || "",
+        assessment.posturalAssessment?.hipKneeAlignment || assessment.hip_knee_alignment || "",
+        assessment.posturalAssessment?.ankleAlignment || assessment.ankle_alignment || "",
+        assessment.posturalAssessment?.spinalMobility || assessment.spinal_mobility || "",
+        assessment.posturalAssessment?.recommendations?.stretching || assessment.recommendations || "",
         assessment.posturalAssessment?.recommendations?.strengthening || "",
         assessment.circumferenceMeasurements?.neck || "",
         assessment.circumferenceMeasurements?.shoulders || "",
@@ -837,7 +954,7 @@ export default function AdminDashboard() {
         assessment.circumferenceMeasurements?.calf || "",
         assessment.circumferenceMeasurements?.ankle || "",
         `"${assessment.advice || ""}"`,
-        new Date(assessment.createdAt).toLocaleDateString()
+        new Date(assessment.createdAt || assessment.created_at).toLocaleDateString()
       ].join(","))
     ].join("\n");
 
@@ -846,7 +963,7 @@ export default function AdminDashboard() {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `body_assessments_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `body_assessments_${selectedAssessmentIds.size > 0 ? 'selected_' : ''}${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -854,7 +971,7 @@ export default function AdminDashboard() {
 
     toast({
       title: "Export Successful",
-      description: "Body assessments exported to CSV file"
+      description: `${assessmentsToExport.length} body assessment(s) exported to CSV file`
     });
   };
 
@@ -1757,7 +1874,7 @@ export default function AdminDashboard() {
                   className="border-gold text-gold hover:bg-gold hover:text-black"
                   onClick={exportToExcel}
                 >
-                  Export to Excel
+                  Export {selectedAssessmentIds.size > 0 ? `Selected (${selectedAssessmentIds.size})` : 'All'} to Excel
                 </Button>
                 <Dialog open={showAssessmentModal} onOpenChange={setShowAssessmentModal}>
                   <DialogTrigger asChild>
@@ -1768,7 +1885,9 @@ export default function AdminDashboard() {
                   </DialogTrigger>
                   <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle className="text-gold">Body Composition & BMI Assessment</DialogTitle>
+                      <DialogTitle className="text-gold">
+                        {editingAssessment ? 'Edit Body Assessment' : 'Body Composition & BMI Assessment'}
+                      </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleCreateAssessment} className="space-y-6">
                       {/* Basic Information */}
@@ -2126,8 +2245,8 @@ export default function AdminDashboard() {
                         />
                       </div>
 
-                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createAssessmentMutation.isPending}>
-                        {createAssessmentMutation.isPending ? "Creating..." : "Create Assessment"}
+                      <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createAssessmentMutation.isPending || updateAssessmentMutation.isPending}>
+                        {editingAssessment ? (updateAssessmentMutation.isPending ? "Updating..." : "Update Assessment") : (createAssessmentMutation.isPending ? "Creating..." : "Create Assessment")}
                       </Button>
                     </form>
                   </DialogContent>
@@ -2144,6 +2263,14 @@ export default function AdminDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400 w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedAssessmentIds.size === bodyAssessments?.length && bodyAssessments?.length > 0}
+                          onChange={(e) => handleSelectAllAssessments(e.target.checked)}
+                          className="rounded"
+                        />
+                      </TableHead>
                       <TableHead className="text-gray-400">Client Name</TableHead>
                       <TableHead className="text-gray-400">Age</TableHead>
                       <TableHead className="text-gray-400">BMI</TableHead>
@@ -2155,14 +2282,22 @@ export default function AdminDashboard() {
                   </TableHeader>
                   <TableBody>
                     {Array.isArray(bodyAssessments) && bodyAssessments.map((assessment: any) => (
-                      <TableRow key={assessment._id} className="border-gray-800">
-                        <TableCell className="text-white">{assessment.memberName}</TableCell>
+                      <TableRow key={assessment._id || assessment.id} className="border-gray-800">
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedAssessmentIds.has(assessment._id || assessment.id)}
+                            onChange={(e) => handleSelectAssessment(assessment._id || assessment.id, e.target.checked)}
+                            className="rounded"
+                          />
+                        </TableCell>
+                        <TableCell className="text-white">{assessment.memberName || assessment.client_name}</TableCell>
                         <TableCell className="text-gray-400">{assessment.age}</TableCell>
-                        <TableCell className="text-gray-400">{assessment.bodyComposition?.bmi || 'N/A'}</TableCell>
-                        <TableCell className="text-gray-400">{assessment.bodyComposition?.weight || 'N/A'} kg</TableCell>
-                        <TableCell className="text-gray-400">{assessment.bodyComposition?.fat || 'N/A'}%</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.bmi || assessment.bmi || 'N/A'}</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.weight || assessment.weight || 'N/A'} kg</TableCell>
+                        <TableCell className="text-gray-400">{assessment.bodyComposition?.fat || assessment.fat || 'N/A'}%</TableCell>
                         <TableCell className="text-gray-400">
-                          {new Date(assessment.createdAt).toLocaleDateString()}
+                          {new Date(assessment.createdAt || assessment.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
@@ -2178,6 +2313,7 @@ export default function AdminDashboard() {
                               size="sm"
                               variant="ghost"
                               className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => handleEditAssessment(assessment)}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -2187,7 +2323,7 @@ export default function AdminDashboard() {
                     ))}
                     {(!Array.isArray(bodyAssessments) || bodyAssessments.length === 0) && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-gray-400">
+                        <TableCell colSpan={8} className="text-center text-gray-400">
                           No body assessments found
                         </TableCell>
                       </TableRow>
@@ -2240,7 +2376,10 @@ export default function AdminDashboard() {
                 <Input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setMarkedTrainers(new Set()); // Reset marked trainers when date changes
+                  }}
                   className="bg-black border-gray-700 text-white"
                 />
                 <Button 
@@ -2390,6 +2529,9 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {trainers?.map((trainer: any) => {
                       const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
+                      const isMarked = markedTrainers.has(trainer.userId);
+                      const showButtons = !hasAttendance && !isMarked;
+                      
                       return (
                         <div key={`quick-attendance-${trainer.userId}`} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
                           <div>
@@ -2397,7 +2539,7 @@ export default function AdminDashboard() {
                             <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ')}</p>
                           </div>
                           <div className="flex space-x-2">
-                            {!hasAttendance ? (
+                            {showButtons ? (
                               <>
                                 <Button 
                                   size="sm" 
@@ -2416,10 +2558,14 @@ export default function AdminDashboard() {
                                   Absent
                                 </Button>
                               </>
-                            ) : (
+                            ) : hasAttendance ? (
                               <div className="flex items-center space-x-2">
                                 {getAttendanceStatusBadge(hasAttendance.status)}
                                 <span className="text-xs text-gray-400">{hasAttendance.checkInTime}</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center space-x-2">
+                                <Badge className="bg-gray-600 text-white">Marked</Badge>
                               </div>
                             )}
                           </div>

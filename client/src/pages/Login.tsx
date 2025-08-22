@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -147,6 +148,15 @@ export default function Login() {
                   {isLoading ? "Signing In..." : "Sign In"}
                 </Button>
               </form>
+
+              <div className="text-center">
+                <Link 
+                  to="/forgot-password" 
+                  className="text-sm text-gold hover:text-gold/80 underline"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </TabsContent>
 
             <TabsContent value="signup">
