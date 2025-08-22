@@ -128,6 +128,11 @@ export default function TrainerDashboard() {
     queryFn: () => apiRequest('GET', '/api/trainer/clients'),
   });
 
+  const { data: assignedClients = [], isLoading: assignedClientsLoading } = useQuery({
+    queryKey: ['/api/trainer/assigned-clients'],
+    queryFn: () => apiRequest('GET', '/api/trainer/assigned-clients'),
+  });
+
   const { data: workoutPlans = [], isLoading: workoutPlansLoading } = useQuery({
     queryKey: ['/api/trainer/workout-plans'],
     queryFn: () => apiRequest('GET', '/api/trainer/workout-plans'),
@@ -376,10 +381,10 @@ export default function TrainerDashboard() {
                 <div>
                   <p className="text-gray-400 text-sm">Active Clients</p>
                   <p className="text-2xl font-bold text-gold">
-                    {statsLoading ? (
+                    {statsLoading || assignedClientsLoading ? (
                       <div className="animate-pulse bg-gray-700 h-8 w-12 rounded"></div>
                     ) : (
-                      trainerStats?.totalClients || 0
+                      assignedClients?.length || 0
                     )}
                   </p>
                 </div>
@@ -696,10 +701,10 @@ export default function TrainerDashboard() {
           <TabsContent value="clients" className="space-y-6">
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader>
-                <CardTitle className="text-gold">Your Clients ({clients.length})</CardTitle>
+                <CardTitle className="text-gold">Your Assigned Clients ({assignedClients?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent>
-                {clientsLoading ? (
+                {assignedClientsLoading ? (
                   <div className="space-y-4">
                     {[...Array(5)].map((_, i) => (
                       <div key={i} className="animate-pulse bg-gray-800 rounded h-12"></div>
@@ -709,27 +714,38 @@ export default function TrainerDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-gray-800">
-                        <TableHead className="text-gray-400">Name</TableHead>
+                        <TableHead className="text-gray-400">Client Name</TableHead>
                         <TableHead className="text-gray-400">Email</TableHead>
-                        <TableHead className="text-gray-400">Join Date</TableHead>
-                        <TableHead className="text-gray-400">Sessions Completed</TableHead>
+                        <TableHead className="text-gray-400">Phone</TableHead>
+                        <TableHead className="text-gray-400">Assigned Date</TableHead>
+                        <TableHead className="text-gray-400">Assignment Notes</TableHead>
                         <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {clients?.length > 0 ? (
-                        clients.map((client) => (
-                          <TableRow key={client.id} className="border-gray-800">
-                            <TableCell className="text-white">{client.name}</TableCell>
-                            <TableCell className="text-gray-400">{client.email}</TableCell>
-                            <TableCell className="text-gray-400">{new Date(client.joinDate).toLocaleDateString()}</TableCell>
-                            <TableCell className="text-gray-400">{client.sessionsCompleted}</TableCell>
+                      {assignedClients && assignedClients.length > 0 ? (
+                        assignedClients.map((assignment) => (
+                          <TableRow key={`assignment-${assignment.id}-${assignment.member_id}-${assignment.trainer_id}`} className="border-gray-800">
+                            <TableCell className="text-white font-semibold">
+                              {assignment.member_name || `${assignment.member_first_name || ''} ${assignment.member_last_name || ''}`.trim() || 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-gray-400">{assignment.member_email || 'N/A'}</TableCell>
+                            <TableCell className="text-gray-400">{assignment.member_phone || 'N/A'}</TableCell>
+                            <TableCell className="text-gray-400">
+                              {assignment.assigned_date ? new Date(assignment.assigned_date).toLocaleDateString() : 'N/A'}
+                            </TableCell>
+                            <TableCell className="text-gray-400 max-w-xs truncate">{assignment.notes || 'No notes'}</TableCell>
                             <TableCell>
                               <div className="flex space-x-2">
                                 <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
                                   View Profile
                                 </Button>
-                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-blue-400 hover:bg-blue-400 hover:text-white"
+                                  onClick={() => setActiveTab("schedule")}
+                                >
                                   Schedule Session
                                 </Button>
                               </div>
@@ -738,8 +754,10 @@ export default function TrainerDashboard() {
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-gray-400">
-                            No clients assigned yet
+                          <TableCell colSpan={6} className="text-center text-gray-400 py-8">
+                            <User className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                            <p>No clients assigned to you yet</p>
+                            <p className="text-sm text-gray-500 mt-2">When admin assigns clients to you, they will appear here</p>
                           </TableCell>
                         </TableRow>
                       )}

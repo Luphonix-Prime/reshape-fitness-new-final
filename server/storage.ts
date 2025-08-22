@@ -1010,6 +1010,7 @@ export const storage = {
       SELECT mta.*,
              CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
              mp.email as member_email,
+             mp.phone as member_phone,
              CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name,
              tp.email as trainer_email,
              tp.specializations
@@ -1034,6 +1035,17 @@ export const storage = {
 
     const { rows } = await pool.query(query, values);
     return rows;
+  },
+
+  async removeTrainerFromMember(memberId: string, trainerId: string) {
+    const { rows } = await pool.query(`
+      UPDATE member_trainer_assignments 
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      WHERE member_id = $1 AND trainer_id = $2
+      RETURNING *
+    `, [memberId, trainerId]);
+
+    return rows[0];
   },
 
   async removeTrainerFromMember(memberId: string, trainerId: string) {

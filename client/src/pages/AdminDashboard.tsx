@@ -124,6 +124,16 @@ export default function AdminDashboard() {
 
   const [settingsLoading, setSettingsLoading] = useState(false);
 
+  // Trainer Assignment State
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [selectedMemberForAssignment, setSelectedMemberForAssignment] = useState<string>('');
+  const [selectedTrainerForAssignment, setSelectedTrainerForAssignment] = useState<string>('');
+  const [assignmentData, setAssignmentData] = useState({
+    trainerId: "",
+    assignedDate: new Date().toISOString().split('T')[0],
+    notes: ""
+  });
+
   // Fetch real data
   const { data: members, isLoading: membersLoading, refetch: refetchMembers } = useQuery({
     queryKey: ['/api/admin/members'],
@@ -164,6 +174,12 @@ export default function AdminDashboard() {
   const { data: inquiries, refetch: refetchInquiries } = useQuery({
     queryKey: ['/api/admin/inquiries'],
     queryFn: () => apiRequest('GET', '/api/admin/inquiries'),
+  });
+
+  // Fetch Trainer Assignments
+  const { data: trainerAssignments, refetch: refetchTrainerAssignments } = useQuery({
+    queryKey: ['/api/admin/trainer-assignments'],
+    queryFn: () => apiRequest('GET', '/api/admin/trainer-assignments'),
   });
 
   // Mutations
@@ -407,7 +423,54 @@ export default function AdminDashboard() {
     }
   });
 
+  // Trainer Assignment Mutations
+  const assignTrainerMutation = useMutation({
+    mutationFn: (assignmentData: any) => apiRequest('POST', '/api/admin/assign-trainer', assignmentData),
+    onSuccess: () => {
+      toast({
+        title: "Assignment Successful",
+        description: "Trainer assigned to member successfully."
+      });
+      setShowAssignModal(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign trainer",
+        variant: "destructive"
+      });
+    }
+  });
 
+  const handleRemoveTrainer = async (memberId: string, trainerId: string) => {
+    if (confirm('Are you sure you want to remove this trainer assignment?')) {
+      try {
+        await apiRequest('DELETE', `/api/admin/remove-trainer/${memberId}/${trainerId}`);
+        toast({
+          title: "Assignment Removed",
+          description: "Trainer removed from member successfully."
+        });
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] });
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to remove trainer assignment",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      refetchMembers();
+      refetchTrainers();
+      refetchAssessments();
+      refetchInquiries();
+      refetchTrainerAssignments();
+    }
+  }, [user]);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -680,7 +743,7 @@ export default function AdminDashboard() {
       };
 
       await recordAttendanceMutation.mutateAsync(attendanceData);
-      
+
       // Add trainer to marked set to disable buttons
       setMarkedTrainers(prev => new Set(prev).add(trainerId));
     } catch (error: any) {
@@ -841,9 +904,11 @@ export default function AdminDashboard() {
     setShowConvertModal(true);
   };
 
-  const handleDeleteInquiry = (inquiryId: string) => {
-    if (confirm('Are you sure you want to cancel this inquiry?')) {
-      deleteInquiryMutation.mutate(inquiryId);
+  const handleDeleteInquiry = async (inquiryId: string) => {
+    try {
+      await deleteInquiryMutation.mutateAsync(inquiryId);
+    } catch (error: any) {
+      console.error('Error deleting inquiry:', error);
     }
   };
 
@@ -975,6 +1040,43 @@ export default function AdminDashboard() {
     });
   };
 
+  // Handler for submitting trainer assignment
+  const handleSubmitAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await apiRequest('POST', '/api/admin/assign-trainer', {
+        memberId: selectedMemberForAssignment,
+        trainerId: selectedTrainerForAssignment,
+        assignedDate: assignmentData.assignedDate, // Use state for date
+        notes: assignmentData.notes // Use state for notes
+      });
+
+      toast({
+        title: "Success",
+        description: "Trainer assigned to member successfully",
+      });
+
+      // Reset form states
+      setSelectedMemberForAssignment('');
+      setSelectedTrainerForAssignment('');
+      setAssignmentData({
+        trainerId: "",
+        assignedDate: new Date().toISOString().split('T')[0],
+        notes: ""
+      });
+
+      // Refresh assignments
+      refetchTrainerAssignments();
+      setShowAssignModal(false); // Close the modal
+    } catch (error: any) {
+      console.error('Error assigning trainer:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to assign trainer to member",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (membersLoading || trainersLoading || statsLoading) {
     return (
@@ -1298,71 +1400,105 @@ export default function AdminDashboard() {
                     </form>
                   </DialogContent>
                 </Dialog>
+                {/* Add Trainer Assignment Button */}
+                <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="border-gold text-gold hover:bg-gold hover:text-black"
+                      onClick={() => {
+                        // If a member is selected, open modal to assign a trainer
+                        if (selectedMemberForAssignment) {
+                          setShowAssignModal(true);
+                        } else {
+                          toast({ title: "Please select a member first" });
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Assign Trainer
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                    <DialogHeader>
+                      <DialogTitle className="text-gold">
+                        Assign Trainer to {selectedMemberForAssignment ? members?.find(m => m.userId === selectedMemberForAssignment)?.firstName + " " + members?.find(m => m.userId === selectedMemberForAssignment)?.lastName : 'Member'}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmitAssignment} className="space-y-4">
+                      <div>
+                        <Label htmlFor="memberId">Select Member</Label>
+                        <Select
+                          required
+                          value={selectedMemberForAssignment}
+                          onValueChange={setSelectedMemberForAssignment}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white">
+                            <SelectValue placeholder="Select a member" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            {members?.map((member: any) => (
+                              <SelectItem key={`assign-member-${member.userId}`} value={member.userId} className="focus:bg-gold focus:text-black">
+                                {member.firstName} {member.lastName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="trainerId">Select Trainer</Label>
+                        <Select
+                          required
+                          value={selectedTrainerForAssignment}
+                          onValueChange={setSelectedTrainerForAssignment}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white">
+                            <SelectValue placeholder="Select a trainer" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            {trainers?.map((trainer: any) => (
+                              <SelectItem key={`assign-trainer-${trainer.userId}`} value={trainer.userId} className="focus:bg-gold focus:text-black">
+                                {trainer.firstName} {trainer.lastName} - {trainer.specializations?.join(', ')}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="assignedDate">Assignment Date</Label>
+                        <Input
+                          type="date"
+                          value={assignmentData.assignedDate}
+                          onChange={(e) => setAssignmentData({...assignmentData, assignedDate: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="notes">Notes</Label>
+                        <Textarea
+                          value={assignmentData.notes}
+                          onChange={(e) => setAssignmentData({...assignmentData, notes: e.target.value})}
+                          placeholder="Additional notes about this assignment..."
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full bg-gold text-black hover:bg-white"
+                        disabled={assignTrainerMutation.isPending}
+                      >
+                        {assignTrainerMutation.isPending ? "Assigning..." : "Assign Trainer"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
-            {/* Members Table */}
-            <Card className="bg-gray-900 border-gray-800">
-              <CardHeader>
-                <CardTitle className="text-gold">Current Members ({members?.length || 0})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-gray-800">
-                      <TableHead className="text-gray-400">Name</TableHead>
-                      <TableHead className="text-gray-400">Email</TableHead>
-                      <TableHead className="text-gray-400">Phone</TableHead>
-                      <TableHead className="text-gray-400">Membership</TableHead>
-                      <TableHead className="text-gray-400">Join Date</TableHead>
-                      <TableHead className="text-gray-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members?.map((member: any) => (
-                      <TableRow key={member.userId} className="border-gray-800">
-                        <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
-                        <TableCell className="text-gray-400">{member.email}</TableCell>
-                        <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="border-gold text-gold">
-                            {member.membershipTier || 'N/A'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-gray-400">
-                          {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-gold hover:bg-gold hover:text-black"
-                              onClick={() => handleEditMember(member)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-400 hover:bg-red-400 hover:text-white"
-                              onClick={() => handleDeleteMember(member)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
             {/* Trainers Table */}
-            <Card className="bg-gray-900 border-gray-800">
+            <Card className="bg-gray-900 border-gray-800 mb-6">
               <CardHeader>
-                <CardTitle className="text-gold">Training Staff ({trainers?.length || 0})</CardTitle>
+                <CardTitle className="text-gold">Current Trainers ({trainers?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1371,8 +1507,8 @@ export default function AdminDashboard() {
                       <TableHead className="text-gray-400">Name</TableHead>
                       <TableHead className="text-gray-400">Email</TableHead>
                       <TableHead className="text-gray-400">Specializations</TableHead>
-                      <TableHead className="text-gray-400">Rate</TableHead>
                       <TableHead className="text-gray-400">Experience</TableHead>
+                      <TableHead className="text-gray-400">Hourly Rate</TableHead>
                       <TableHead className="text-gray-400">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1382,10 +1518,14 @@ export default function AdminDashboard() {
                         <TableCell className="text-white">{trainer.firstName} {trainer.lastName}</TableCell>
                         <TableCell className="text-gray-400">{trainer.email}</TableCell>
                         <TableCell className="text-gray-400">
-                          {trainer.specializations?.join(', ') || 'N/A'}
+                          {Array.isArray(trainer.specializations) 
+                            ? trainer.specializations.slice(0, 2).join(', ')
+                            : 'N/A'
+                          }
+                          {Array.isArray(trainer.specializations) && trainer.specializations.length > 2 && '...'}
                         </TableCell>
-                        <TableCell className="text-gray-400">${trainer.hourlyRate}/hr</TableCell>
                         <TableCell className="text-gray-400">{trainer.experienceYears} years</TableCell>
+                        <TableCell className="text-gray-400">${trainer.hourlyRate}/hr</TableCell>
                         <TableCell>
                           <div className="flex space-x-2">
                             <Button
@@ -1408,10 +1548,158 @@ export default function AdminDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {(!trainers || trainers.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-gray-400">
+                          No trainers found
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>
             </Card>
+
+            {/* Members Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Current Members ({members?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Email</TableHead>
+                      <TableHead className="text-gray-400">Phone</TableHead>
+                      <TableHead className="text-gray-400">Membership</TableHead>
+                      <TableHead className="text-gray-400">Join Date</TableHead>
+                      <TableHead className="text-gray-400">Trainer</TableHead> {/* Added for Trainer Assignment */}
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members?.map((member: any) => {
+                      // Find the assigned trainer for this member
+                      const assignment = Array.isArray(trainerAssignments)
+                        ? trainerAssignments.find((ta: any) => ta.member_id === member.userId)
+                        : null;
+                      const assignedTrainerName = assignment ? assignment.trainer_name : 'Not Assigned';
+
+                      return (
+                        <TableRow key={member.userId} className="border-gray-800">
+                          <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
+                          <TableCell className="text-gray-400">{member.email}</TableCell>
+                          <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="border-gold text-gold">
+                              {member.membershipTier || 'N/A'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-gray-400">
+                            {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-white"> {/* Display assigned trainer */}
+                            {assignedTrainerName}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gold hover:bg-gold hover:text-black"
+                                onClick={() => handleEditMember(member)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-400 hover:bg-red-400 hover:text-white"
+                                onClick={() => handleDeleteMember(member)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                              {/* Button to assign trainer to this member */}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-blue-500 hover:text-blue-700"
+                                onClick={() => {
+                                  setSelectedMemberForAssignment(member.userId);
+                                  const assignment = Array.isArray(trainerAssignments) ? trainerAssignments.find((ta: any) => ta.member_id === member.userId) : null;
+                                  setAssignmentData({
+                                    trainerId: assignment ? assignment.trainer_id : "",
+                                    assignedDate: assignment ? new Date(assignment.assigned_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                    notes: assignment ? assignment.notes : ""
+                                  });
+                                  setSelectedTrainerForAssignment(assignment ? assignment.trainer_id : ""); // Pre-select if assigned
+                                  setShowAssignModal(true);
+                                }}
+                              >
+                                {assignment ? <Edit className="h-4 w-4" /> : <Target className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Trainer Assignments Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Current Trainer Assignments ({trainerAssignments?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Member</TableHead>
+                      <TableHead className="text-gray-400">Trainer</TableHead>
+                      <TableHead className="text-gray-400">Assigned Date</TableHead>
+                      <TableHead className="text-gray-400">Notes</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainerAssignments?.map((assignment: any) => (
+                      <TableRow key={`${assignment.member_id}-${assignment.trainer_id}`} className="border-gray-800">
+                        <TableCell className="text-white">{assignment.member_name}</TableCell>
+                        <TableCell className="text-white">{assignment.trainer_name}</TableCell>
+                        <TableCell className="text-gray-400">
+                          {new Date(assignment.assigned_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-gray-400">{assignment.notes || 'N/A'}</TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-red-400 hover:bg-red-400 hover:text-white"
+                            onClick={() => handleRemoveTrainer(assignment.member_id, assignment.trainer_id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!trainerAssignments || trainerAssignments.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-400">
+                          No trainer assignments found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Assign Trainer Modal is now outside the members table */}
+
           </TabsContent>
 
           <TabsContent value="inquiries" className="space-y-6">
@@ -2239,9 +2527,9 @@ export default function AdminDashboard() {
                         <Textarea
                           value={newAssessment.advice}
                           onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
-                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
                           className="bg-black border-gray-700 text-white"
                           rows={4}
+                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
                         />
                       </div>
 
@@ -2382,7 +2670,7 @@ export default function AdminDashboard() {
                   }}
                   className="bg-black border-gray-700 text-white"
                 />
-                <Button 
+                <Button
                   variant="outline"
                   className="border-gold text-gold hover:bg-gold hover:text-black"
                   onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
@@ -2531,7 +2819,7 @@ export default function AdminDashboard() {
                       const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
                       const isMarked = markedTrainers.has(trainer.userId);
                       const showButtons = !hasAttendance && !isMarked;
-                      
+
                       return (
                         <div key={`quick-attendance-${trainer.userId}`} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
                           <div>
@@ -2541,16 +2829,16 @@ export default function AdminDashboard() {
                           <div className="flex space-x-2">
                             {showButtons ? (
                               <>
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   className="bg-green-600 hover:bg-green-700 text-white"
                                   onClick={() => handleQuickAttendance(trainer.userId, "present")}
                                   disabled={recordAttendanceMutation.isPending}
                                 >
                                   Present
                                 </Button>
-                                <Button 
-                                  size="sm" 
+                                <Button
+                                  size="sm"
                                   className="bg-red-600 hover:bg-red-700 text-white"
                                   onClick={() => handleQuickAttendance(trainer.userId, "absent")}
                                   disabled={recordAttendanceMutation.isPending}
@@ -2597,7 +2885,7 @@ export default function AdminDashboard() {
                   </TableHeader>
                   <TableBody>
                     {Array.isArray(todayAttendance) && todayAttendance.map((attendance: any) => {
-                      const hours = attendance.checkInTime && attendance.checkOutTime 
+                      const hours = attendance.checkInTime && attendance.checkOutTime
                         ? ((new Date(`1970-01-01T${attendance.checkOutTime}:00`).getTime() - new Date(`1970-01-01T${attendance.checkInTime}:00`).getTime()) / (1000 * 60 * 60)).toFixed(1)
                         : 'N/A';
                       return (
@@ -2795,7 +3083,7 @@ export default function AdminDashboard() {
                       const tierId = tier._id || tier.id;
                       // Only render if we have a valid tier ID
                       if (!tierId) return null;
-                      
+
                       return (
                         <div key={`pricing-tier-${tierId}`}>
                           <Label htmlFor={`price-${tierId}`}>{tier.name} Price</Label>
