@@ -18,6 +18,12 @@ interface MembershipTier {
   price: number;
   features: string[];
   description: string;
+  // New fields for session packages
+  sessions?: number;
+  duration?: string;
+  oneOnOnePrice?: number;
+  twoPeoplePrice?: number;
+  threePeoplePrice?: number;
 }
 
 interface MemberProfile {
@@ -1005,52 +1011,67 @@ export const storage = {
     return rows[0];
   },
 
-  async getMemberTrainerAssignments(filters: any = {}) {
-    let query = `
-      SELECT mta.*,
-             CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
-             mp.email as member_email,
-             mp.phone as member_phone,
-             CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name,
-             tp.email as trainer_email,
-             tp.specializations
-      FROM member_trainer_assignments mta
-      JOIN member_profiles mp ON mta.member_id = mp.id
-      JOIN trainer_profiles tp ON mta.trainer_id = tp.id
-      WHERE mta.is_active = true
-    `;
-    const values: any[] = [];
-    let paramIndex = 1;
+  async getMemberTrainerAssignments(filters: { memberId?: string, trainerId?: string } = {}) {
+    try {
+      let query = `
+        SELECT mta.*, 
+               mp.first_name as member_first_name,
+               mp.last_name as member_last_name,
+               CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
+               mp.email as member_email,
+               mp.phone as member_phone,
+               tp.first_name as trainer_first_name,
+               tp.last_name as trainer_last_name,
+               CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name,
+               tp.email as trainer_email
+        FROM member_trainer_assignments mta
+        LEFT JOIN member_profiles mp ON mta.member_id = mp.id
+        LEFT JOIN trainer_profiles tp ON mta.trainer_id = tp.id
+        WHERE mta.is_active = true
+      `;
 
-    if (filters.memberId) {
-      query += ` AND mta.member_id = $${paramIndex++}`;
-      values.push(filters.memberId);
+      const params = [];
+      let paramIndex = 1;
+
+      if (filters.memberId) {
+        query += ` AND mta.member_id = $${paramIndex++}`;
+        params.push(filters.memberId);
+      }
+
+      if (filters.trainerId) {
+        query += ` AND mta.trainer_id = $${paramIndex++}`;
+        params.push(filters.trainerId);
+      }
+
+      query += ` ORDER BY mta.assigned_date DESC`;
+
+      const { rows } = await pool.query(query, params);
+      return rows.map(row => ({
+        id: row.id,
+        member_id: row.member_id,
+        trainer_id: row.trainer_id,
+        member_name: row.member_name,
+        member_first_name: row.member_first_name,
+        member_last_name: row.member_last_name,
+        member_email: row.member_email,
+        member_phone: row.member_phone,
+        trainer_name: row.trainer_name,
+        trainer_first_name: row.trainer_first_name,
+        trainer_last_name: row.trainer_last_name,
+        trainer_email: row.trainer_email,
+        assigned_date: row.assigned_date,
+        notes: row.notes,
+        is_active: row.is_active
+      }));
+    } catch (error) {
+      console.error('Error getting member trainer assignments:', error);
+      throw error;
     }
-    if (filters.trainerId) {
-      query += ` AND mta.trainer_id = $${paramIndex++}`;
-      values.push(filters.trainerId);
-    }
-
-    query += ' ORDER BY mta.assigned_date DESC';
-
-    const { rows } = await pool.query(query, values);
-    return rows;
   },
 
   async removeTrainerFromMember(memberId: string, trainerId: string) {
     const { rows } = await pool.query(`
       UPDATE member_trainer_assignments 
-      SET is_active = false, updated_at = CURRENT_TIMESTAMP
-      WHERE member_id = $1 AND trainer_id = $2
-      RETURNING *
-    `, [memberId, trainerId]);
-
-    return rows[0];
-  },
-
-  async removeTrainerFromMember(memberId: string, trainerId: string) {
-    const { rows } = await pool.query(`
-      UPDATE member_trainer_assignments
       SET is_active = false, updated_at = CURRENT_TIMESTAMP
       WHERE member_id = $1 AND trainer_id = $2
       RETURNING *
@@ -1150,6 +1171,182 @@ export const storage = {
     await pool.query('DELETE FROM member_sessions WHERE id = $1', [sessionId]);
   },
 
+  // Initialize membership tiers
+  async initializeMembershipTiers() {
+    try {
+      // Check if tiers already exist
+      const { rows: existingTiers } = await pool.query('SELECT COUNT(*) as count FROM membership_tiers');
+      if (existingTiers[0].count > 0) {
+        console.log('Membership tiers already exist, skipping initialization');
+        return;
+      }
+
+      const tiers = [
+        // 12 Session Packages
+        {
+          name: 'ONE_ON_ONE_12_SESSIONS',
+          price: 18000,
+          sessions: 12,
+          duration: '1 month',
+          oneOnOnePrice: 1500,
+          twoPeoplePrice: 1200,
+          threePeoplePrice: 1000,
+          features: ['One-on-one personal training', 'Customized workout plans', 'Progress tracking', 'Nutrition guidance'],
+          description: '12 intensive personal training sessions designed for maximum results'
+        },
+        {
+          name: 'TWO_PEOPLE_12_SESSIONS',
+          price: 14400,
+          sessions: 12,
+          duration: '1 month',
+          oneOnOnePrice: 1500,
+          twoPeoplePrice: 1200,
+          threePeoplePrice: 1000,
+          features: ['Partner training sessions', 'Shared motivation', 'Cost-effective training', 'Customized routines'],
+          description: '12 partner training sessions for motivated duos'
+        },
+        {
+          name: 'THREE_PEOPLE_12_SESSIONS',
+          price: 12000,
+          sessions: 12,
+          duration: '1 month',
+          oneOnOnePrice: 1500,
+          twoPeoplePrice: 1200,
+          threePeoplePrice: 1000,
+          features: ['Small group training', 'Team building exercises', 'Affordable group rates', 'Social fitness'],
+          description: '12 small group training sessions for fitness enthusiasts'
+        },
+
+        // 24 Session Packages
+        {
+          name: 'ONE_ON_ONE_24_SESSIONS',
+          price: 34200,
+          sessions: 24,
+          duration: '1 month',
+          oneOnOnePrice: 1425,
+          twoPeoplePrice: 1140,
+          threePeoplePrice: 950,
+          features: ['Extended personal training', 'Advanced technique development', 'Comprehensive fitness assessment', 'Detailed progress reports'],
+          description: '24 comprehensive sessions for serious fitness transformation'
+        },
+        {
+          name: 'TWO_PEOPLE_24_SESSIONS',
+          price: 27360,
+          sessions: 24,
+          duration: '1 month',
+          oneOnOnePrice: 1425,
+          twoPeoplePrice: 1140,
+          threePeoplePrice: 950,
+          features: ['Extended partner training', 'Competition-style workouts', 'Buddy system motivation', 'Shared achievement goals'],
+          description: '24 partner sessions for committed fitness pairs'
+        },
+        {
+          name: 'THREE_PEOPLE_24_SESSIONS',
+          price: 22800,
+          sessions: 24,
+          duration: '1 month',
+          oneOnOnePrice: 1425,
+          twoPeoplePrice: 1140,
+          threePeoplePrice: 950,
+          features: ['Extended group training', 'Team challenges', 'Group fitness goals', 'Social accountability'],
+          description: '24 group sessions for dedicated fitness teams'
+        },
+
+        // 36 Session Packages
+        {
+          name: 'ONE_ON_ONE_36_SESSIONS',
+          price: 48600,
+          sessions: 36,
+          duration: '3 months',
+          oneOnOnePrice: 1350,
+          twoPeoplePrice: 1080,
+          threePeoplePrice: 900,
+          features: ['Quarterly transformation program', 'Advanced training techniques', 'Lifestyle coaching', 'Complete body recomposition'],
+          description: '36 sessions for complete fitness transformation over 3 months'
+        },
+        {
+          name: 'TWO_PEOPLE_36_SESSIONS',
+          price: 38880,
+          sessions: 36,
+          duration: '3 months',
+          oneOnOnePrice: 1350,
+          twoPeoplePrice: 1080,
+          threePeoplePrice: 900,
+          features: ['Quarterly partner program', 'Synchronized training routines', 'Mutual support system', 'Shared transformation journey'],
+          description: '36 partner sessions for long-term fitness commitment'
+        },
+        {
+          name: 'THREE_PEOPLE_36_SESSIONS',
+          price: 32400,
+          sessions: 36,
+          duration: '3 months',
+          oneOnOnePrice: 1350,
+          twoPeoplePrice: 1080,
+          threePeoplePrice: 900,
+          features: ['Quarterly group program', 'Team fitness challenges', 'Group transformation goals', 'Community support'],
+          description: '36 group sessions for sustained fitness progress'
+        },
+
+        // 72 Session Packages
+        {
+          name: 'ONE_ON_ONE_72_SESSIONS',
+          price: 86400,
+          sessions: 72,
+          duration: '6 months',
+          oneOnOnePrice: 1200,
+          twoPeoplePrice: 960,
+          threePeoplePrice: 800,
+          features: ['Complete lifestyle transformation', 'Advanced coaching techniques', 'Holistic wellness approach', 'Long-term habit formation'],
+          description: '72 sessions for ultimate fitness mastery over 6 months'
+        },
+        {
+          name: 'TWO_PEOPLE_72_SESSIONS',
+          price: 69120,
+          sessions: 72,
+          duration: '6 months',
+          oneOnOnePrice: 1200,
+          twoPeoplePrice: 960,
+          threePeoplePrice: 800,
+          features: ['Extended partner transformation', 'Long-term accountability', 'Comprehensive fitness journey', 'Sustained motivation'],
+          description: '72 partner sessions for ultimate fitness partnership'
+        },
+        {
+          name: 'THREE_PEOPLE_72_SESSIONS',
+          price: 57600,
+          sessions: 72,
+          duration: '6 months',
+          oneOnOnePrice: 1200,
+          twoPeoplePrice: 960,
+          threePeoplePrice: 800,
+          features: ['Extended group transformation', 'Long-term team building', 'Comprehensive group fitness', 'Community achievement'],
+          description: '72 group sessions for ultimate team fitness success'
+        }
+      ];
+
+      for (const tier of tiers) {
+        await pool.query(`
+          INSERT INTO membership_tiers (name, price, sessions, duration, oneOnOnePrice, twoPeoplePrice, threePeoplePrice, features, description)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          ON CONFLICT (name) DO NOTHING
+        `, [
+          tier.name, 
+          tier.price, 
+          tier.sessions, 
+          tier.duration, 
+          tier.oneOnOnePrice, 
+          tier.twoPeoplePrice, 
+          tier.threePeoplePrice, 
+          tier.features, 
+          tier.description
+        ]);
+      }
+      console.log('Membership tiers initialized successfully.');
+    } catch (error) {
+      console.error('Error initializing membership tiers:', error);
+      throw error;
+    }
+  },
+
   // Helper methods for mapping database results
   mapUserFromDb(row: any): User {
     if (!row || !row.id) return null;
@@ -1173,7 +1370,13 @@ export const storage = {
       name: row.name,
       price: parseFloat(row.price),
       features: row.features,
-      description: row.description
+      description: row.description,
+      // Map new fields
+      sessions: row.sessions,
+      duration: row.duration,
+      oneOnOnePrice: row.oneononeprice,
+      twoPeoplePrice: row.twopeopleprice,
+      threePeoplePrice: row.threepeopleprice
     };
   },
 

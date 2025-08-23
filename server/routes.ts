@@ -36,6 +36,16 @@ const isAuthenticated = async (req: any, res: any, next: any) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Simple test route
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'OK', 
+      message: 'Server is running',
+      timestamp: new Date().toISOString()
+    });
+  });
+
+  // API routes should be registered after Vite middleware
   // Setup session middleware with secret
   app.use(session({
     secret: 'reshape-fitness-dev-secret-key',
@@ -764,41 +774,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get trainer profile by email (since trainer profiles are standalone)
       const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE email = $1', [userEmail]);
-      if (trainerRows.length === 0) {
-        return res.json({
-          totalClients: 0,
-          todaySessions: 0,
-          weeklyHours: 0,
-          avgRating: 0
-        });
+
+      let totalClients = 0;
+      let todaySessions = 0;
+      let weeklyHours = 0;
+
+      if (trainerRows.length > 0) {
+        const trainerId = trainerRows[0].id;
+
+        // Get real stats from database for specific trainer
+        const { rows: clientStats } = await pool.query(`
+          SELECT COUNT(DISTINCT mta.member_id) as total_clients
+          FROM member_trainer_assignments mta
+          WHERE mta.trainer_id = $1 AND mta.is_active = true
+        `, [trainerId]);
+
+        const { rows: sessionStats } = await pool.query(`
+          SELECT COUNT(*) as today_sessions
+          FROM member_sessions ms
+          WHERE ms.trainer_id = $1 AND DATE(ms.scheduled_date) = CURRENT_DATE
+        `, [trainerId]);
+
+        const { rows: weeklyStats } = await pool.query(`
+          SELECT COALESCE(SUM(ms.duration), 0) as weekly_minutes
+          FROM member_sessions ms
+          WHERE ms.trainer_id = $1 
+          AND ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+          AND ms.scheduled_date <= CURRENT_DATE
+        `, [trainerId]);
+
+        totalClients = parseInt(clientStats[0]?.total_clients) || 0;
+        todaySessions = parseInt(sessionStats[0]?.today_sessions) || 0;
+        weeklyHours = Math.round((parseInt(weeklyStats[0]?.weekly_minutes) || 0) / 60);
+      } else if (userEmail === 'trainer@reshape.com') {
+        // For demo trainer, show aggregated stats from all assignments
+        const { rows: clientStats } = await pool.query(`
+          SELECT COUNT(DISTINCT mta.member_id) as total_clients
+          FROM member_trainer_assignments mta
+          WHERE mta.is_active = true
+        `);
+
+        const { rows: sessionStats } = await pool.query(`
+          SELECT COUNT(*) as today_sessions
+          FROM member_sessions ms
+          WHERE DATE(ms.scheduled_date) = CURRENT_DATE
+        `);
+
+        const { rows: weeklyStats } = await pool.query(`
+          SELECT COALESCE(SUM(ms.duration), 0) as weekly_minutes
+          FROM member_sessions ms
+          WHERE ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+          AND ms.scheduled_date <= CURRENT_DATE
+        `);
+
+        totalClients = parseInt(clientStats[0]?.total_clients) || 0;
+        todaySessions = parseInt(sessionStats[0]?.today_sessions) || 0;
+        weeklyHours = Math.round((parseInt(weeklyStats[0]?.weekly_minutes) || 0) / 60);
       }
-      const trainerId = trainerRows[0].id;
-
-      // Get real stats from database
-      const { rows: clientStats } = await pool.query(`
-        SELECT COUNT(DISTINCT mta.member_id) as total_clients
-        FROM member_trainer_assignments mta
-        WHERE mta.trainer_id = $1 AND mta.is_active = true
-      `, [trainerId]);
-
-      const { rows: sessionStats } = await pool.query(`
-        SELECT COUNT(*) as today_sessions
-        FROM member_sessions ms
-        WHERE ms.trainer_id = $1 AND DATE(ms.scheduled_date) = CURRENT_DATE
-      `, [trainerId]);
-
-      const { rows: weeklyStats } = await pool.query(`
-        SELECT COALESCE(SUM(ms.duration), 0) as weekly_minutes
-        FROM member_sessions ms
-        WHERE ms.trainer_id = $1 
-        AND ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
-        AND ms.scheduled_date <= CURRENT_DATE
-      `, [trainerId]);
 
       const stats = {
-        totalClients: parseInt(clientStats[0]?.total_clients) || 0,
-        todaySessions: parseInt(sessionStats[0]?.today_sessions) || 0,
-        weeklyHours: Math.round((parseInt(weeklyStats[0]?.weekly_minutes) || 0) / 60),
+        totalClients,
+        todaySessions,
+        weeklyHours,
         avgRating: 4.8 // This would need a ratings system implementation
       };
 
@@ -1279,7 +1316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/create-trainer', async (req, res) => {
     try {
       const trainerData = req.body;
-      
+
       // Validate required fields
       if (!trainerData.firstName || !trainerData.lastName || !trainerData.email) {
         return res.status(400).json({ message: "First name, last name, and email are required" });
@@ -1409,9 +1446,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/delete-trainer/:trainerId', async (req, res) => {
     try {
       const { trainerId } = req.params;
-      
+
       const { rows } = await pool.query('DELETE FROM trainer_profiles WHERE id = $1 RETURNING *', [trainerId]);
-      
+
       if (rows.length === 0) {
         return res.status(404).json({ message: "Trainer not found" });
       }
@@ -1427,7 +1464,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/create-member', async (req, res) => {
     try {
       const memberData = req.body;
-      
+
       // Validate required fields
       if (!memberData.firstName || !memberData.lastName || !memberData.email) {
         return res.status(400).json({ message: "First name, last name, and email are required" });
@@ -1772,7 +1809,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Handle 12-hour format (HH:MM AM/PM)
         const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = timeStr.match(time12Pattern);
+        const match = time12Pattern.match(timeStr);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -1896,21 +1933,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get assigned clients for a trainer
-  app.get('/api/trainer/assigned-clients', async (req: any, res) => {
+  app.get('/api/trainer/assigned-clients', isAuthenticated, async (req: any, res) => {
     try {
       const userEmail = req.session.user?.email;
       if (!userEmail) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Get trainer profile by email
+      // First, try to get trainer profile by email
       const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE email = $1', [userEmail]);
-      if (trainerRows.length === 0) {
+
+      let trainerId = null;
+      if (trainerRows.length > 0) {
+        trainerId = trainerRows[0].id;
+      } else {
+        // If no trainer profile found with email, check if this is a demo user
+        // For demo trainer, get all assignments for demonstration
+        if (userEmail === 'trainer@reshape.com') {
+          // Get all active assignments for demo purposes
+          const { rows } = await pool.query(`
+            SELECT mta.*, 
+                   mp.first_name as member_first_name,
+                   mp.last_name as member_last_name,
+                   mp.email as member_email,
+                   mp.phone as member_phone,
+                   CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
+                   tp.first_name as trainer_first_name,
+                   tp.last_name as trainer_last_name,
+                   CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name
+            FROM member_trainer_assignments mta
+            JOIN member_profiles mp ON mta.member_id = mp.id
+            JOIN trainer_profiles tp ON mta.trainer_id = tp.id
+            WHERE mta.is_active = true
+            ORDER BY mta.assigned_date DESC
+            LIMIT 10
+          `);
+
+          const assignments = rows.map(row => ({
+            id: row.id,
+            member_id: row.member_id,
+            trainer_id: row.trainer_id,
+            member_name: row.member_name,
+            member_first_name: row.member_first_name,
+            member_last_name: row.member_last_name,
+            member_email: row.member_email,
+            member_phone: row.member_phone,
+            assigned_date: row.assigned_date,
+            notes: row.notes,
+            is_active: row.is_active,
+            trainer_name: row.trainer_name
+          }));
+
+          return res.json(assignments);
+        }
         return res.json([]);
       }
-      const trainerId = trainerRows[0].id;
 
-      const assignments = await storage.getMemberTrainerAssignments({ trainerId });
+      // Get assigned clients with member details for specific trainer
+      const { rows } = await pool.query(`
+        SELECT mta.*, 
+               mp.first_name as member_first_name,
+               mp.last_name as member_last_name,
+               mp.email as member_email,
+               mp.phone as member_phone,
+               CONCAT(mp.first_name, ' ', mp.last_name) as member_name
+        FROM member_trainer_assignments mta
+        JOIN member_profiles mp ON mta.member_id = mp.id
+        WHERE mta.trainer_id = $1 AND mta.is_active = true
+        ORDER BY mta.assigned_date DESC
+      `, [trainerId]);
+
+      const assignments = rows.map(row => ({
+        id: row.id,
+        member_id: row.member_id,
+        trainer_id: row.trainer_id,
+        member_name: row.member_name,
+        member_first_name: row.member_first_name,
+        member_last_name: row.member_last_name,
+        member_email: row.member_email,
+        member_phone: row.member_phone,
+        assigned_date: row.assigned_date,
+        notes: row.notes,
+        is_active: row.is_active
+      }));
+
       res.json(assignments);
     } catch (error: any) {
       console.error('Error fetching assigned clients:', error);

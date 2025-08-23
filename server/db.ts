@@ -48,10 +48,16 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS membership_tiers (
       id SERIAL PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
-      price DECIMAL(10,2) NOT NULL,
+      price DECIMAL(10, 2) NOT NULL,
+      sessions INTEGER DEFAULT 0,
+      duration VARCHAR(100) DEFAULT '',
+      oneOnOnePrice DECIMAL(10, 2) DEFAULT 0,
+      twoPeoplePrice DECIMAL(10, 2) DEFAULT 0,
+      threePeoplePrice DECIMAL(10, 2) DEFAULT 0,
       features TEXT[],
       description TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
 
@@ -378,12 +384,35 @@ async function insertSampleData() {
 
       for (const tier of tiers) {
         await pool.query(
-          'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
-          [tier.name, tier.price, tier.features, tier.description]
+          'INSERT INTO membership_tiers (name, price, features, description, sessions, duration, oneOnOnePrice, twoPeoplePrice, threePeoplePrice) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [tier.name, tier.price, tier.features, tier.description, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.twoPeoplePrice, tier.threePeoplePrice]
         );
       }
       console.log('Membership tiers inserted');
     }
+
+    // Add missing columns to membership_tiers if they don't exist
+    const columnsToAdd = [
+      'sessions INTEGER DEFAULT 0',
+      'duration VARCHAR(100) DEFAULT \'\'',
+      'oneOnOnePrice DECIMAL(10, 2) DEFAULT 0',
+      'twoPeoplePrice DECIMAL(10, 2) DEFAULT 0',
+      'threePeoplePrice DECIMAL(10, 2) DEFAULT 0'
+    ];
+
+    for (const column of columnsToAdd) {
+      const columnName = column.split(' ')[0];
+      try {
+        await pool.query(`ALTER TABLE membership_tiers ADD COLUMN IF NOT EXISTS ${column}`);
+      } catch (error) {
+        // Column might already exist, continue
+        console.log(`Column ${columnName} might already exist in membership_tiers`);
+      }
+    }
+
+    // Initialize sample data
+    await insertSampleData();
+
 
     // Always ensure admin, trainer, and member users exist
     const adminEmail = 'admin@reshape.com';

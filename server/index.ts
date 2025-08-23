@@ -1,8 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic } from "./vite";
-import { initializeDatabase, closeDatabase } from "./db";
+import { registerRoutes } from "./routes.js";
+import { setupVite, serveStatic } from "./vite.js";
+import { initializeDatabase, closeDatabase } from "./db.js";
 
 const app = express();
 
@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 
     const server = await registerRoutes(app);
 
-    // importantly only setup vite in development and after routes are registered
+    // Setup Vite or static serving AFTER registering routes
     if (app.get("env") === "development") {
       await setupVite(app, server);
     } else {
@@ -69,6 +69,7 @@ app.use((req, res, next) => {
       }).format(new Date());
 
       console.log(`${formattedTime} [express] serving on port ${PORT}`);
+      console.log(`Frontend available at: http://0.0.0.0:${PORT}`);
     });
 
     // Graceful shutdown
