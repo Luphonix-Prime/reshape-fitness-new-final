@@ -43,6 +43,7 @@ export default function TrainerDashboard() {
   const [selectedSession, setSelectedSession] = useState<any>(null);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
+  const [showAddAssessment, setShowAddAssessment] = useState(false); // State for the new assessment dialog
 
   // State for New Assessment Form
   const [newAssessment, setNewAssessment] = useState({
@@ -122,6 +123,7 @@ export default function TrainerDashboard() {
   const { data: upcomingSessions = [], isLoading: sessionsLoading } = useQuery({
     queryKey: ['/api/trainer/sessions'],
     queryFn: () => apiRequest('GET', '/api/trainer/sessions'),
+    refetchInterval: 5000, // Refetch every 5 seconds for real-time updates
   });
 
   const { data: clients = [], isLoading: clientsLoading } = useQuery({
@@ -235,7 +237,7 @@ export default function TrainerDashboard() {
 
       toast({
         title: "Session Scheduled",
-        description: `Session with ${selectedMember.firstName} ${selectedMember.lastName} has been scheduled successfully.`
+        description: `Session with ${selectedMember.firstName} ${selectedMember.lastName} has been scheduled successfully and will appear in real-time.`
       });
 
       setShowNewSessionModal(false);
@@ -249,8 +251,11 @@ export default function TrainerDashboard() {
         notes: ""
       });
 
-      // Refresh the sessions list
+      // Refresh the sessions list immediately and show success
       queryClient.invalidateQueries({ queryKey: ['/api/trainer/sessions'] });
+
+      // Also refresh other related queries
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/stats'] });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -317,7 +322,7 @@ export default function TrainerDashboard() {
       title: "Assessment Created",
       description: `Assessment for ${newAssessment.clientName} has been created successfully.`
     });
-    setShowNewSessionModal(false); // Reusing modal for now, ideally a new modal for assessment
+    setShowAddAssessment(false); // Close the modal
     setNewAssessment({ // Reset form
       clientName: "",
       dateOfBirth: "",
@@ -359,6 +364,7 @@ export default function TrainerDashboard() {
       },
       advice: "",
     });
+    queryClient.invalidateQueries({ queryKey: ['/api/trainer/assessments'] }); // Refresh assessments
   };
 
 
@@ -526,288 +532,256 @@ export default function TrainerDashboard() {
             </TabsTrigger>
             <TabsTrigger value="assignments" className="data-[state=active]:bg-gold data-[state=active]:text-black">
               <Target className="h-4 w-4 mr-2" />
-              ASSIGNMENTS
+              CLIENT ASSIGNMENTS
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="schedule" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Today's Schedule */}
-              <div className="lg:col-span-2">
-                <Card className="bg-gray-900 border-gray-800">
-                  <CardHeader>
-                    <CardTitle className="text-gold flex items-center justify-between">
-                      Today's Schedule
-                      <Dialog open={showNewSessionModal} onOpenChange={setShowNewSessionModal}>
-                        <DialogTrigger asChild>
-                          <Button className="bg-gold text-black hover:bg-white">
-                            <Plus className="h-4 w-4 mr-2" />
-                            Schedule Session
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-gray-900 border-gray-800 text-white">
-                          <DialogHeader>
-                            <DialogTitle className="text-gold">Schedule New Session</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div>
-                              <Label htmlFor="memberId">Select Member</Label>
-                              <Select
-                                value={newSession.memberId}
-                                onValueChange={(value) => setNewSession({...newSession, memberId: value})}
-                              >
-                                <SelectTrigger className="bg-black border-gray-700 text-white">
-                                  <SelectValue placeholder="Select a member" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                  {allMembersLoading ? (
-                                    <SelectItem value="loading" disabled>
-                                      Loading members...
-                                    </SelectItem>
-                                  ) : allMembers?.length > 0 ? (
-                                    allMembers.map((member) => (
-                                      <SelectItem key={member.userId} value={member.userId}>
-                                        {member.firstName} {member.lastName}
-                                      </SelectItem>
-                                    ))
-                                  ) : (
-                                    <SelectItem value="no-members" disabled>
-                                      No members found
-                                    </SelectItem>
-                                  )}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label htmlFor="trainerId">Select Trainer</Label>
-                              <Select
-                                value={newSession.trainerId}
-                                onValueChange={(value) => setNewSession({...newSession, trainerId: value})}
-                              >
-                                <SelectTrigger className="bg-black border-gray-700 text-white">
-                                  <SelectValue placeholder="Select a trainer" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                  {allTrainersLoading ? (
-                                    <SelectItem value="loading" disabled>
-                                      Loading trainers...
-                                    </SelectItem>
-                                  ) : (() => {
-                                    // Filter trainers assigned to the selected member
-                                    const assignedTrainers = allTrainers?.filter(trainer => 
-                                      allTrainerAssignments?.some(assignment => 
-                                        assignment.member_id.toString() === newSession.memberId && 
-                                        assignment.trainer_id.toString() === trainer.userId
-                                      )
-                                    ) || [];
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-semibold text-gold">Upcoming Sessions</h3>
+              <Dialog open={showNewSessionModal} onOpenChange={setShowNewSessionModal}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gold text-black hover:bg-white">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Schedule Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-gold">Schedule New Session</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="memberId">Select Member</Label>
+                      <Select
+                        value={newSession.memberId}
+                        onValueChange={(value) => setNewSession({...newSession, memberId: value})}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select a member" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          {allMembersLoading ? (
+                            <SelectItem value="loading" disabled>
+                              Loading members...
+                            </SelectItem>
+                          ) : allMembers?.length > 0 ? (
+                            allMembers.map((member) => (
+                              <SelectItem key={member.userId} value={member.userId}>
+                                {member.firstName} {member.lastName}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="no-members" disabled>
+                              No members found
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="trainerId">Select Trainer</Label>
+                      <Select
+                        value={newSession.trainerId}
+                        onValueChange={(value) => setNewSession({...newSession, trainerId: value})}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select a trainer" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          {allTrainersLoading ? (
+                            <SelectItem value="loading" disabled>
+                              Loading trainers...
+                            </SelectItem>
+                          ) : (() => {
+                            // Filter trainers assigned to the selected member
+                            const assignedTrainers = allTrainers?.filter(trainer =>
+                              allTrainerAssignments?.some(assignment =>
+                                assignment.member_id.toString() === newSession.memberId &&
+                                assignment.trainer_id.toString() === trainer.userId
+                              )
+                            ) || [];
 
-                                    return assignedTrainers.length > 0 ? (
-                                      assignedTrainers.map((trainer) => (
-                                        <SelectItem key={trainer.userId} value={trainer.userId}>
-                                          {trainer.firstName} {trainer.lastName} - {trainer.specializations?.join(', ')}
-                                        </SelectItem>
-                                      ))
-                                    ) : (
-                                      <SelectItem value="no-assigned-trainers" disabled>
-                                        {newSession.memberId ? "No trainers assigned to this member" : "Select a member first"}
-                                      </SelectItem>
-                                    );
-                                  })()}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label htmlFor="sessionType">Session Type</Label>
-                              <Select
-                                value={newSession.sessionType}
-                                onValueChange={(value) => setNewSession({...newSession, sessionType: value})}
-                              >
-                                <SelectTrigger className="bg-black border-gray-700 text-white">
-                                  <SelectValue placeholder="Select session type" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                  <SelectItem value="strength">Strength Training</SelectItem>
-                                  <SelectItem value="cardio">Cardio</SelectItem>
-                                  <SelectItem value="hiit">HIIT</SelectItem>
-                                  <SelectItem value="yoga">Yoga</SelectItem>
-                                  <SelectItem value="pilates">Pilates</SelectItem>
-                                  <SelectItem value="consultation">Consultation</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label htmlFor="date">Date</Label>
-                                <Input
-                                  id="date"
-                                  type="date"
-                                  value={newSession.date}
-                                  onChange={(e) => setNewSession({...newSession, date: e.target.value})}
-                                  className="bg-black border-gray-700 text-white"
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="time">Time</Label>
-                                <Input
-                                  id="time"
-                                  type="time"
-                                  value={newSession.time}
-                                  onChange={(e) => setNewSession({...newSession, time: e.target.value})}
-                                  className="bg-black border-gray-700 text-white"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <Label htmlFor="duration">Duration (minutes)</Label>
-                              <Select
-                                value={newSession.duration}
-                                onValueChange={(value) => setNewSession({...newSession, duration: value})}
-                              >
-                                <SelectTrigger className="bg-black border-gray-700 text-white">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                                  <SelectItem value="30">30 minutes</SelectItem>
-                                  <SelectItem value="45">45 minutes</SelectItem>
-                                  <SelectItem value="60">60 minutes</SelectItem>
-                                  <SelectItem value="90">90 minutes</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label htmlFor="notes">Session Notes</Label>
-                              <Textarea
-                                id="notes"
-                                value={newSession.notes}
-                                onChange={(e) => setNewSession({...newSession, notes: e.target.value})}
-                                className="bg-black border-gray-700 text-white"
-                                placeholder="Add any special notes for this session..."
-                              />
-                            </div>
-                            <Button
-                              onClick={handleScheduleNewSession}
-                              className="w-full bg-gold text-black hover:bg-white"
-                            >
-                              Schedule Session
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {sessionsLoading ? (
-                      <div className="space-y-4">
-                        {[...Array(3)].map((_, i) => (
-                          <div key={i} className="animate-pulse bg-gray-800 rounded-lg p-4 h-24"></div>
-                        ))}
+                            return assignedTrainers.length > 0 ? (
+                              assignedTrainers.map((trainer) => (
+                                <SelectItem key={trainer.userId} value={trainer.userId}>
+                                  {trainer.firstName} {trainer.lastName} - {trainer.specializations?.join(', ')}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no-assigned-trainers" disabled>
+                                {newSession.memberId ? "No trainers assigned to this member" : "Select a member first"}
+                              </SelectItem>
+                            );
+                          })()}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="sessionType">Session Type</Label>
+                      <Select
+                        value={newSession.sessionType}
+                        onValueChange={(value) => setNewSession({...newSession, sessionType: value})}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select session type" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          <SelectItem value="strength">Strength Training</SelectItem>
+                          <SelectItem value="cardio">Cardio</SelectItem>
+                          <SelectItem value="hiit">HIIT</SelectItem>
+                          <SelectItem value="yoga">Yoga</SelectItem>
+                          <SelectItem value="pilates">Pilates</SelectItem>
+                          <SelectItem value="consultation">Consultation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="date">Date</Label>
+                        <Input
+                          id="date"
+                          type="date"
+                          value={newSession.date}
+                          onChange={(e) => setNewSession({...newSession, date: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
                       </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {upcomingSessions?.length > 0 ? (
-                          upcomingSessions.map((session) => (
-                            <div key={session.id} className="bg-black rounded-lg p-4 border border-gray-800">
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center space-x-3">
-                                  <User className="h-5 w-5 text-gold" />
-                                  <div>
-                                    <h3 className="text-white font-semibold">{session.clientName}</h3>
-                                    <p className="text-gray-400 text-sm">{session.sessionType}</p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-gold font-semibold">{session.time}</p>
-                                  <p className="text-gray-400 text-sm">{session.duration} min</p>
-                                </div>
+                      <div>
+                        <Label htmlFor="time">Time</Label>
+                        <Input
+                          id="time"
+                          type="time"
+                          value={newSession.time}
+                          onChange={(e) => setNewSession({...newSession, time: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="duration">Duration (minutes)</Label>
+                      <Select
+                        value={newSession.duration}
+                        onValueChange={(value) => setNewSession({...newSession, duration: value})}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="45">45 minutes</SelectItem>
+                          <SelectItem value="60">60 minutes</SelectItem>
+                          <SelectItem value="90">90 minutes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="notes">Session Notes</Label>
+                      <Textarea
+                        id="notes"
+                        value={newSession.notes}
+                        onChange={(e) => setNewSession({...newSession, notes: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="Add any special notes for this session..."
+                      />
+                    </div>
+                    <Button
+                      onClick={handleScheduleNewSession}
+                      className="w-full bg-gold text-black hover:bg-white"
+                    >
+                      Schedule Session
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">Sessions ({upcomingSessions?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {sessionsLoading ? (
+                  <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                      <div key={i} className="animate-pulse bg-gray-800 rounded-lg p-4 h-24"></div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {upcomingSessions?.length > 0 ? (
+                      upcomingSessions.map((session) => (
+                        <div key={session.id} className="bg-black rounded-lg p-4 border border-gray-800">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-3">
+                              <User className="h-5 w-5 text-gold" />
+                              <div>
+                                <h3 className="text-white font-semibold">{session.clientName}</h3>
+                                <p className="text-gray-400 text-sm">{session.sessionType}</p>
+                                {session.trainerName && (
+                                  <p className="text-blue-400 text-xs">Trainer: {session.trainerName}</p>
+                                )}
                               </div>
-                              <div className="flex items-center justify-between">
-                                {getStatusBadge(session.status)}
-                                <div className="flex space-x-2">
-                                  {session.status === "Pending" && (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        className="bg-green-600 hover:bg-green-700 text-white"
-                                        onClick={() => updateSessionStatus(session.id, "Confirmed")}
-                                      >
-                                        <CheckCircle className="h-4 w-4" />
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        onClick={() => updateSessionStatus(session.id, "Cancelled")}
-                                      >
-                                        <XCircle className="h-4 w-4" />
-                                      </Button>
-                                    </>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-gold hover:bg-gold hover:text-black"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                              {session.notes && (
-                                <p className="text-gray-400 text-sm mt-2 italic">{session.notes}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-gold font-semibold">{new Date(session.date).toLocaleDateString()}</p>
+                              <p className="text-gold font-semibold">{session.time}</p>
+                              <p className="text-gray-400 text-sm">{session.duration} min</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              {getStatusBadge(session.status)}
+                              {session.createdAt && (
+                                <Badge variant="outline" className="text-xs">
+                                  Scheduled {new Date(session.createdAt).toLocaleDateString()}
+                                </Badge>
                               )}
                             </div>
-                          ))
-                        ) : (
-                          <div className="text-center text-gray-400 py-8">
-                            <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-600" />
-                            <p>No upcoming sessions scheduled</p>
+                            <div className="flex space-x-2">
+                              {session.status === "Pending" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => updateSessionStatus(session.id, "Confirmed")}
+                                  >
+                                    <CheckCircle className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => updateSessionStatus(session.id, "Cancelled")}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-gold hover:bg-gold hover:text-black"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        )}
+                          {session.notes && (
+                            <p className="text-gray-400 text-sm mt-2 italic">"{session.notes}"</p>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center text-gray-400 py-8">
+                        <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-600" />
+                        <p>No upcoming sessions scheduled</p>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Quick Actions */}
-              <div>
-                <Card className="bg-gray-900 border-gray-800">
-                  <CardHeader>
-                    <CardTitle className="text-gold">Quick Actions</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <Button
-                      className="w-full bg-black border border-gold text-gold hover:bg-gold hover:text-black"
-                      onClick={() => setShowNewSessionModal(true)}
-                    >
-                      <CalendarDays className="h-4 w-4 mr-2" />
-                      Schedule New Session
-                    </Button>
-                    <Button
-                      className="w-full bg-black border border-green-600 text-green-400 hover:bg-green-600 hover:text-white"
-                      onClick={() => setShowNewWorkoutModal(true)}
-                    >
-                      <Dumbbell className="h-4 w-4 mr-2" />
-                      Create Workout Plan
-                    </Button>
-                    <Button
-                      className="w-full bg-black border border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
-                      onClick={() => setShowNewNutritionModal(true)}
-                    >
-                      <Apple className="h-4 w-4 mr-2" />
-                      Design Nutrition Plan
-                    </Button>
-                    <Button
-                      className="w-full bg-black border border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
-                    >
-                      <Users className="h-4 w-4 mr-2" />
-                      View All Clients
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
-
-
 
           <TabsContent value="inquiries" className="space-y-6">
             <div className="flex justify-between items-center">
@@ -1238,8 +1212,8 @@ export default function TrainerDashboard() {
 
           <TabsContent value="assessments" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gold">Client Assessments</h2>
-              <Dialog>
+              <h3 className="text-xl font-semibold text-gold">Client Assessments</h3>
+              <Dialog open={showAddAssessment} onOpenChange={setShowAddAssessment}>
                 <DialogTrigger asChild>
                   <Button className="bg-gold text-black hover:bg-white">
                     <Plus className="h-4 w-4 mr-2" />
@@ -1714,17 +1688,23 @@ export default function TrainerDashboard() {
                       <TableRow className="border-gray-800">
                         <TableHead className="text-gray-400">Client Name</TableHead>
                         <TableHead className="text-gray-400">Date</TableHead>
-                        <TableHead className="text-gray-400">Trainer</TableHead>
+                        <TableHead className="text-gray-400">Age</TableHead>
+                        <TableHead className="text-gray-400">Height</TableHead>
+                        <TableHead className="text-gray-400">Weight</TableHead>
+                        <TableHead className="text-gray-400">BMI</TableHead>
                         <TableHead className="text-gray-400">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {assessments?.length > 0 ? (
+                      {assessments && assessments.length > 0 ? (
                         assessments.map((assessment) => (
                           <TableRow key={assessment.id} className="border-gray-800">
-                            <TableCell className="text-white">{assessment.clientName}</TableCell>
+                            <TableCell className="text-white font-semibold">{assessment.clientName}</TableCell>
                             <TableCell className="text-gray-400">{assessment.date}</TableCell>
-                            <TableCell className="text-gray-400">{assessment.trainerName}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.age || 'N/A'}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.height ? `${assessment.height} cm` : 'N/A'}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.weight ? `${assessment.weight} kg` : 'N/A'}</TableCell>
+                            <TableCell className="text-gray-400">{assessment.bmi && typeof assessment.bmi === 'number' ? assessment.bmi.toFixed(1) : 'N/A'}</TableCell>
                             <TableCell>
                               <div className="flex space-x-2">
                                 <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
@@ -1742,9 +1722,10 @@ export default function TrainerDashboard() {
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center text-gray-400 py-8">
+                          <TableCell colSpan={7} className="text-center text-gray-400 py-8">
                             <Target className="h-12 w-12 mx-auto mb-4 text-gray-600" />
-                            <p>No assessments available</p>
+                            <p>No assessments available yet</p>
+                            <p className="text-sm text-gray-500 mt-2">Body assessments will appear here once created</p>
                           </TableCell>
                         </TableRow>
                       )}
@@ -2047,13 +2028,13 @@ export default function TrainerDashboard() {
 
           <TabsContent value="assignments" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold text-gold">All Trainer-Member Assignments</h2>
+              <h2 className="text-2xl font-bold text-gold">All Trainer-Client Assignments</h2>
             </div>
 
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader>
                 <CardTitle className="text-gold">Current Trainer Assignments ({allTrainerAssignments?.length || 0})</CardTitle>
-                <p className="text-sm text-gray-400 mt-2">All trainer-to-member assignments in the system</p>
+                <p className="text-sm text-gray-400 mt-2">All trainer-to-client assignments in the system</p>
               </CardHeader>
               <CardContent>
                 {allAssignmentsLoading ? (
@@ -2069,10 +2050,10 @@ export default function TrainerDashboard() {
                         <Table>
                           <TableHeader>
                             <TableRow className="border-gray-800">
-                              <TableHead className="text-gray-400">Member</TableHead>
+                              <TableHead className="text-gray-400">Client</TableHead>
                               <TableHead className="text-gray-400">Trainer</TableHead>
-                              <TableHead className="text-gray-400">Member Email</TableHead>
-                              <TableHead className="text-gray-400">Member Phone</TableHead>
+                              <TableHead className="text-gray-400">Client Email</TableHead>
+                              <TableHead className="text-gray-400">Client Phone</TableHead>
                               <TableHead className="text-gray-400">Assigned Date</TableHead>
                               <TableHead className="text-gray-400">Notes</TableHead>
                               <TableHead className="text-gray-400">Actions</TableHead>
@@ -2116,9 +2097,9 @@ export default function TrainerDashboard() {
                     ) : (
                       <div className="text-center text-gray-400 py-12">
                         <Target className="h-16 w-16 mx-auto mb-6 text-gray-600" />
-                        <h3 className="text-lg font-semibold text-white mb-2">No Trainer Assignments Found</h3>
-                        <p className="text-gray-400 mb-2">There are currently no trainer-member assignments in the system.</p>
-                        <p className="text-sm text-gray-500">Assignments will appear here once admins assign trainers to members.</p>
+                        <h3 className="text-lg font-semibold text-white mb-2">No Trainer-Client Assignments Found</h3>
+                        <p className="text-gray-400 mb-2">There are currently no trainer-client assignments in the system.</p>
+                        <p className="text-sm text-gray-500">Assignments will appear here once admins assign trainers to clients.</p>
                       </div>
                     )}
 
@@ -2129,7 +2110,7 @@ export default function TrainerDashboard() {
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-gray-400 text-sm">Total Assignments</p>
+                                <p className="text-gray-400 text-sm">Total Clients</p>
                                 <p className="text-xl font-bold text-gold">{allTrainerAssignments.length}</p>
                               </div>
                               <Users className="h-6 w-6 text-gold" />
@@ -2155,7 +2136,7 @@ export default function TrainerDashboard() {
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-gray-400 text-sm">Unique Members</p>
+                                <p className="text-gray-400 text-sm">Unique Clients</p>
                                 <p className="text-xl font-bold text-blue-400">
                                   {new Set(allTrainerAssignments.map(a => a.member_id)).size}
                                 </p>

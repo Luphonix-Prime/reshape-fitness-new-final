@@ -1073,11 +1073,18 @@ export const storage = {
     const memberName = sessionData.memberName && sessionData.memberName.trim() !== '' ? sessionData.memberName : null;
     const trainerName = sessionData.trainerName && sessionData.trainerName.trim() !== '' ? sessionData.trainerName : null;
 
+    console.log('Creating member session with data:', {
+      memberId, trainerId, sessionType, scheduledDate, scheduledTime,
+      duration, status, notes, memberName, trainerName
+    });
+
     const { rows } = await pool.query(
       `INSERT INTO member_sessions (member_id, trainer_id, session_type, scheduled_date, scheduled_time, duration, status, notes, member_name, trainer_name)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [memberId, trainerId, sessionType, scheduledDate, scheduledTime, duration, status, notes, memberName, trainerName]
     );
+    
+    console.log('Session created successfully:', rows[0]);
     return rows[0];
   },
 

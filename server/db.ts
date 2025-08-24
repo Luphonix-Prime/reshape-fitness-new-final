@@ -439,6 +439,121 @@ async function insertSampleData() {
       console.log('Member user and profile created');
     }
 
+    // Insert sample body assessments
+    const { rows: existingAssessments } = await pool.query('SELECT COUNT(*) FROM body_assessments');
+    if (parseInt(existingAssessments[0].count) === 0) {
+      const sampleAssessments = [
+        {
+          client_name: 'dhyey patel',
+          date_of_birth: '2025-01-01',
+          age: 25,
+          height: 175.5,
+          bp: '120/80',
+          bp_after_treadmill: '140/85',
+          emergency_contact: 'emergency@example.com',
+          bmi: 22.5,
+          weight: 70.5,
+          muscle: 45.2,
+          fat: 15.8,
+          saturated_fat: 8.5,
+          visceral_fat: 5.2,
+          bmr: 1650,
+          body_age: 23,
+          advice: 'Maintain current fitness level with regular cardio exercises'
+        },
+        {
+          client_name: 'John Smith',
+          date_of_birth: '1990-05-15',
+          age: 34,
+          height: 180.0,
+          bp: '125/82',
+          bp_after_treadmill: '145/88',
+          emergency_contact: 'john.emergency@example.com',
+          bmi: 24.7,
+          weight: 80.0,
+          muscle: 52.1,
+          fat: 18.5,
+          saturated_fat: 10.2,
+          visceral_fat: 6.8,
+          bmr: 1850,
+          body_age: 32,
+          advice: 'Focus on strength training and reduce body fat percentage'
+        }
+      ];
+
+      for (const assessment of sampleAssessments) {
+        await pool.query(`
+          INSERT INTO body_assessments (
+            client_name, date_of_birth, age, height, bp, bp_after_treadmill,
+            emergency_contact, bmi, weight, muscle, fat, saturated_fat,
+            visceral_fat, bmr, body_age, advice
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        `, [
+          assessment.client_name, assessment.date_of_birth, assessment.age,
+          assessment.height, assessment.bp, assessment.bp_after_treadmill,
+          assessment.emergency_contact, assessment.bmi, assessment.weight,
+          assessment.muscle, assessment.fat, assessment.saturated_fat,
+          assessment.visceral_fat, assessment.bmr, assessment.body_age, assessment.advice
+        ]);
+      }
+      console.log('Sample body assessments inserted');
+    }
+
+    // Insert sample member sessions
+    const { rows: existingSessions } = await pool.query('SELECT COUNT(*) FROM member_sessions');
+    if (parseInt(existingSessions[0].count) === 0) {
+      const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const sampleSessions = [
+        {
+          member_name: 'dhyey patel',
+          session_type: 'cardio',
+          scheduled_date: tomorrow.toISOString().split('T')[0],
+          scheduled_time: '10:00',
+          duration: 60,
+          status: 'scheduled',
+          notes: 'Focus on cardiovascular endurance',
+          trainer_name: 'Trainer Pro'
+        },
+        {
+          member_name: 'John Smith',
+          session_type: 'Strength Training',
+          scheduled_date: today.toISOString().split('T')[0],
+          scheduled_time: '14:30',
+          duration: 90,
+          status: 'confirmed',
+          notes: 'Upper body workout session',
+          trainer_name: 'Trainer Pro'
+        },
+        {
+          member_name: 'Sarah Johnson',
+          session_type: 'Personal Training',
+          scheduled_date: tomorrow.toISOString().split('T')[0],
+          scheduled_time: '09:00',
+          duration: 60,
+          status: 'pending',
+          notes: 'Initial assessment and goal setting',
+          trainer_name: 'Trainer Pro'
+        }
+      ];
+
+      for (const session of sampleSessions) {
+        await pool.query(`
+          INSERT INTO member_sessions (
+            member_name, session_type, scheduled_date, scheduled_time,
+            duration, status, notes, trainer_name
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          session.member_name, session.session_type, session.scheduled_date,
+          session.scheduled_time, session.duration, session.status,
+          session.notes, session.trainer_name
+        ]);
+      }
+      console.log('Sample member sessions inserted');
+    }
+
     console.log('Sample data initialization completed successfully');
   } catch (error) {
     console.error('Error inserting sample data:', error);

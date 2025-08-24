@@ -209,6 +209,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug endpoint to show database contents
+  app.get('/api/debug/database-contents', async (req, res) => {
+    try {
+      // Get all tables data
+      const sessions = await pool.query('SELECT * FROM member_sessions ORDER BY created_at DESC LIMIT 10');
+      const assessments = await pool.query('SELECT * FROM body_assessments ORDER BY created_at DESC LIMIT 10');
+      const members = await pool.query('SELECT * FROM member_profiles ORDER BY created_at DESC LIMIT 10');
+      const trainers = await pool.query('SELECT * FROM trainer_profiles ORDER BY created_at DESC LIMIT 10');
+      const assignments = await pool.query('SELECT * FROM member_trainer_assignments ORDER BY created_at DESC LIMIT 10');
+      const workoutPlans = await pool.query('SELECT * FROM workout_plans ORDER BY created_at DESC LIMIT 10');
+      const nutritionPlans = await pool.query('SELECT * FROM nutrition_plans ORDER BY created_at DESC LIMIT 10');
+
+      res.json({
+        sessions: sessions.rows,
+        assessments: assessments.rows,
+        members: members.rows,
+        trainers: trainers.rows,
+        assignments: assignments.rows,
+        workoutPlans: workoutPlans.rows,
+        nutritionPlans: nutritionPlans.rows,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Debug database contents error:', error);
+      res.status(500).json({ message: "Failed to fetch database contents", error: error.message });
+    }
+  });
+
   // Auth routes for demo login/logout
   app.post('/api/auth/login', async (req, res) => {
     try {
@@ -762,38 +790,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Get trainer profile by email (since trainer profiles are standalone)
-      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE email = $1', [userEmail]);
-      if (trainerRows.length === 0) {
-        return res.json({
-          totalClients: 0,
-          todaySessions: 0,
-          weeklyHours: 0,
-          avgRating: 0
-        });
-      }
-      const trainerId = trainerRows[0].id;
+      console.log(`Fetching stats for trainer user: ${userEmail}`);
 
-      // Get real stats from database
+      // For trainer dashboard, show overall stats (all assignments and sessions)
       const { rows: clientStats } = await pool.query(`
         SELECT COUNT(DISTINCT mta.member_id) as total_clients
         FROM member_trainer_assignments mta
-        WHERE mta.trainer_id = $1 AND mta.is_active = true
-      `, [trainerId]);
+        WHERE mta.is_active = true
+      `);
 
       const { rows: sessionStats } = await pool.query(`
         SELECT COUNT(*) as today_sessions
         FROM member_sessions ms
-        WHERE ms.trainer_id = $1 AND DATE(ms.scheduled_date) = CURRENT_DATE
-      `, [trainerId]);
+        WHERE DATE(ms.scheduled_date) = CURRENT_DATE
+      `);
 
       const { rows: weeklyStats } = await pool.query(`
         SELECT COALESCE(SUM(ms.duration), 0) as weekly_minutes
         FROM member_sessions ms
-        WHERE ms.trainer_id = $1
-        AND ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
+        WHERE ms.scheduled_date >= CURRENT_DATE - INTERVAL '7 days'
         AND ms.scheduled_date <= CURRENT_DATE
-      `, [trainerId]);
+      `);
 
       const stats = {
         totalClients: parseInt(clientStats[0]?.total_clients) || 0,
@@ -802,6 +819,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         avgRating: 4.8 // This would need a ratings system implementation
       };
 
+      console.log(`Trainer stats:`, stats);
       res.json(stats);
     } catch (error: any) {
       console.error('Error fetching trainer stats:', error);
@@ -812,21 +830,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/trainer/sessions', async (req: any, res) => {
     try {
       const userEmail = req.session.user?.email;
-      if (!userEmail) {
+      const userId = req.session.user?.id;
+
+      if (!userEmail || !userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Get trainer profile by email
-      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE email = $1', [userEmail]);
-      if (trainerRows.length === 0) {
-        return res.json([]);
-      }
-      const trainerId = trainerRows[0].id;
+      console.log(`Fetching sessions for trainer user: ${userEmail}`);
 
-      // Get upcoming sessions from database
+      // Get all upcoming sessions from database with trainer and member details
+      // For trainer dashboard, show all sessions (they can see all scheduled sessions)
       const { rows } = await pool.query(`
         SELECT ms.*,
                COALESCE(ms.member_name, CONCAT(mp.first_name, ' ', mp.last_name)) as client_name,
+               COALESCE(ms.trainer_name, CONCAT(tp.first_name, ' ', tp.last_name)) as trainer_name,
                ms.session_type,
                ms.scheduled_date::date as date,
                ms.scheduled_time as time,
@@ -835,24 +852,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
                  WHEN ms.status IS NULL THEN 'Pending'
                  ELSE INITCAP(ms.status)
                END as status,
-               ms.notes
+               ms.notes,
+               ms.created_at
         FROM member_sessions ms
         LEFT JOIN member_profiles mp ON ms.member_id = mp.id
-        WHERE ms.trainer_id = $1
-        AND ms.scheduled_date >= CURRENT_DATE
-        ORDER BY ms.scheduled_date, ms.scheduled_time
-        LIMIT 10
-      `, [trainerId]);
+        LEFT JOIN trainer_profiles tp ON ms.trainer_id = tp.id
+        WHERE ms.scheduled_date >= CURRENT_DATE
+        ORDER BY ms.created_at DESC, ms.scheduled_date, ms.scheduled_time
+        LIMIT 50
+      `);
+
+      console.log(`Found ${rows.length} sessions in database`);
 
       const sessions = rows.map(row => ({
         id: row.id,
-        clientName: row.client_name,
+        clientName: row.client_name || 'Unknown Client',
+        trainerName: row.trainer_name || 'Unknown Trainer',
         sessionType: row.session_type || 'Training Session',
         date: new Date(row.date).toISOString().split('T')[0],
         time: row.time || 'TBD',
         duration: row.duration || 60,
         status: row.status || 'Pending',
-        notes: row.notes || ''
+        notes: row.notes || '',
+        createdAt: row.created_at
       }));
 
       res.json(sessions);
@@ -923,7 +945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get workout plans created by this trainer
       const { rows } = await pool.query(`
         SELECT wp.*,
-               COALESCE(wp.member_name, CONCAT(mp.first_name, ' ', mp.last_name)) as client_name
+               CONCAT(mp.first_name, ' ', mp.last_name) as client_name
         FROM workout_plans wp
         LEFT JOIN member_profiles mp ON wp.member_id = mp.id
         WHERE wp.trainer_id = $1
@@ -932,7 +954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const workoutPlans = rows.map(row => ({
         id: row.id,
-        clientName: row.client_name,
+        clientName: row.client_name || 'Unknown Client',
         planName: row.plan_name,
         createdDate: row.created_at,
         exercises: 8 // This would need to be calculated from exercises table
@@ -962,7 +984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get nutrition plans created by this trainer
       const { rows } = await pool.query(`
         SELECT np.*,
-               COALESCE(np.member_name, CONCAT(mp.first_name, ' ', mp.last_name)) as client_name
+               CONCAT(mp.first_name, ' ', mp.last_name) as client_name
         FROM nutrition_plans np
         LEFT JOIN member_profiles mp ON np.member_id = mp.id
         WHERE np.trainer_id = $1
@@ -971,7 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const nutritionPlans = rows.map(row => ({
         id: row.id,
-        clientName: row.client_name,
+        clientName: row.client_name || 'Unknown Client',
         planName: row.plan_name,
         createdDate: row.created_at,
         calories: row.calories || 2000
@@ -988,35 +1010,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userEmail = req.session.user?.email;
       const userName = `${req.session.user?.firstName || 'Trainer'} ${req.session.user?.lastName || 'Pro'}`;
-      if (!userEmail) {
+      const userId = req.session.user?.id;
+
+      if (!userEmail || !userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      // Get trainer profile by email
-      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE email = $1', [userEmail]);
-      if (trainerRows.length === 0) {
-        return res.json([]);
-      }
-      const trainerId = trainerRows[0].id;
+      console.log(`Fetching assessments for trainer: ${userName} (${userEmail}) with user ID: ${userId}`);
 
-      // Get body assessments for this trainer's clients
+      // Get all body assessments from the database
       const { rows } = await pool.query(`
         SELECT ba.*,
                COALESCE(ba.client_name, CONCAT(mp.first_name, ' ', mp.last_name)) as client_name,
-               COALESCE(CONCAT(tp.first_name, ' ', tp.last_name), $2) as trainer_name
+               '${userName}' as trainer_name
         FROM body_assessments ba
         LEFT JOIN member_profiles mp ON ba.member_id = mp.id
-        LEFT JOIN trainer_profiles tp ON tp.id = $1
-        LEFT JOIN member_trainer_assignments mta ON mp.id = mta.member_id AND mta.trainer_id = $1
-        WHERE mta.trainer_id = $1 OR ba.trainer_id = $1
         ORDER BY ba.created_at DESC
-      `, [trainerId, userName]);
+      `);
+
+      console.log(`Found ${rows.length} assessments in database`);
 
       const assessments = rows.map(row => ({
         id: row.id,
         clientName: row.client_name,
         date: new Date(row.created_at).toISOString().split('T')[0],
-        trainerName: row.trainer_name
+        trainerName: row.trainer_name,
+        age: row.age,
+        height: row.height,
+        weight: row.weight,
+        bmi: row.bmi,
+        advice: row.advice
       }));
 
       res.json(assessments);
@@ -1089,17 +1112,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         convertedScheduledTime = converted;
       }
 
-      const session = await storage.createMemberSession({
+      const sessionData = {
         memberId,
         trainerId,
+        memberName: memberName,
+        trainerName: trainerName,
         sessionType,
         scheduledDate,
         scheduledTime: convertedScheduledTime,
         duration: duration || 60,
         notes,
-        memberName,
-        trainerName
-      });
+        status: 'scheduled'
+      };
+
+      console.log('Creating session with data:', sessionData);
+
+      const session = await storage.createMemberSession(sessionData);
 
       res.json({
         message: "Session scheduled successfully",
@@ -1666,7 +1694,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/inquiries/:inquiryId/convert', async (req, res) => {
     try {
       const { inquiryId } = req.params;
-      const { memberData, assessmentData } = req.body;
 
       // Get the inquiry details from inquiries table
       const { rows: inquiryRows } = await pool.query('SELECT * FROM inquiries WHERE id = $1', [inquiryId]);
@@ -1683,35 +1710,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastName: inquiry.last_name,
         email: inquiry.email,
         phone: inquiry.phone,
-        membershipTierId: memberData?.membershipTierId || null,
+        membershipTierId: req.body.memberData?.membershipTierId || null,
         emergencyContact: inquiry.phone || inquiry.email,
         fitnessGoals: "Converted from inquiry - General fitness improvement"
       });
 
       // Create body assessment if provided with proper validation
-      if (assessmentData && Object.keys(assessmentData).length > 0) {
+      if (req.body.assessmentData && Object.keys(req.body.assessmentData).length > 0) {
         // Clean and validate assessment data
         const cleanedAssessmentData = {
           memberId: memberProfile.id,
-          dateOfBirth: assessmentData.dateOfBirth || null,
-          age: assessmentData.age && assessmentData.age.toString().trim() !== '' ? parseInt(assessmentData.age) : null,
-          height: assessmentData.height && assessmentData.height.toString().trim() !== '' ? parseFloat(assessmentData.height) : null,
-          bloodPressure: assessmentData.bloodPressure || null,
-          afterTreadmillBP: assessmentData.afterTreadmillBP || null,
-          emergencyContact: assessmentData.emergencyContact || inquiry.phone || inquiry.email,
+          dateOfBirth: req.body.assessmentData.dateOfBirth || null,
+          age: req.body.assessmentData.age && req.body.assessmentData.age.toString().trim() !== '' ? parseInt(req.body.assessmentData.age) : null,
+          height: req.body.assessmentData.height && req.body.assessmentData.height.toString().trim() !== '' ? parseFloat(req.body.assessmentData.height) : null,
+          bloodPressure: req.body.assessmentData.bloodPressure || null,
+          afterTreadmillBP: req.body.assessmentData.afterTreadmillBP || null,
+          emergencyContact: req.body.assessmentData.emergencyContact || inquiry.phone || inquiry.email,
           bodyComposition: {
-            bmi: assessmentData.bodyComposition?.bmi && assessmentData.bodyComposition.bmi.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.bmi) : null,
-            weight: assessmentData.bodyComposition?.weight && assessmentData.bodyComposition.weight.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.weight) : null,
-            muscle: assessmentData.bodyComposition?.muscle && assessmentData.bodyComposition.muscle.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.muscle) : null,
-            fat: assessmentData.bodyComposition?.fat && assessmentData.bodyComposition.fat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.fat) : null,
-            saturatedFat: assessmentData.bodyComposition?.saturatedFat && assessmentData.bodyComposition.saturatedFat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.saturatedFat) : null,
-            visceralFat: assessmentData.bodyComposition?.visceralFat && assessmentData.bodyComposition.visceralFat.toString().trim() !== '' ? parseFloat(assessmentData.bodyComposition.visceralFat) : null,
-            bmr: assessmentData.bodyComposition?.bmr && assessmentData.bodyComposition.bmr.toString().trim() !== '' ? parseInt(assessmentData.bodyComposition.bmr) : null,
-            bodyAge: assessmentData.bodyComposition?.bodyAge && assessmentData.bodyComposition.bodyAge.toString().trim() !== '' ? parseInt(assessmentData.bodyComposition.bodyAge) : null
+            bmi: req.body.assessmentData.bodyComposition?.bmi && req.body.assessmentData.bodyComposition.bmi.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.bmi) : null,
+            weight: req.body.assessmentData.bodyComposition?.weight && req.body.assessmentData.bodyComposition.weight.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.weight) : null,
+            muscle: req.body.assessmentData.bodyComposition?.muscle && req.body.assessmentData.bodyComposition.muscle.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.muscle) : null,
+            fat: req.body.assessmentData.bodyComposition?.fat && req.body.assessmentData.bodyComposition.fat.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.fat) : null,
+            saturatedFat: req.body.assessmentData.bodyComposition?.saturatedFat && req.body.assessmentData.bodyComposition.saturatedFat.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.saturatedFat) : null,
+            visceralFat: req.body.assessmentData.bodyComposition?.visceralFat && req.body.assessmentData.bodyComposition.visceralFat.toString().trim() !== '' ? parseFloat(req.body.assessmentData.bodyComposition.visceralFat) : null,
+            bmr: req.body.assessmentData.bodyComposition?.bmr && req.body.assessmentData.bodyComposition.bmr.toString().trim() !== '' ? parseInt(req.body.assessmentData.bodyComposition.bmr) : null,
+            bodyAge: req.body.assessmentData.bodyComposition?.bodyAge && req.body.assessmentData.bodyComposition.bodyAge.toString().trim() !== '' ? parseInt(req.body.assessmentData.bodyComposition.bodyAge) : null
           },
-          posturalAssessment: assessmentData.posturalAssessment || {},
-          circumferenceMeasurements: assessmentData.circumferenceMeasurements || {},
-          advice: assessmentData.advice || null
+          posturalAssessment: req.body.assessmentData.posturalAssessment || {},
+          circumferenceMeasurements: req.body.assessmentData.circumferenceMeasurements || {},
+          advice: req.body.assessmentData.advice || null
         };
 
         await storage.createBodyAssessment(cleanedAssessmentData);
@@ -1963,12 +1990,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await storage.removeTrainerFromMember(memberId, trainerId);
 
       res.json({
-        message: "Trainer removed from member successfully",
+        message: "Trainer removed from client successfully",
         result
       });
     } catch (error: any) {
-      console.error("Error removing trainer from member:", error);
-      res.status(500).json({ message: error.message || "Failed to remove trainer from member" });
+      console.error("Error removing trainer from client:", error);
+      res.status(500).json({ message: error.message || "Failed to remove trainer from client" });
     }
   });
 
@@ -2002,10 +2029,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { memberId, trainerId } = req.params;
       await storage.removeTrainerFromMember(memberId, trainerId);
-      res.json({ message: "Trainer removed from member successfully" });
+      res.json({ message: "Trainer removed from client successfully" });
     } catch (error: any) {
-      console.error("Error removing trainer from member:", error);
-      res.status(500).json({ message: error.message || "Failed to remove trainer from member" });
+      console.error("Error removing trainer from client:", error);
+      res.status(500).json({ message: error.message || "Failed to remove trainer from client" });
     }
   });
 

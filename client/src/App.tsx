@@ -20,7 +20,9 @@ import Subscribe from "@/pages/Subscribe";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import ConfirmEmailChange from "@/pages/ConfirmEmailChange";
-import NotFound from "@/pages/not-found";
+import NotFound from "./pages/not-found";
+import DatabaseDebug from "./pages/DatabaseDebug";
+
 
 function Router() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -50,6 +52,7 @@ function Router() {
       <Route path="/member-dashboard" component={MemberDashboard} />
       <Route path="/trainer-dashboard" component={TrainerDashboard} />
       <Route path="/admin-dashboard" component={AdminDashboard} />
+      <Route path="/debug" component={DatabaseDebug} />
 
       {/* Default route - redirect based on authentication and user type */}
       <Route path="/">
