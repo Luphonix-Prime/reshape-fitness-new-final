@@ -49,7 +49,15 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS membership_tiers (
       id SERIAL PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
-      price DECIMAL(10,2) NOT NULL,
+      sessions INTEGER NOT NULL,
+      duration VARCHAR(50) NOT NULL,
+      one_on_one_price DECIMAL(10,2) NOT NULL,
+      one_on_one_per_session DECIMAL(10,2) NOT NULL,
+      two_people_price DECIMAL(10,2) NOT NULL,
+      two_people_per_session DECIMAL(10,2) NOT NULL,
+      three_people_price DECIMAL(10,2) NOT NULL,
+      three_people_per_session DECIMAL(10,2) NOT NULL,
+      tiers JSONB DEFAULT '[]',
       features TEXT[],
       description TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -68,6 +76,7 @@ async function createTables() {
       fitness_goals TEXT,
       emergency_contact VARCHAR(255),
       tier_category VARCHAR(20),
+      training_type VARCHAR(20) DEFAULT 'one_on_one',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -316,15 +325,25 @@ async function insertSampleData() {
     // Insert membership tiers (always check/insert these)
     const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
     if (parseInt(existingTiers[0].count) === 0) {
+      // Clear existing membership tiers to avoid conflicts
+      await pool.query('DELETE FROM membership_tiers');
+
       const tiers = [
         {
-          name: 'TIER 1',
-          price: 18000,
-          duration: '1 month',
+          name: '12 Session Package',
           sessions: 12,
-          oneOnOnePrice: 1500,
-          twoPeoplePrice: 1200,
-          threePeoplePrice: 1000,
+          duration: '1 month',
+          oneOnOnePrice: 18000,
+          oneOnOnePerSession: 1500,
+          twoPeoplePrice: 14400,
+          twoPeoplePerSession: 1200,
+          threePeoplePrice: 12000,
+          threePeoplePerSession: 1000,
+          tiersData: JSON.stringify([
+            { type: 'one_on_one', price: 18000, perSession: 1500 },
+            { type: 'two_people', price: 14400, perSession: 1200 },
+            { type: 'three_people', price: 12000, perSession: 1000 }
+          ]),
           description: '12 sessions in 1 month',
           features: JSON.stringify([
             '12 Personal Training Sessions',
@@ -335,13 +354,20 @@ async function insertSampleData() {
           ])
         },
         {
-          name: 'TIER 2',
-          price: 34200,
-          duration: '1 month',
+          name: '24 Session Package',
           sessions: 24,
-          oneOnOnePrice: 1425,
-          twoPeoplePrice: 1140,
-          threePeoplePrice: 950,
+          duration: '1 month',
+          oneOnOnePrice: 34200,
+          oneOnOnePerSession: 1425,
+          twoPeoplePrice: 27360,
+          twoPeoplePerSession: 1140,
+          threePeoplePrice: 22800,
+          threePeoplePerSession: 950,
+          tiersData: JSON.stringify([
+            { type: 'one_on_one', price: 34200, perSession: 1425 },
+            { type: 'two_people', price: 27360, perSession: 1140 },
+            { type: 'three_people', price: 22800, perSession: 950 }
+          ]),
           description: '24 sessions in 1 month',
           features: JSON.stringify([
             '24 Personal Training Sessions',
@@ -353,13 +379,20 @@ async function insertSampleData() {
           ])
         },
         {
-          name: 'TIER 3',
-          price: 48600,
-          duration: '3 months',
+          name: '36 Session Package',
           sessions: 36,
-          oneOnOnePrice: 1350,
-          twoPeoplePrice: 1080,
-          threePeoplePrice: 900,
+          duration: '3 months',
+          oneOnOnePrice: 48600,
+          oneOnOnePerSession: 1350,
+          twoPeoplePrice: 38880,
+          twoPeoplePerSession: 1080,
+          threePeoplePrice: 32400,
+          threePeoplePerSession: 900,
+          tiersData: JSON.stringify([
+            { type: 'one_on_one', price: 48600, perSession: 1350 },
+            { type: 'two_people', price: 38880, perSession: 1080 },
+            { type: 'three_people', price: 32400, perSession: 900 }
+          ]),
           description: '36 sessions in 3 months',
           features: JSON.stringify([
             '36 Personal Training Sessions',
@@ -371,13 +404,20 @@ async function insertSampleData() {
           ])
         },
         {
-          name: 'TIER 4',
-          price: 86400,
-          duration: '6 months',
+          name: '72 Session Package',
           sessions: 72,
-          oneOnOnePrice: 1200,
-          twoPeoplePrice: 960,
-          threePeoplePrice: 800,
+          duration: '6 months',
+          oneOnOnePrice: 86400,
+          oneOnOnePerSession: 1200,
+          twoPeoplePrice: 69120,
+          twoPeoplePerSession: 960,
+          threePeoplePrice: 57600,
+          threePeoplePerSession: 800,
+          tiersData: JSON.stringify([
+            { type: 'one_on_one', price: 86400, perSession: 1200 },
+            { type: 'two_people', price: 69120, perSession: 960 },
+            { type: 'three_people', price: 57600, perSession: 800 }
+          ]),
           description: '72 sessions in 6 months',
           features: JSON.stringify([
             '72 Personal Training Sessions',
@@ -393,8 +433,8 @@ async function insertSampleData() {
 
       for (const tier of tiers) {
         await pool.query(
-          'INSERT INTO membership_tiers (name, price, features, description) VALUES ($1, $2, $3, $4)',
-          [tier.name, tier.price, tier.features, tier.description]
+          'INSERT INTO membership_tiers (name, sessions, duration, one_on_one_price, one_on_one_per_session, two_people_price, two_people_per_session, three_people_price, three_people_per_session, tiers, features, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+          [tier.name, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.oneOnOnePerSession, tier.twoPeoplePrice, tier.twoPeoplePerSession, tier.threePeoplePrice, tier.threePeoplePerSession, tier.tiersData, tier.features, tier.description]
         );
       }
       console.log('Membership tiers inserted');

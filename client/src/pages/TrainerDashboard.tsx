@@ -50,6 +50,18 @@ interface NutritionPlan {
   id: number;
   clientName: string;
   planName: string;
+  description: string;
+  calories: number;
+  meals: string;
+  createdDate: string;
+  clientId: string;
+  trainerId: string;
+}
+
+interface NutritionPlan {
+  id: number;
+  clientName: string;
+  planName: string;
   createdDate: string;
   calories: string | number;
   description: string;
@@ -67,14 +79,14 @@ export default function TrainerDashboard() {
   const [showNewSessionModal, setShowNewSessionModal] = useState(false);
   const [showNewWorkoutModal, setShowNewWorkoutModal] = useState(false);
   const [showNewNutritionModal, setShowNewNutritionModal] = useState(false);
+  const [editingWorkoutPlan, setEditingWorkoutPlan] = useState<WorkoutPlan | null>(null);
+  const [showEditNutritionModal, setShowEditNutritionModal] = useState(false);
+  const [editingNutritionPlan, setEditingNutritionPlan] = useState<NutritionPlan | null>(null);
   const [selectedSession, setSelectedSession] = useState<any>(null);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
   const [showAddAssessment, setShowAddAssessment] = useState(false); // State for the new assessment dialog
-  const [showEditWorkoutModal, setShowEditWorkoutModal] = useState(false);
-  const [showEditNutritionModal, setShowEditNutritionModal] = useState(false);
-  const [editingWorkoutPlan, setEditingWorkoutPlan] = useState<WorkoutPlan | null>(null);
-  const [editingNutritionPlan, setEditingNutritionPlan] = useState<NutritionPlan | null>(null);
+
 
   // State for New Assessment Form
   const [newAssessment, setNewAssessment] = useState({
@@ -273,18 +285,58 @@ export default function TrainerDashboard() {
     }
   });
 
+  const convertInquiryMutation = useMutation({
+    mutationFn: ({ inquiryId, memberData, assessmentData }: { inquiryId: string, memberData: any, assessmentData: any }) =>
+      apiRequest('POST', `/api/admin/inquiries/${inquiryId}/convert`, { memberData, assessmentData }),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Converted",
+        description: "Inquiry has been converted to member successfully."
+      });
+      setShowConvertModal(false);
+      setSelectedInquiry(null);
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/inquiries'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to convert inquiry",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteInquiryMutation = useMutation({
+    mutationFn: (inquiryId: string) => apiRequest('DELETE', `/api/admin/inquiries/${inquiryId}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Inquiry Cancelled",
+        description: "Inquiry has been cancelled successfully."
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/inquiries'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel inquiry",
+        variant: "destructive"
+      });
+    }
+  });
+
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
     setShowConvertModal(true);
   };
 
-  const handleDeleteInquiry = (inquiryId: string) => {
+  const handleDeleteInquiry = async (inquiryId: string) => {
     if (confirm('Are you sure you want to cancel this inquiry?')) {
-      toast({
-        title: "Inquiry Cancelled",
-        description: "Inquiry has been cancelled successfully."
-      });
+      try {
+        await deleteInquiryMutation.mutateAsync(inquiryId);
+      } catch (error: any) {
+        console.error('Error deleting inquiry:', error);
+      }
     }
   };
 
@@ -292,13 +344,15 @@ export default function TrainerDashboard() {
     e.preventDefault();
     if (!selectedInquiry) return;
 
-    toast({
-      title: "Inquiry Converted",
-      description: `${selectedInquiry.firstName} ${selectedInquiry.lastName} has been converted to a member successfully.`
-    });
+    const memberData = {
+      membershipTierId: ""
+    };
 
-    setShowConvertModal(false);
-    setSelectedInquiry(null);
+    convertInquiryMutation.mutate({
+      inquiryId: selectedInquiry._id,
+      memberData,
+      assessmentData: newAssessment
+    });
   };
 
   const handleScheduleNewSession = async () => {
@@ -1020,13 +1074,14 @@ export default function TrainerDashboard() {
 
             {/* Convert Inquiry Modal */}
             <Dialog open={showConvertModal} onOpenChange={setShowConvertModal}>
-              <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl">
-                <DialogHeader>
+              <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader className="flex-shrink-0">
                   <DialogTitle className="text-gold">
                     Convert Inquiry to Member - {selectedInquiry?.firstName} {selectedInquiry?.lastName}
                   </DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmitConversion} className="space-y-6">
+                <form onSubmit={handleSubmitConversion} className="flex flex-col h-full overflow-hidden">
+                  <div className="flex-1 overflow-y-auto space-y-6 pr-2">
                   <div className="space-y-4 p-4 bg-black rounded-lg">
                     <h3 className="text-lg font-semibold text-gold">Inquiry Information</h3>
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -1054,18 +1109,20 @@ export default function TrainerDashboard() {
                   </div>
 
                   {/* Complete Body Assessment Form */}
-                  <div className="space-y-6">
-                    <h3 className="text-lg font-semibold text-gold">Complete Body Assessment</h3>
+                    <div className="space-y-6">
+                      <h3 className="text-lg font-semibold text-gold">Complete Body Assessment</h3>
 
-                    {/* Basic Information */}
-                    <div className="space-y-4 p-4 bg-black rounded-lg">
-                      <h4 className="text-md font-semibold text-gold">Basic Information</h4>
-                      <div className="grid grid-cols-2 gap-4">
+                      {/* Basic Information */}
+                      <div className="space-y-4 p-4 bg-black rounded-lg">
+                        <h4 className="text-md font-semibold text-gold">Basic Information</h4>
+                        <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="dateOfBirth">Date of Birth</Label>
                           <Input
                             type="date"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.dateOfBirth}
+                            onChange={(e) => setNewAssessment({...newAssessment, dateOfBirth: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1073,6 +1130,8 @@ export default function TrainerDashboard() {
                           <Input
                             type="number"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.age || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, age: parseInt(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1080,6 +1139,8 @@ export default function TrainerDashboard() {
                           <Input
                             type="number"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.height || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, height: parseInt(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1087,6 +1148,8 @@ export default function TrainerDashboard() {
                           <Input
                             placeholder="e.g., 124/84"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.bp}
+                            onChange={(e) => setNewAssessment({...newAssessment, bp: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1094,13 +1157,16 @@ export default function TrainerDashboard() {
                           <Input
                             placeholder="e.g., 152/92"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.bpAfterTreadmill}
+                            onChange={(e) => setNewAssessment({...newAssessment, bpAfterTreadmill: e.target.value})}
                           />
                         </div>
                         <div>
                           <Label htmlFor="emergencyContact">Emergency Contact</Label>
                           <Input
                             className="bg-black border-gray-700 text-white"
-                            defaultValue={selectedInquiry?.phone}
+                            value={newAssessment.emergencyContact}
+                            onChange={(e) => setNewAssessment({...newAssessment, emergencyContact: e.target.value})}
                           />
                         </div>
                       </div>
@@ -1116,6 +1182,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.bmi || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, bmi: parseFloat(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1124,6 +1192,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.weight || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, weight: parseFloat(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1132,6 +1202,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.muscle || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, muscle: parseFloat(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1140,6 +1212,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.fat || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, fat: parseFloat(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1148,6 +1222,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.saturatedFat || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, saturatedFat: parseFloat(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1155,6 +1231,8 @@ export default function TrainerDashboard() {
                           <Input
                             type="number"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.visceralFat || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, visceralFat: parseInt(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1162,6 +1240,8 @@ export default function TrainerDashboard() {
                           <Input
                             type="number"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.bmr || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, bmr: parseInt(e.target.value)})}
                           />
                         </div>
                         <div>
@@ -1169,6 +1249,8 @@ export default function TrainerDashboard() {
                           <Input
                             type="number"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.bodyAge || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, bodyAge: parseInt(e.target.value)})}
                           />
                         </div>
                       </div>
@@ -1192,6 +1274,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., neutral"
+                            value={newAssessment.headNeckAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, headNeckAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1199,6 +1283,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., rounded shoulder"
+                            value={newAssessment.shoulderAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, shoulderAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1206,6 +1292,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., kyphotic curve"
+                            value={newAssessment.upperBackAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, upperBackAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1213,6 +1301,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., neutral"
+                            value={newAssessment.lowerBackAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, lowerBackAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1220,6 +1310,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., neutral"
+                            value={newAssessment.pelvicAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, pelvicAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1227,6 +1319,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., neutral"
+                            value={newAssessment.hipKneeAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, hipKneeAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1234,6 +1328,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., neutral"
+                            value={newAssessment.ankleAlignment}
+                            onChange={(e) => setNewAssessment({...newAssessment, ankleAlignment: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1241,6 +1337,8 @@ export default function TrainerDashboard() {
                           <Input
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., decreased (spinal rotation, side bending, forward flexion)"
+                            value={newAssessment.spinalMobility}
+                            onChange={(e) => setNewAssessment({...newAssessment, spinalMobility: e.target.value})}
                           />
                         </div>
                       </div>
@@ -1250,6 +1348,8 @@ export default function TrainerDashboard() {
                           <Textarea
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., hamstring, glutes maximus, TFL, calf, trapezius, pectoral"
+                            value={newAssessment.recommendations}
+                            onChange={(e) => setNewAssessment({...newAssessment, recommendations: e.target.value})}
                           />
                         </div>
                         <div>
@@ -1257,6 +1357,8 @@ export default function TrainerDashboard() {
                           <Textarea
                             className="bg-black border-gray-700 text-white"
                             placeholder="e.g., gluteus maximus and quadriceps, rotator cuff, scapular muscle"
+                            value={newAssessment.recommendations} // Assuming this is where strengthening goes
+                            onChange={(e) => setNewAssessment({...newAssessment, recommendations: e.target.value})}
                           />
                         </div>
                       </div>
@@ -1272,6 +1374,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.neck || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1280,6 +1384,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.shoulders || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1288,14 +1394,20 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.chest || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: parseFloat(e.target.value)}})}
                           />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <Label htmlFor="upperArm">Upper Arm</Label>
                           <Input
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.upperArm || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, upperArm: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1304,6 +1416,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.forearms || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, forearms: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1312,14 +1426,20 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.wrist || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, wrist: parseFloat(e.target.value)}})}
                           />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <Label htmlFor="waist">Waist</Label>
                           <Input
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.waist || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1328,6 +1448,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.hip || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1336,14 +1458,20 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.thighs || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, thighs: parseFloat(e.target.value)}})}
                           />
                         </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <Label htmlFor="calf">Calf</Label>
                           <Input
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.calf || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, calf: parseFloat(e.target.value)}})}
                           />
                         </div>
                         <div>
@@ -1352,6 +1480,8 @@ export default function TrainerDashboard() {
                             type="number"
                             step="0.1"
                             className="bg-black border-gray-700 text-white"
+                            value={newAssessment.circumferenceMeasurements.ankle || ""}
+                            onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, ankle: parseFloat(e.target.value)}})}
                           />
                         </div>
                       </div>
@@ -1366,14 +1496,19 @@ export default function TrainerDashboard() {
                           className="bg-black border-gray-700 text-white"
                           rows={4}
                           placeholder="e.g., Lower body mobility exercises, Deep breathing exercises, Core strengthening, Pelvic floor muscle activation, Glutes muscles and quadriceps strengthening, Rotator cuff strengthening, Scapular strengthening"
+                          value={newAssessment.advice}
+                          onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
                         />
+                      </div>
                       </div>
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-gold text-black hover:bg-white">
-                    Convert to Member
-                  </Button>
+                  <div className="flex-shrink-0 pt-4 border-t border-gray-800">
+                    <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={convertInquiryMutation.isPending}>
+                      {convertInquiryMutation.isPending ? "Converting..." : "Convert to Member"}
+                    </Button>
+                  </div>
                 </form>
               </DialogContent>
             </Dialog>
@@ -1755,28 +1890,6 @@ export default function TrainerDashboard() {
                             placeholder="7"
                           />
                         </div>
-                      </div>
-                      <div className="col-span-1">
-                        <Label htmlFor="waist">Waist</Label>
-                        <Input
-                          id="waist"
-                          type="number"
-                          value={newAssessment.circumferenceMeasurements.waist || ""}
-                          onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: parseFloat(e.target.value)}})}
-                          className="bg-black border-gray-700 text-white"
-                          placeholder="41"
-                        />
-                      </div>
-                      <div className="col-span-1">
-                        <Label htmlFor="hip">Hip</Label>
-                        <Input
-                          id="hip"
-                          type="number"
-                          value={newAssessment.circumferenceMeasurements.hip || ""}
-                          onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, hip: parseFloat(e.target.value)}})}
-                          className="bg-black border-gray-700 text-white"
-                          placeholder="43.5"
-                        />
                       </div>
                       <h4 className="text-md font-semibold text-gold col-span-3">Legs</h4>
                       <div className="col-span-3 grid grid-cols-3 gap-x-6 gap-y-4">

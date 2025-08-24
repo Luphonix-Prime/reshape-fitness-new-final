@@ -18,6 +18,15 @@ interface MembershipTier {
   price: number;
   features: string[];
   description: string;
+  duration?: string;
+  sessions?: number;
+  oneOnOnePrice?: number;
+  twoPeoplePrice?: number;
+  threePeoplePrice?: number;
+  perSessionRateOneOnOne?: number;
+  perSessionRateTwoPeople?: number;
+  perSessionRateThreePeople?: number;
+  tiers?: any; // Assuming tiers will be a JSON or similar structure
 }
 
 interface MemberProfile {
@@ -26,7 +35,6 @@ interface MemberProfile {
   membershipTierId: string;
   fitnessGoals: string;
   emergencyContact: string;
-  tierCategory?: string; // Added tierCategory
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -42,6 +50,19 @@ interface TrainerProfile {
   isAvailable: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+interface WorkoutPlan {
+  id: number;
+  clientName: string;
+  planName: string;
+  description: string;
+  duration: number;
+  exercises: any; // Consider defining a more specific type for exercises
+  createdDate: Date;
+  exerciseCount: number;
+  clientId: string;
+  trainerId: string;
 }
 
 export const storage = {
@@ -149,8 +170,21 @@ export const storage = {
 
   // Membership tier operations
   async getMembershipTiers(): Promise<MembershipTier[]> {
-    const { rows } = await pool.query('SELECT * FROM membership_tiers ORDER BY price ASC');
-    return rows.map(this.mapMembershipTierFromDb);
+    try {
+      const result = await pool.query(`
+        SELECT id, name, sessions, duration,
+               one_on_one_price, one_on_one_per_session,
+               two_people_price, two_people_per_session,
+               three_people_price, three_people_per_session,
+               tiers, features, description, created_at
+        FROM membership_tiers 
+        ORDER BY sessions ASC
+      `);
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching membership tiers:', error);
+      throw error;
+    }
   },
 
   async getMembershipTier(id: string): Promise<MembershipTier | null> {
@@ -162,24 +196,8 @@ export const storage = {
   // Member profile operations
   async createMemberProfile(profileData: any): Promise<any> {
     try {
-      // Get tier information to determine category
-      let tierCategory = null;
-      if (profileData.membershipTierId) {
-        const tierResult = await pool.query('SELECT name FROM membership_tiers WHERE id = $1', [profileData.membershipTierId]);
-        if (tierResult.rows.length > 0) {
-          const tierName = tierResult.rows[0].name;
-          if (tierName.includes('GOLD')) {
-            tierCategory = 'Gold';
-          } else if (tierName.includes('SILVER')) {
-            tierCategory = 'Silver';
-          } else if (tierName.includes('BRONZE')) {
-            tierCategory = 'Bronze';
-          }
-        }
-      }
-
       const { rows } = await pool.query(`
-        INSERT INTO member_profiles (first_name, last_name, email, phone, membership_tier_id, emergency_contact, fitness_goals, tier_category)
+        INSERT INTO member_profiles (first_name, last_name, email, phone, membership_tier_id, emergency_contact, fitness_goals, training_type)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
       `, [
@@ -190,7 +208,7 @@ export const storage = {
         profileData.membershipTierId,
         profileData.emergencyContact,
         profileData.fitnessGoals,
-        tierCategory
+        profileData.trainingType || 'one_on_one'
       ]);
       return rows[0];
     } catch (error) {
@@ -281,23 +299,7 @@ export const storage = {
         profileValues.push(updates.membershipTierId);
       }
 
-      // Update tier_category if membershipTierId is changed
-      if (updates.membershipTierId) {
-        const tierResult = await pool.query('SELECT name FROM membership_tiers WHERE id = $1', [updates.membershipTierId]);
-        let tierCategory = null;
-        if (tierResult.rows.length > 0) {
-          const tierName = tierResult.rows[0].name;
-          if (tierName.includes('GOLD')) {
-            tierCategory = 'Gold';
-          } else if (tierName.includes('SILVER')) {
-            tierCategory = 'Silver';
-          } else if (tierName.includes('BRONZE')) {
-            tierCategory = 'Bronze';
-          }
-        }
-        profileFields.push(`tier_category = $${profileParamIndex++}`);
-        profileValues.push(tierCategory);
-      }
+
 
 
       if (profileFields.length > 0) {
@@ -1040,18 +1042,7 @@ export const storage = {
   async removeTrainerFromMember(memberId: string, trainerId: string) {
     const { rows } = await pool.query(`
       UPDATE member_trainer_assignments 
-      SET is_active = false, updated_at = CURRENT_TIMESTAMP
-      WHERE member_id = $1 AND trainer_id = $2
-      RETURNING *
-    `, [memberId, trainerId]);
-
-    return rows[0];
-  },
-
-  async removeTrainerFromMember(memberId: string, trainerId: string) {
-    const { rows } = await pool.query(`
-      UPDATE member_trainer_assignments
-      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      SET is_active = false
       WHERE member_id = $1 AND trainer_id = $2
       RETURNING *
     `, [memberId, trainerId]);
@@ -1083,7 +1074,7 @@ export const storage = {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [memberId, trainerId, sessionType, scheduledDate, scheduledTime, duration, status, notes, memberName, trainerName]
     );
-    
+
     console.log('Session created successfully:', rows[0]);
     return rows[0];
   },
@@ -1180,7 +1171,16 @@ export const storage = {
       name: row.name,
       price: parseFloat(row.price),
       features: row.features,
-      description: row.description
+      description: row.description,
+      duration: row.duration,
+      sessions: row.sessions,
+      oneOnOnePrice: row.one_on_one_price ? parseFloat(row.one_on_one_price) : undefined,
+      twoPeoplePrice: row.two_people_price ? parseFloat(row.two_people_price) : undefined,
+      threePeoplePrice: row.three_people_price ? parseFloat(row.three_people_price) : undefined,
+      perSessionRateOneOnOne: row.per_session_rate_one_on_one ? parseFloat(row.per_session_rate_one_on_one) : undefined,
+      perSessionRateTwoPeople: row.per_session_rate_two_people ? parseFloat(row.per_session_rate_two_people) : undefined,
+      perSessionRateThreePeople: row.per_session_rate_three_people ? parseFloat(row.per_session_rate_three_people) : undefined,
+      tiers: row.tiers // Add the new tiers field
     };
   },
 
@@ -1192,7 +1192,6 @@ export const storage = {
       membershipTierId: row.membership_tier_id?.toString(),
       fitnessGoals: row.fitness_goals,
       emergencyContact: row.emergency_contact,
-      tierCategory: row.tier_category, // Include tierCategory
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -1229,35 +1228,71 @@ export const storage = {
   },
 
   // Update workout plan
-  async updateWorkoutPlan(planId: string, updates: any): Promise<void> {
-    const fields = [];
-    const values = [];
-    let paramIndex = 1;
+  async updateWorkoutPlan(id: string, updates: any): Promise<WorkoutPlan | null> {
+    try {
+      const setClause = [];
+      const values = [];
+      let paramIndex = 1;
 
-    if (updates.planName) {
-      fields.push(`plan_name = $${paramIndex++}`);
-      values.push(updates.planName);
-    }
-    if (updates.description !== undefined) {
-      fields.push(`description = $${paramIndex++}`);
-      values.push(updates.description);
-    }
-    if (updates.duration) {
-      fields.push(`duration = $${paramIndex++}`);
-      values.push(updates.duration);
-    }
-    if (updates.exercises !== undefined) {
-      fields.push(`exercises = $${paramIndex++}`);
-      values.push(updates.exercises);
-    }
+      if (updates.planName !== undefined) {
+        setClause.push(`plan_name = $${paramIndex}`);
+        values.push(updates.planName);
+        paramIndex++;
+      }
 
-    if (fields.length > 0) {
-      fields.push(`updated_at = CURRENT_TIMESTAMP`);
-      values.push(planId);
-      await pool.query(
-        `UPDATE workout_plans SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
-        values
-      );
+      if (updates.description !== undefined) {
+        setClause.push(`description = $${paramIndex}`);
+        values.push(updates.description);
+        paramIndex++;
+      }
+
+      if (updates.duration !== undefined) {
+        setClause.push(`duration = $${paramIndex}`);
+        values.push(updates.duration);
+        paramIndex++;
+      }
+
+      if (updates.exercises !== undefined) {
+        setClause.push(`exercises = $${paramIndex}`);
+        values.push(updates.exercises);
+        paramIndex++;
+      }
+
+      if (setClause.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      values.push(id);
+
+      const query = `
+        UPDATE workout_plans
+        SET ${setClause.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING *
+      `;
+
+      const result = await pool.query(query, values);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0];
+      return {
+        id: row.id,
+        clientName: row.client_name,
+        planName: row.plan_name,
+        description: row.description,
+        duration: row.duration,
+        exercises: row.exercises,
+        createdDate: row.created_date,
+        exerciseCount: row.exercise_count || 0,
+        clientId: row.client_id?.toString() || '',
+        trainerId: row.trainer_id?.toString() || ''
+      };
+    } catch (error) {
+      console.error('Error updating workout plan:', error);
+      throw new Error('Failed to update workout plan');
     }
   },
 
@@ -1293,7 +1328,6 @@ export const storage = {
     }
 
     if (fields.length > 0) {
-      fields.push(`updated_at = CURRENT_TIMESTAMP`);
       values.push(planId);
       await pool.query(
         `UPDATE nutrition_plans SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
