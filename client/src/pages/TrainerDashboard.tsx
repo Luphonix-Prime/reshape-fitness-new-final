@@ -32,6 +32,33 @@ import {
 import Navigation from "@/components/Navigation";
 import { useAuth } from "@/hooks/useAuth";
 
+// Define interfaces for workout and nutrition plans for better type safety
+interface WorkoutPlan {
+  id: number;
+  clientName: string;
+  planName: string;
+  createdDate: string;
+  exerciseCount: number;
+  description: string;
+  duration: string | number;
+  exercises: string;
+  clientId: string;
+  trainerId: string;
+}
+
+interface NutritionPlan {
+  id: number;
+  clientName: string;
+  planName: string;
+  createdDate: string;
+  calories: string | number;
+  description: string;
+  meals: string;
+  clientId: string;
+  trainerId: string;
+}
+
+
 export default function TrainerDashboard() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const { toast } = useToast();
@@ -44,6 +71,10 @@ export default function TrainerDashboard() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
   const [showAddAssessment, setShowAddAssessment] = useState(false); // State for the new assessment dialog
+  const [showEditWorkoutModal, setShowEditWorkoutModal] = useState(false);
+  const [showEditNutritionModal, setShowEditNutritionModal] = useState(false);
+  const [editingWorkoutPlan, setEditingWorkoutPlan] = useState<WorkoutPlan | null>(null);
+  const [editingNutritionPlan, setEditingNutritionPlan] = useState<NutritionPlan | null>(null);
 
   // State for New Assessment Form
   const [newAssessment, setNewAssessment] = useState({
@@ -92,13 +123,13 @@ export default function TrainerDashboard() {
     memberId: "",
     trainerId: "",
     sessionType: "",
-    date: "",
-    time: "",
+    date: new Date().toISOString().split('T')[0], // Default to today's date
+    time: new Date().toTimeString().slice(0, 5), // Default to current time
     duration: "60",
     notes: ""
   });
 
-  const [newWorkout, setNewWorkout] = useState({
+  const [newWorkout, setNewWorkout] = useState<Partial<WorkoutPlan>>({
     clientId: "",
     planName: "",
     description: "",
@@ -106,7 +137,7 @@ export default function TrainerDashboard() {
     exercises: ""
   });
 
-  const [newNutrition, setNewNutrition] = useState({
+  const [newNutrition, setNewNutrition] = useState<Partial<NutritionPlan>>({
     clientId: "",
     planName: "",
     description: "",
@@ -146,12 +177,12 @@ export default function TrainerDashboard() {
     queryFn: () => apiRequest('GET', '/api/admin/trainers'),
   });
 
-  const { data: workoutPlans = [], isLoading: workoutPlansLoading } = useQuery({
+  const { data: workoutPlans = [], isLoading: workoutPlansLoading } = useQuery<WorkoutPlan[]>({
     queryKey: ['/api/trainer/workout-plans'],
     queryFn: () => apiRequest('GET', '/api/trainer/workout-plans'),
   });
 
-  const { data: nutritionPlans = [], isLoading: nutritionPlansLoading } = useQuery({
+  const { data: nutritionPlans = [], isLoading: nutritionPlansLoading } = useQuery<NutritionPlan[]>({
     queryKey: ['/api/trainer/nutrition-plans'],
     queryFn: () => apiRequest('GET', '/api/trainer/nutrition-plans'),
   });
@@ -170,6 +201,78 @@ export default function TrainerDashboard() {
     queryKey: ['/api/admin/trainer-assignments'],
     queryFn: () => apiRequest('GET', '/api/admin/trainer-assignments'),
   });
+
+  // Mutations for workout and nutrition plans
+  const mutationCreateWorkout = useMutation({
+    mutationFn: (newPlan: Partial<WorkoutPlan>) => apiRequest('POST', '/api/workout-plans', newPlan),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/workout-plans'] });
+      toast({ title: "Workout Plan Created", description: "Workout plan has been created successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create workout plan", variant: "destructive" });
+    }
+  });
+
+  const mutationUpdateWorkout = useMutation({
+    mutationFn: (updatedPlan: Partial<WorkoutPlan>) => apiRequest('PUT', `/api/workout-plans/${updatedPlan.id}`, updatedPlan),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/workout-plans'] });
+      toast({ title: "Workout Plan Updated", description: "Workout plan has been updated successfully." });
+      setShowEditWorkoutModal(false);
+      setEditingWorkoutPlan(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update workout plan", variant: "destructive" });
+    }
+  });
+
+  const mutationDeleteWorkout = useMutation({
+    mutationFn: (planId: number) => apiRequest('DELETE', `/api/workout-plans/${planId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/workout-plans'] });
+      toast({ title: "Workout Plan Deleted", description: "Workout plan has been deleted successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete workout plan", variant: "destructive" });
+    }
+  });
+
+  const mutationCreateNutrition = useMutation({
+    mutationFn: (newPlan: Partial<NutritionPlan>) => apiRequest('POST', '/api/nutrition-plans', newPlan),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/nutrition-plans'] });
+      toast({ title: "Nutrition Plan Created", description: "Nutrition plan has been created successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to create nutrition plan", variant: "destructive" });
+    }
+  });
+
+  const mutationUpdateNutrition = useMutation({
+    mutationFn: (updatedPlan: Partial<NutritionPlan>) => apiRequest('PUT', `/api/nutrition-plans/${updatedPlan.id}`, updatedPlan),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/nutrition-plans'] });
+      toast({ title: "Nutrition Plan Updated", description: "Nutrition plan has been updated successfully." });
+      setShowEditNutritionModal(false);
+      setEditingNutritionPlan(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update nutrition plan", variant: "destructive" });
+    }
+  });
+
+  const mutationDeleteNutrition = useMutation({
+    mutationFn: (planId: number) => apiRequest('DELETE', `/api/nutrition-plans/${planId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/trainer/nutrition-plans'] });
+      toast({ title: "Nutrition Plan Deleted", description: "Nutrition plan has been deleted successfully." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to delete nutrition plan", variant: "destructive" });
+    }
+  });
+
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
@@ -199,35 +302,35 @@ export default function TrainerDashboard() {
   };
 
   const handleScheduleNewSession = async () => {
-    if (!newSession.memberId || !newSession.trainerId || !newSession.sessionType || !newSession.date || !newSession.time) {
+    if (!newSession.memberId || !newSession.sessionType || !newSession.date || !newSession.time) {
       toast({
         title: "Error",
-        description: "Please select a member, trainer, and fill in all required fields",
+        description: "Please select a member and fill in all required fields",
         variant: "destructive"
       });
       return;
     }
 
-    // Find the selected member and trainer to get their names
-    const selectedMember = allMembers?.find(member => member.userId === newSession.memberId);
-    const selectedTrainer = allTrainers?.find(trainer => trainer.userId === newSession.trainerId);
+    const selectedAssignment = assignedClients?.find(assignment => assignment.member_id.toString() === newSession.memberId);
 
-    if (!selectedMember || !selectedTrainer) {
+    if (!selectedAssignment) {
       toast({
         title: "Error",
-        description: "Please select valid member and trainer",
+        description: "Please select a valid assigned member",
         variant: "destructive"
       });
       return;
     }
 
-    // Create the session with actual database call
+    const currentTrainerName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+    const currentTrainerId = selectedAssignment.trainer_id;
+
     try {
       await apiRequest('POST', '/api/admin/member-sessions', {
         memberId: newSession.memberId,
-        trainerId: newSession.trainerId,
-        memberName: `${selectedMember.firstName} ${selectedMember.lastName}`,
-        trainerName: `${selectedTrainer.firstName} ${selectedTrainer.lastName}`,
+        trainerId: currentTrainerId.toString(),
+        memberName: selectedAssignment.member_name,
+        trainerName: currentTrainerName,
         sessionType: newSession.sessionType,
         scheduledDate: newSession.date,
         scheduledTime: newSession.time,
@@ -237,7 +340,7 @@ export default function TrainerDashboard() {
 
       toast({
         title: "Session Scheduled",
-        description: `Session with ${selectedMember.firstName} ${selectedMember.lastName} has been scheduled successfully and will appear in real-time.`
+        description: `Session with ${selectedAssignment.member_name} has been scheduled successfully.`
       });
 
       setShowNewSessionModal(false);
@@ -245,16 +348,13 @@ export default function TrainerDashboard() {
         memberId: "",
         trainerId: "",
         sessionType: "",
-        date: "",
-        time: "",
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().slice(0, 5),
         duration: "60",
         notes: ""
       });
 
-      // Refresh the sessions list immediately and show success
       queryClient.invalidateQueries({ queryKey: ['/api/trainer/sessions'] });
-
-      // Also refresh other related queries
       queryClient.invalidateQueries({ queryKey: ['/api/trainer/stats'] });
     } catch (error: any) {
       toast({
@@ -265,7 +365,7 @@ export default function TrainerDashboard() {
     }
   };
 
-  const handleCreateWorkoutPlan = () => {
+  const handleCreateWorkoutPlan = async () => {
     if (!newWorkout.clientId || !newWorkout.planName || !newWorkout.description) {
       toast({
         title: "Error",
@@ -275,9 +375,23 @@ export default function TrainerDashboard() {
       return;
     }
 
-    toast({
-      title: "Workout Plan Created",
-      description: `Workout plan "${newWorkout.planName}" has been created successfully.`
+    const selectedAssignment = assignedClients?.find(assignment => assignment.member_id.toString() === newWorkout.clientId);
+
+    if (!selectedAssignment) {
+      toast({
+        title: "Error",
+        description: "Please select a valid assigned member",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    mutationCreateWorkout.mutate({
+      ...newWorkout,
+      memberId: newWorkout.clientId!,
+      trainerId: selectedAssignment.trainer_id.toString(),
+      duration: parseInt(newWorkout.duration as string) || 4,
+      clientId: newWorkout.clientId!,
     });
 
     setShowNewWorkoutModal(false);
@@ -290,7 +404,7 @@ export default function TrainerDashboard() {
     });
   };
 
-  const handleCreateNutritionPlan = () => {
+  const handleCreateNutritionPlan = async () => {
     if (!newNutrition.clientId || !newNutrition.planName || !newNutrition.description) {
       toast({
         title: "Error",
@@ -300,9 +414,23 @@ export default function TrainerDashboard() {
       return;
     }
 
-    toast({
-      title: "Nutrition Plan Created",
-      description: `Nutrition plan "${newNutrition.planName}" has been created successfully.`
+    const selectedAssignment = assignedClients?.find(assignment => assignment.member_id.toString() === newNutrition.clientId);
+
+    if (!selectedAssignment) {
+      toast({
+        title: "Error",
+        description: "Please select a valid assigned member",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    mutationCreateNutrition.mutate({
+      ...newNutrition,
+      memberId: newNutrition.clientId!,
+      trainerId: selectedAssignment.trainer_id.toString(),
+      calories: parseInt(newNutrition.calories as string) || 2000,
+      clientId: newNutrition.clientId!,
     });
 
     setShowNewNutritionModal(false);
@@ -315,15 +443,13 @@ export default function TrainerDashboard() {
     });
   };
 
-  // Handler for creating a new assessment
   const handleCreateAssessment = () => {
-    // TODO: Implement actual API call to save the assessment
     toast({
       title: "Assessment Created",
       description: `Assessment for ${newAssessment.clientName} has been created successfully.`
     });
-    setShowAddAssessment(false); // Close the modal
-    setNewAssessment({ // Reset form
+    setShowAddAssessment(false);
+    setNewAssessment({
       clientName: "",
       dateOfBirth: "",
       age: 0,
@@ -364,9 +490,8 @@ export default function TrainerDashboard() {
       },
       advice: "",
     });
-    queryClient.invalidateQueries({ queryKey: ['/api/trainer/assessments'] }); // Refresh assessments
+    queryClient.invalidateQueries({ queryKey: ['/api/trainer/assessments'] });
   };
-
 
   const updateSessionStatus = (sessionId: number, newStatus: string) => {
     toast({
@@ -388,7 +513,6 @@ export default function TrainerDashboard() {
     }
   };
 
-  // Show loading spinner while checking authentication
   if (isLoading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -397,13 +521,11 @@ export default function TrainerDashboard() {
     );
   }
 
-  // Redirect to login if not authenticated
   if (!isAuthenticated) {
     window.location.href = '/login';
     return null;
   }
 
-  // Check if user has trainer role
   if (user?.userType !== 'trainer' && user?.role !== 'trainer') {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -420,6 +542,90 @@ export default function TrainerDashboard() {
       title: "Export Complete",
       description: "Client report has been exported to PDF successfully."
     });
+  };
+
+  // Handlers for editing workout plans
+  const openEditWorkoutModal = (plan: WorkoutPlan) => {
+    setEditingWorkoutPlan(plan);
+    setNewWorkout({
+      clientId: plan.clientId?.toString() || "",
+      planName: plan.planName || "",
+      description: plan.description || "",
+      duration: plan.duration?.toString() || "",
+      exercises: plan.exercises || ""
+    });
+    setShowEditWorkoutModal(true);
+  };
+
+  const handleEditWorkoutPlan = async () => {
+    if (!editingWorkoutPlan || !newWorkout.planName || !newWorkout.description) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const updatedPlanData = {
+      id: editingWorkoutPlan.id,
+      planName: newWorkout.planName,
+      description: newWorkout.description,
+      duration: parseInt(newWorkout.duration as string) || 4,
+      exercises: newWorkout.exercises || "",
+      clientId: editingWorkoutPlan.clientId,
+      trainerId: editingWorkoutPlan.trainerId,
+    };
+
+    mutationUpdateWorkout.mutate(updatedPlanData);
+  };
+
+  const handleDeleteWorkoutPlan = (planId: number, planName: string) => {
+    if (confirm(`Are you sure you want to delete the workout plan "${planName}"?`)) {
+      mutationDeleteWorkout.mutate(planId);
+    }
+  };
+
+  // Handlers for editing nutrition plans
+  const openEditNutritionModal = (plan: NutritionPlan) => {
+    setEditingNutritionPlan(plan);
+    setNewNutrition({
+      clientId: plan.clientId?.toString() || "",
+      planName: plan.planName || "",
+      description: plan.description || "",
+      calories: plan.calories?.toString() || "",
+      meals: plan.meals || ""
+    });
+    setShowEditNutritionModal(true);
+  };
+
+  const handleEditNutritionPlan = async () => {
+    if (!editingNutritionPlan || !newNutrition.planName || !newNutrition.description) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const updatedPlanData = {
+      id: editingNutritionPlan.id,
+      planName: newNutrition.planName,
+      description: newNutrition.description,
+      calories: parseInt(newNutrition.calories as string) || 2000,
+      meals: newNutrition.meals || "",
+      clientId: editingNutritionPlan.clientId,
+      trainerId: editingNutritionPlan.trainerId,
+    };
+
+    mutationUpdateNutrition.mutate(updatedPlanData);
+  };
+
+  const handleDeleteNutritionPlan = (planId: number, planName: string) => {
+    if (confirm(`Are you sure you want to delete the nutrition plan "${planName}"?`)) {
+      mutationDeleteNutrition.mutate(planId);
+    }
   };
 
   return (
@@ -552,68 +758,30 @@ export default function TrainerDashboard() {
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="memberId">Select Member</Label>
+                      <Label htmlFor="memberId">Select Assigned Member</Label>
                       <Select
                         value={newSession.memberId}
                         onValueChange={(value) => setNewSession({...newSession, memberId: value})}
                       >
                         <SelectTrigger className="bg-black border-gray-700 text-white">
-                          <SelectValue placeholder="Select a member" />
+                          <SelectValue placeholder="Select an assigned member" />
                         </SelectTrigger>
                         <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                          {allMembersLoading ? (
+                          {assignedClientsLoading ? (
                             <SelectItem value="loading" disabled>
-                              Loading members...
+                              Loading assigned members...
                             </SelectItem>
-                          ) : allMembers?.length > 0 ? (
-                            allMembers.map((member) => (
-                              <SelectItem key={member.userId} value={member.userId}>
-                                {member.firstName} {member.lastName}
+                          ) : assignedClients?.length > 0 ? (
+                            assignedClients.map((assignment) => (
+                              <SelectItem key={assignment.member_id} value={assignment.member_id.toString()}>
+                                {assignment.member_name}
                               </SelectItem>
                             ))
                           ) : (
                             <SelectItem value="no-members" disabled>
-                              No members found
+                              No assigned members found
                             </SelectItem>
                           )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="trainerId">Select Trainer</Label>
-                      <Select
-                        value={newSession.trainerId}
-                        onValueChange={(value) => setNewSession({...newSession, trainerId: value})}
-                      >
-                        <SelectTrigger className="bg-black border-gray-700 text-white">
-                          <SelectValue placeholder="Select a trainer" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                          {allTrainersLoading ? (
-                            <SelectItem value="loading" disabled>
-                              Loading trainers...
-                            </SelectItem>
-                          ) : (() => {
-                            // Filter trainers assigned to the selected member
-                            const assignedTrainers = allTrainers?.filter(trainer =>
-                              allTrainerAssignments?.some(assignment =>
-                                assignment.member_id.toString() === newSession.memberId &&
-                                assignment.trainer_id.toString() === trainer.userId
-                              )
-                            ) || [];
-
-                            return assignedTrainers.length > 0 ? (
-                              assignedTrainers.map((trainer) => (
-                                <SelectItem key={trainer.userId} value={trainer.userId}>
-                                  {trainer.firstName} {trainer.lastName} - {trainer.specializations?.join(', ')}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="no-assigned-trainers" disabled>
-                                {newSession.memberId ? "No trainers assigned to this member" : "Select a member first"}
-                              </SelectItem>
-                            );
-                          })()}
                         </SelectContent>
                       </Select>
                     </div>
@@ -645,6 +813,7 @@ export default function TrainerDashboard() {
                           value={newSession.date}
                           onChange={(e) => setNewSession({...newSession, date: e.target.value})}
                           className="bg-black border-gray-700 text-white"
+                          min={new Date().toISOString().split('T')[0]}
                         />
                       </div>
                       <div>
@@ -1825,6 +1994,64 @@ export default function TrainerDashboard() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* Edit Workout Plan Modal */}
+              <Dialog open={showEditWorkoutModal} onOpenChange={setShowEditWorkoutModal}>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-gold">Edit Workout Plan</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="planName">Plan Name</Label>
+                      <Input
+                        id="planName"
+                        value={newWorkout.planName}
+                        onChange={(e) => setNewWorkout({...newWorkout, planName: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="e.g., Upper Body Strength"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        value={newWorkout.description}
+                        onChange={(e) => setNewWorkout({...newWorkout, description: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="Describe the workout plan goals and focus..."
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="duration">Duration (weeks)</Label>
+                      <Input
+                        id="duration"
+                        type="number"
+                        value={newWorkout.duration}
+                        onChange={(e) => setNewWorkout({...newWorkout, duration: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="4"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="exercises">Exercises</Label>
+                      <Textarea
+                        id="exercises"
+                        value={newWorkout.exercises}
+                        onChange={(e) => setNewWorkout({...newWorkout, exercises: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="List exercises with sets and reps..."
+                      />
+                    </div>
+                    <Button
+                      onClick={handleEditWorkoutPlan}
+                      className="w-full bg-gold text-black hover:bg-white"
+                    >
+                      Update Plan
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <Card className="bg-gray-900 border-gray-800">
@@ -1853,14 +2080,23 @@ export default function TrainerDashboard() {
                             <TableCell className="text-white">{plan.clientName}</TableCell>
                             <TableCell className="text-white">{plan.planName}</TableCell>
                             <TableCell className="text-gray-400">{new Date(plan.createdDate).toLocaleDateString()}</TableCell>
-                            <TableCell className="text-gray-400">{plan.exercises} exercises</TableCell>
+                            <TableCell className="text-gray-400">{plan.exerciseCount || 0} exercises</TableCell>
                             <TableCell>
                               <div className="flex space-x-2">
-                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-gold hover:bg-gold hover:text-black"
+                                  onClick={() => openEditWorkoutModal(plan)}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                                  View
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteWorkoutPlan(plan.id, plan.planName)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -1970,6 +2206,64 @@ export default function TrainerDashboard() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* Edit Nutrition Plan Modal */}
+              <Dialog open={showEditNutritionModal} onOpenChange={setShowEditNutritionModal}>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-gold">Edit Nutrition Plan</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="planName">Plan Name</Label>
+                      <Input
+                        id="planName"
+                        value={newNutrition.planName}
+                        onChange={(e) => setNewNutrition({...newNutrition, planName: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="e.g., Muscle Gain Diet"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        value={newNutrition.description}
+                        onChange={(e) => setNewNutrition({...newNutrition, description: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="Describe the nutrition plan goals..."
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="calories">Daily Calories</Label>
+                      <Input
+                        id="calories"
+                        type="number"
+                        value={newNutrition.calories}
+                        onChange={(e) => setNewNutrition({...newNutrition, calories: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="2200"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="meals">Meal Plan</Label>
+                      <Textarea
+                        id="meals"
+                        value={newNutrition.meals}
+                        onChange={(e) => setNewNutrition({...newNutrition, meals: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="Detail the meal plan and macros..."
+                      />
+                    </div>
+                    <Button
+                      onClick={handleEditNutritionPlan}
+                      className="w-full bg-gold text-black hover:bg-white"
+                    >
+                      Update Plan
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
 
             <Card className="bg-gray-900 border-gray-800">
@@ -2001,11 +2295,20 @@ export default function TrainerDashboard() {
                             <TableCell className="text-gray-400">{plan.calories} cal</TableCell>
                             <TableCell>
                               <div className="flex space-x-2">
-                                <Button size="sm" variant="ghost" className="text-gold hover:bg-gold hover:text-black">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-gold hover:bg-gold hover:text-black"
+                                  onClick={() => openEditNutritionModal(plan)}
+                                >
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button size="sm" variant="ghost" className="text-blue-400 hover:bg-blue-400 hover:text-white">
-                                  View
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteNutritionPlan(plan.id, plan.planName)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
                             </TableCell>

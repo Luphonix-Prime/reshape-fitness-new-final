@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Activity, Settings, BarChart, Plus, Edit, Trash2, Phone, Calendar, Target } from "lucide-react";
+import { Users, Activity, Settings, BarChart, Plus, Edit, Trash2, Phone, Calendar, Target, Key } from "lucide-react";
 import Navigation from "@/components/Navigation";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -22,6 +22,16 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("members");
+  const [showScheduleSessionModal, setShowScheduleSessionModal] = useState(false);
+  const [newSessionData, setNewSessionData] = useState({
+    memberId: "",
+    trainerId: "",
+    sessionType: "",
+    date: new Date().toISOString().split('T')[0],
+    time: new Date().toTimeString().slice(0, 5),
+    duration: "60",
+    notes: ""
+  });
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set());
@@ -55,6 +65,12 @@ export default function AdminDashboard() {
     certifications: "",
     bio: ""
   });
+
+  // Trainer Password Change State
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [selectedTrainerForPassword, setSelectedTrainerForPassword] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // Body Assessment state
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
@@ -182,6 +198,12 @@ export default function AdminDashboard() {
     queryFn: () => apiRequest('GET', '/api/admin/trainer-assignments'),
   });
 
+  // Fetch all sessions for admin
+  const { data: allSessions, refetch: refetchAllSessions } = useQuery({
+    queryKey: ['/api/admin/member-sessions'],
+    queryFn: () => apiRequest('GET', '/api/admin/member-sessions'),
+  });
+
   // Mutations
   const createMemberMutation = useMutation({
     mutationFn: (memberData: any) => apiRequest('POST', '/api/admin/create-member', memberData),
@@ -258,6 +280,29 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to update trainer",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Trainer password change mutation
+  const changeTrainerPasswordMutation = useMutation({
+    mutationFn: ({ trainerId, newPassword }: { trainerId: string, newPassword: string }) =>
+      apiRequest('POST', `/api/admin/change-trainer-password/${trainerId}`, { newPassword }),
+    onSuccess: () => {
+      toast({
+        title: "Password Updated",
+        description: "Trainer's password has been updated successfully."
+      });
+      setShowChangePasswordModal(false);
+      setSelectedTrainerForPassword(null);
+      setNewPassword("");
+      setConfirmPassword("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update password",
         variant: "destructive",
       });
     }
@@ -341,7 +386,7 @@ export default function AdminDashboard() {
   });
 
   const shareAssessmentMutation = useMutation({
-    mutationFn: ({ assessmentId, trainerId }: { assessmentId: string, trainerId: string }) => 
+    mutationFn: ({ assessmentId, trainerId }: { assessmentId: string, trainerId: string }) =>
       apiRequest('POST', `/api/admin/body-assessments/${assessmentId}/share/${trainerId}`, {}),
     onSuccess: () => {
       toast({
@@ -361,7 +406,7 @@ export default function AdminDashboard() {
   });
 
   const updateAssessmentMutation = useMutation({
-    mutationFn: ({ id, assessmentData }: { id: string, assessmentData: any }) => 
+    mutationFn: ({ id, assessmentData }: { id: string, assessmentData: any }) =>
       apiRequest('PUT', `/api/admin/body-assessments/${id}`, assessmentData),
     onSuccess: () => {
       toast({
@@ -383,7 +428,7 @@ export default function AdminDashboard() {
   });
 
   const convertInquiryMutation = useMutation({
-    mutationFn: ({ inquiryId, memberData, assessmentData }: { inquiryId: string, memberData: any, assessmentData: any }) => 
+    mutationFn: ({ inquiryId, memberData, assessmentData }: { inquiryId: string, memberData: any, assessmentData: any }) =>
       apiRequest('POST', `/api/admin/inquiries/${inquiryId}/convert`, { memberData, assessmentData }),
     onSuccess: () => {
       toast({
@@ -443,6 +488,35 @@ export default function AdminDashboard() {
     }
   });
 
+  // Session scheduling mutation for admin
+  const scheduleSessionMutation = useMutation({
+    mutationFn: (sessionData: any) => apiRequest('POST', '/api/admin/member-sessions', sessionData),
+    onSuccess: () => {
+      toast({
+        title: "Session Scheduled",
+        description: "Training session has been scheduled successfully."
+      });
+      setShowScheduleSessionModal(false);
+      setNewSessionData({
+        memberId: "",
+        trainerId: "",
+        sessionType: "",
+        date: new Date().toISOString().split('T')[0],
+        time: new Date().toTimeString().slice(0, 5),
+        duration: "60",
+        notes: ""
+      });
+      refetchAllSessions();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to schedule session",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleRemoveTrainer = async (memberId: string, trainerId: string) => {
     if (confirm('Are you sure you want to remove this trainer assignment?')) {
       try {
@@ -460,6 +534,37 @@ export default function AdminDashboard() {
         });
       }
     }
+  };
+
+  const handleScheduleSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newSessionData.memberId || !newSessionData.trainerId || !newSessionData.sessionType || !newSessionData.date || !newSessionData.time) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Get member and trainer names
+    const selectedMember = members?.find(m => m.userId === newSessionData.memberId);
+    const selectedTrainer = trainers?.find(t => t.userId === newSessionData.trainerId);
+
+    const sessionData = {
+      memberId: newSessionData.memberId,
+      trainerId: newSessionData.trainerId,
+      memberName: selectedMember ? `${selectedMember.firstName} ${selectedMember.lastName}` : '',
+      trainerName: selectedTrainer ? `${selectedTrainer.firstName} ${selectedTrainer.lastName}` : '',
+      sessionType: newSessionData.sessionType,
+      scheduledDate: newSessionData.date,
+      scheduledTime: newSessionData.time,
+      duration: parseInt(newSessionData.duration),
+      notes: newSessionData.notes
+    };
+
+    scheduleSessionMutation.mutate(sessionData);
   };
 
   useEffect(() => {
@@ -671,6 +776,34 @@ export default function AdminDashboard() {
       setMembershipPricing(pricing);
     }
   }, [membershipTiers]);
+
+  // Handler for changing trainer password
+  const handleSubmitPasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters long.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (selectedTrainerForPassword) {
+      changeTrainerPasswordMutation.mutate({ trainerId: selectedTrainerForPassword.userId, newPassword });
+    }
+  };
+
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -957,7 +1090,7 @@ export default function AdminDashboard() {
     }
 
     // Filter assessments based on selection
-    const assessmentsToExport = selectedAssessmentIds.size > 0 
+    const assessmentsToExport = selectedAssessmentIds.size > 0
       ? bodyAssessments.filter((assessment: any) => selectedAssessmentIds.has(assessment._id || assessment.id))
       : bodyAssessments;
 
@@ -1149,10 +1282,14 @@ export default function AdminDashboard() {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-gray-900 border-gray-800">
+          <TabsList className="grid w-full grid-cols-7 bg-gray-900 border-gray-800">
             <TabsTrigger value="members" className="data-[state=active]:bg-gold data-[state=active]:text-black">
               <Users className="h-4 w-4 mr-2" />
               MANAGE MEMBERS
+            </TabsTrigger>
+            <TabsTrigger value="sessions" className="data-[state=active]:bg-gold data-[state=active]:text-black">
+              <Calendar className="h-4 w-4 mr-2" />
+              SESSIONS
             </TabsTrigger>
             <TabsTrigger value="inquiries" className="data-[state=active]:bg-gold data-[state=active]:text-black">
               <Phone className="h-4 w-4 mr-2" />
@@ -1492,6 +1629,27 @@ export default function AdminDashboard() {
                     </form>
                   </DialogContent>
                 </Dialog>
+
+                {/* Button to trigger password change modal */}
+                <Button
+                  variant="outline"
+                  className="border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black"
+                  onClick={() => {
+                    // This button should probably be within the trainer list, but for now,
+                    // we'll open it if any trainer is selected or prompt the user.
+                    // A more robust solution would be a button next to each trainer row.
+                    if (trainers && trainers.length > 0) {
+                      // For demonstration, we'll just open the modal.
+                      // In a real app, you'd select a trainer first.
+                      toast({ title: "Select a trainer to change their password", description: "You can do this from the 'MANAGE MEMBERS' tab." });
+                    } else {
+                      toast({ title: "No trainers available", description: "Please add trainers first." });
+                    }
+                  }}
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Change Trainer Password
+                </Button>
               </div>
             </div>
 
@@ -1518,7 +1676,7 @@ export default function AdminDashboard() {
                         <TableCell className="text-white">{trainer.firstName} {trainer.lastName}</TableCell>
                         <TableCell className="text-gray-400">{trainer.email}</TableCell>
                         <TableCell className="text-gray-400">
-                          {Array.isArray(trainer.specializations) 
+                          {Array.isArray(trainer.specializations)
                             ? trainer.specializations.slice(0, 2).join(', ')
                             : 'N/A'
                           }
@@ -1543,6 +1701,18 @@ export default function AdminDashboard() {
                               onClick={() => handleDeleteTrainer(trainer)}
                             >
                               <Trash2 className="h-4 w-4" />
+                            </Button>
+                            {/* Button to change password */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-yellow-500 hover:bg-yellow-500 hover:text-black"
+                              onClick={() => {
+                                setSelectedTrainerForPassword(trainer);
+                                setShowChangePasswordModal(true);
+                              }}
+                            >
+                              <Key className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>
@@ -1700,6 +1870,211 @@ export default function AdminDashboard() {
 
             {/* Assign Trainer Modal is now outside the members table */}
 
+          </TabsContent>
+
+          <TabsContent value="sessions" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">Training Sessions Management</h2>
+              <Dialog open={showScheduleSessionModal} onOpenChange={setShowScheduleSessionModal}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gold text-black hover:bg-white">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Schedule Session
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-900 border-gray-800 text-white">
+                  <DialogHeader>
+                    <DialogTitle className="text-gold">Schedule New Training Session</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleScheduleSession} className="space-y-4">
+                    <div>
+                      <Label htmlFor="memberId">Select Member</Label>
+                      <Select
+                        value={newSessionData.memberId}
+                        onValueChange={(value) => setNewSessionData({...newSessionData, memberId: value})}
+                        required
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select a member" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          {members?.map((member: any) => (
+                            <SelectItem key={member.userId} value={member.userId}>
+                              {member.firstName} {member.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="trainerId">Select Trainer</Label>
+                      <Select
+                        value={newSessionData.trainerId}
+                        onValueChange={(value) => setNewSessionData({...newSessionData, trainerId: value})}
+                        required
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select a trainer" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          {trainers?.map((trainer: any) => (
+                            <SelectItem key={trainer.userId} value={trainer.userId}>
+                              {trainer.firstName} {trainer.lastName} - {trainer.specializations?.join(', ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="sessionType">Session Type</Label>
+                      <Select
+                        value={newSessionData.sessionType}
+                        onValueChange={(value) => setNewSessionData({...newSessionData, sessionType: value})}
+                        required
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue placeholder="Select session type" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          <SelectItem value="strength">Strength Training</SelectItem>
+                          <SelectItem value="cardio">Cardio</SelectItem>
+                          <SelectItem value="hiit">HIIT</SelectItem>
+                          <SelectItem value="yoga">Yoga</SelectItem>
+                          <SelectItem value="pilates">Pilates</SelectItem>
+                          <SelectItem value="consultation">Consultation</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="date">Date</Label>
+                        <Input
+                          id="date"
+                          type="date"
+                          value={newSessionData.date}
+                          onChange={(e) => setNewSessionData({...newSessionData, date: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                          min={new Date().toISOString().split('T')[0]}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="time">Time</Label>
+                        <Input
+                          id="time"
+                          type="time"
+                          value={newSessionData.time}
+                          onChange={(e) => setNewSessionData({...newSessionData, time: e.target.value})}
+                          className="bg-black border-gray-700 text-white"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="duration">Duration (minutes)</Label>
+                      <Select
+                        value={newSessionData.duration}
+                        onValueChange={(value) => setNewSessionData({...newSessionData, duration: value})}
+                      >
+                        <SelectTrigger className="bg-black border-gray-700 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                          <SelectItem value="30">30 minutes</SelectItem>
+                          <SelectItem value="45">45 minutes</SelectItem>
+                          <SelectItem value="60">60 minutes</SelectItem>
+                          <SelectItem value="90">90 minutes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="notes">Session Notes</Label>
+                      <Textarea
+                        id="notes"
+                        value={newSessionData.notes}
+                        onChange={(e) => setNewSessionData({...newSessionData, notes: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        placeholder="Add any special notes for this session..."
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full bg-gold text-black hover:bg-white"
+                      disabled={scheduleSessionMutation.isPending}
+                    >
+                      {scheduleSessionMutation.isPending ? "Scheduling..." : "Schedule Session"}
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            {/* All Sessions Table */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <CardTitle className="text-gold">All Training Sessions ({allSessions?.length || 0})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Member</TableHead>
+                      <TableHead className="text-gray-400">Trainer</TableHead>
+                      <TableHead className="text-gray-400">Session Type</TableHead>
+                      <TableHead className="text-gray-400">Date</TableHead>
+                      <TableHead className="text-gray-400">Time</TableHead>
+                      <TableHead className="text-gray-400">Duration</TableHead>
+                      <TableHead className="text-gray-400">Status</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allSessions?.map((session: any) => (
+                      <TableRow key={session.id} className="border-gray-800">
+                        <TableCell className="text-white">{session.member_name || session.memberName}</TableCell>
+                        <TableCell className="text-white">{session.trainer_name || session.trainerName}</TableCell>
+                        <TableCell className="text-white">{session.session_type || session.sessionType}</TableCell>
+                        <TableCell className="text-gray-400">
+                          {new Date(session.scheduled_date || session.scheduledDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-gray-400">{session.scheduled_time || session.scheduledTime}</TableCell>
+                        <TableCell className="text-gray-400">{session.duration} min</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="border-gold text-gold">
+                            {session.status || 'Scheduled'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:bg-red-400 hover:text-white"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!allSessions || allSessions.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-gray-400">
+                          No training sessions scheduled
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="inquiries" className="space-y-6">
@@ -3120,6 +3495,62 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Change Trainer Password Modal */}
+      <Dialog open={showChangePasswordModal} onOpenChange={setShowChangePasswordModal}>
+        <DialogContent className="max-w-md bg-black border-gold">
+          <DialogHeader>
+            <DialogTitle className="text-gold">
+              Change Password - {selectedTrainerForPassword?.firstName} {selectedTrainerForPassword?.lastName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="newPassword" className="text-gray-300">New Password *</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="bg-gray-800 border-gray-700 text-white"
+                placeholder="Enter new password (min 8 characters)"
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPassword" className="text-gray-300">Confirm Password *</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="bg-gray-800 border-gray-700 text-white"
+                placeholder="Confirm new password"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowChangePasswordModal(false);
+                setSelectedTrainerForPassword(null);
+                setNewPassword("");
+                setConfirmPassword("");
+              }}
+              className="border-gray-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitPasswordChange}
+              className="bg-gold text-black hover:bg-gold/80"
+              disabled={changeTrainerPasswordMutation.isPending}
+            >
+              {changeTrainerPasswordMutation.isPending ? "Changing..." : "Change Password"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

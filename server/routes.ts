@@ -249,7 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       let userData = null;
 
-      // Check main user credentials
+      // First check for demo credentials
       if (email === "admin" && password === "admin") {
         // Get admin user from database
         try {
@@ -319,10 +319,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Database lookup error for member:", dbError);
           return res.status(500).json({ message: "Database error during member authentication." });
         }
+      } else {
+        // Check real user credentials in database
+        try {
+          const { rows: userRows } = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+
+          if (userRows.length === 0) {
+            return res.status(401).json({ message: "Invalid credentials" });
+          }
+
+          const dbUser = userRows[0];
+
+          // Check if user has a password set
+          if (!dbUser.password_hash) {
+            return res.status(401).json({ message: "Password not set for this account. Please contact administrator." });
+          }
+
+          // Verify password
+          const isPasswordValid = await authService.verifyPassword(password, dbUser.password_hash);
+
+          if (!isPasswordValid) {
+            return res.status(401).json({ message: "Invalid credentials" });
+          }
+
+          // User authenticated successfully
+          userData = {
+            id: dbUser.id.toString(),
+            email: dbUser.email,
+            firstName: dbUser.first_name || '',
+            lastName: dbUser.last_name || '',
+            userType: dbUser.user_type || 'member',
+            role: dbUser.user_type || 'member',
+            first_name: dbUser.first_name || '',
+            last_name: dbUser.last_name || '',
+            user_type: dbUser.user_type || 'member'
+          };
+
+          console.log(`User authenticated: ${email} (${dbUser.user_type})`);
+        } catch (dbError) {
+          console.error("Database error during authentication:", dbError);
+          return res.status(500).json({ message: "Authentication error" });
+        }
       }
 
       if (!userData) {
-        return res.status(401).json({ message: "Invalid credentials. Use: admin/admin, trainer/trainer, or member/member" });
+        return res.status(401).json({ message: "Invalid credentials" });
       }
 
       // Store user in session
@@ -646,14 +687,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update workout plan
+  app.put('/api/workout-plans/:planId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId } = req.params;
+      const updates = req.body;
+
+      await storage.updateWorkoutPlan(planId, updates);
+      res.json({ message: "Workout plan updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating workout plan:", error);
+      res.status(500).json({ message: error.message || "Failed to update workout plan" });
+    }
+  });
+
+  // Delete workout plan
+  app.delete('/api/workout-plans/:planId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId } = req.params;
+
+      await storage.deleteWorkoutPlan(planId);
+      res.json({ message: "Workout plan deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting workout plan:", error);
+      res.status(500).json({ message: error.message || "Failed to delete workout plan" });
+    }
+  });
+
   // Create workout plan
   app.post('/api/workout-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const plan = await storage.createWorkoutPlan(req.body);
-      res.json(plan);
-    } catch (error) {
+      const { memberId, trainerId, planName, description, duration, exercises } = req.body;
+
+      if (!memberId || !trainerId || !planName) {
+        return res.status(400).json({ message: "Missing required fields: memberId, trainerId, planName" });
+      }
+
+      const plan = await storage.createWorkoutPlan({
+        memberId,
+        trainerId,
+        planName,
+        description: description || '',
+        duration: duration || 4,
+        exercises: exercises || ''
+      });
+
+      res.json({
+        message: "Workout plan created successfully",
+        plan
+      });
+    } catch (error: any) {
       console.error("Error creating workout plan:", error);
-      res.status(500).json({ message: "Failed to create workout plan" });
+      res.status(500).json({ message: error.message || "Failed to create workout plan" });
     }
   });
 
@@ -683,14 +768,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update nutrition plan
+  app.put('/api/nutrition-plans/:planId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId } = req.params;
+      const updates = req.body;
+
+      await storage.updateNutritionPlan(planId, updates);
+      res.json({ message: "Nutrition plan updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating nutrition plan:", error);
+      res.status(500).json({ message: error.message || "Failed to update nutrition plan" });
+    }
+  });
+
+  // Delete nutrition plan
+  app.delete('/api/nutrition-plans/:planId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { planId } = req.params;
+
+      await storage.deleteNutritionPlan(planId);
+      res.json({ message: "Nutrition plan deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting nutrition plan:", error);
+      res.status(500).json({ message: error.message || "Failed to delete nutrition plan" });
+    }
+  });
+
   // Create nutrition plan
   app.post('/api/nutrition-plans', isAuthenticated, async (req: any, res) => {
     try {
-      const plan = await storage.createNutritionPlan(req.body);
-      res.json(plan);
-    } catch (error) {
+      const { memberId, trainerId, planName, description, calories, meals } = req.body;
+
+      if (!memberId || !trainerId || !planName) {
+        return res.status(400).json({ message: "Missing required fields: memberId, trainerId, planName" });
+      }
+
+      const plan = await storage.createNutritionPlan({
+        memberId,
+        trainerId,
+        planName,
+        description: description || '',
+        calories: calories || 2000,
+        meals: meals || ''
+      });
+
+      res.json({
+        message: "Nutrition plan created successfully",
+        plan
+      });
+    } catch (error: any) {
       console.error("Error creating nutrition plan:", error);
-      res.status(500).json({ message: "Failed to create nutrition plan" });
+      res.status(500).json({ message: error.message || "Failed to create nutrition plan" });
     }
   });
 
@@ -956,8 +1085,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: row.id,
         clientName: row.client_name || 'Unknown Client',
         planName: row.plan_name,
+        description: row.description,
+        duration: row.duration,
+        exercises: row.exercises,
         createdDate: row.created_at,
-        exercises: 8 // This would need to be calculated from exercises table
+        exerciseCount: row.exercises ? row.exercises.split(',').length : 0
       }));
 
       res.json(workoutPlans);
@@ -995,8 +1127,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         id: row.id,
         clientName: row.client_name || 'Unknown Client',
         planName: row.plan_name,
-        createdDate: row.created_at,
-        calories: row.calories || 2000
+        description: row.description,
+        calories: row.calories || 2000,
+        meals: row.meals,
+        createdDate: row.created_at
       }));
 
       res.json(nutritionPlans);
@@ -1211,6 +1345,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin route to view all sessions
+  app.get('/api/admin/all-sessions', async (req, res) => {
+    try {
+      const sessions = await storage.getMemberSessions({});
+      res.json(sessions);
+    } catch (error: any) {
+      console.error("Error fetching all sessions:", error);
+      res.status(500).json({ message: error.message || "Failed to fetch sessions" });
+    }
+  });
+
   // Member routes
   app.get('/api/member/stats', async (req, res) => {
     try {
@@ -1315,49 +1460,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log('Creating trainer with data:', trainerData);
 
-      // Check if trainer with this email already exists
+      // Check if user with this email already exists in users table
+      const { rows: existingUser } = await pool.query('SELECT * FROM users WHERE email = $1', [trainerData.email]);
+      if (existingUser.length > 0) {
+        return res.status(400).json({ message: "A user with this email already exists" });
+      }
+
+      // Check if trainer with this email already exists in trainer_profiles table
       const { rows: existingTrainer } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [trainerData.email]);
       if (existingTrainer.length > 0) {
         return res.status(400).json({ message: "A trainer with this email already exists" });
       }
 
-      // Create trainer profile directly in trainer_profiles table (without user_id)
-      const { rows } = await pool.query(`
-        INSERT INTO trainer_profiles (first_name, last_name, email, phone, specializations, hourly_rate, experience_years, certifications, bio, is_available)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING *
-      `, [
-        trainerData.firstName,
-        trainerData.lastName,
-        trainerData.email,
-        trainerData.phone || null,
-        Array.isArray(trainerData.specializations) ? trainerData.specializations : [],
-        trainerData.hourlyRate ? parseFloat(trainerData.hourlyRate) : 75.00,
-        trainerData.experienceYears ? parseInt(trainerData.experienceYears) : 2,
-        trainerData.certifications || '',
-        trainerData.bio || '',
-        true
-      ]);
+      const client = await pool.connect();
 
-      const trainer = rows[0];
-      console.log('Trainer created successfully:', trainer);
+      try {
+        await client.query('BEGIN');
 
-      res.json({
-        message: "Trainer created successfully",
-        trainer: {
-          userId: trainer.id.toString(),
-          firstName: trainer.first_name,
-          lastName: trainer.last_name,
-          email: trainer.email,
-          phone: trainer.phone,
-          specializations: trainer.specializations || [],
-          hourlyRate: trainer.hourly_rate || 75,
-          experienceYears: trainer.experience_years || 2,
-          certifications: trainer.certifications || '',
-          bio: trainer.bio || '',
-          isAvailable: trainer.is_available !== false
-        }
-      });
+        // First, create user in users table
+        const { rows: userRows } = await client.query(`
+          INSERT INTO users (email, first_name, last_name, user_type, phone)
+          VALUES ($1, $2, $3, $4, $5)
+          RETURNING id, email, first_name, last_name, user_type, phone, created_at
+        `, [
+          trainerData.email,
+          trainerData.firstName,
+          trainerData.lastName,
+          'trainer',
+          trainerData.phone || null
+        ]);
+
+        const user = userRows[0];
+        console.log('User created:', user);
+
+        // Then, create trainer profile in trainer_profiles table
+        const { rows: trainerRows } = await client.query(`
+          INSERT INTO trainer_profiles (user_id, first_name, last_name, email, phone, specializations, hourly_rate, experience_years, certifications, bio, is_available)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          RETURNING *
+        `, [
+          user.id,
+          trainerData.firstName,
+          trainerData.lastName,
+          trainerData.email,
+          trainerData.phone || null,
+          Array.isArray(trainerData.specializations) ? trainerData.specializations : [],
+          trainerData.hourlyRate ? parseFloat(trainerData.hourlyRate) : 75.00,
+          trainerData.experienceYears ? parseInt(trainerData.experienceYears) : 2,
+          trainerData.certifications || '',
+          trainerData.bio || '',
+          true
+        ]);
+
+        const trainer = trainerRows[0];
+
+        await client.query('COMMIT');
+        console.log('Trainer created successfully in both tables:', { user, trainer });
+
+        res.json({
+          message: "Trainer created successfully in both users and trainer_profiles tables",
+          trainer: {
+            userId: trainer.id.toString(),
+            firstName: trainer.first_name,
+            lastName: trainer.last_name,
+            email: trainer.email,
+            phone: trainer.phone,
+            specializations: trainer.specializations || [],
+            hourlyRate: trainer.hourly_rate || 75,
+            experienceYears: trainer.experience_years || 2,
+            certifications: trainer.certifications || '',
+            bio: trainer.bio || '',
+            isAvailable: trainer.is_available !== false
+          }
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error creating trainer:", error);
       res.status(500).json({ message: error.message || "Failed to create trainer" });
@@ -1370,66 +1551,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { trainerId } = req.params;
       const updates = req.body;
 
-      // Build dynamic update query
-      const fields = [];
-      const values = [];
-      let paramIndex = 1;
+      // Get trainer profile to find associated user_id
+      const { rows: trainerRows } = await pool.query('SELECT user_id FROM trainer_profiles WHERE id = $1', [trainerId]);
 
-      if (updates.firstName) {
-        fields.push(`first_name = $${paramIndex++}`);
-        values.push(updates.firstName);
-      }
-      if (updates.lastName) {
-        fields.push(`last_name = $${paramIndex++}`);
-        values.push(updates.lastName);
-      }
-      if (updates.email) {
-        fields.push(`email = $${paramIndex++}`);
-        values.push(updates.email);
-      }
-      if (updates.phone !== undefined) {
-        fields.push(`phone = $${paramIndex++}`);
-        values.push(updates.phone);
-      }
-      if (updates.specializations) {
-        fields.push(`specializations = $${paramIndex++}`);
-        values.push(updates.specializations);
-      }
-      if (updates.hourlyRate) {
-        fields.push(`hourly_rate = $${paramIndex++}`);
-        values.push(parseFloat(updates.hourlyRate));
-      }
-      if (updates.experienceYears) {
-        fields.push(`experience_years = $${paramIndex++}`);
-        values.push(parseInt(updates.experienceYears));
-      }
-      if (updates.certifications !== undefined) {
-        fields.push(`certifications = $${paramIndex++}`);
-        values.push(updates.certifications);
-      }
-      if (updates.bio !== undefined) {
-        fields.push(`bio = $${paramIndex++}`);
-        values.push(updates.bio);
-      }
-      if (updates.isAvailable !== undefined) {
-        fields.push(`is_available = $${paramIndex++}`);
-        values.push(updates.isAvailable);
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer not found" });
       }
 
-      if (fields.length > 0) {
-        fields.push(`updated_at = CURRENT_TIMESTAMP`);
-        values.push(trainerId);
+      const userId = trainerRows[0].user_id;
+      const client = await pool.connect();
 
-        await pool.query(
-          `UPDATE trainer_profiles SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
-          values
-        );
+      try {
+        await client.query('BEGIN');
+
+        // Update users table if basic info is being changed
+        const userFields = [];
+        const userValues = [];
+        let userParamIndex = 1;
+
+        if (updates.firstName) {
+          userFields.push(`first_name = $${userParamIndex++}`);
+          userValues.push(updates.firstName);
+        }
+        if (updates.lastName) {
+          userFields.push(`last_name = $${userParamIndex++}`);
+          userValues.push(updates.lastName);
+        }
+        if (updates.email) {
+          userFields.push(`email = $${userParamIndex++}`);
+          userValues.push(updates.email);
+        }
+        if (updates.phone !== undefined) {
+          userFields.push(`phone = $${userParamIndex++}`);
+          userValues.push(updates.phone);
+        }
+
+        if (userFields.length > 0 && userId) {
+          userFields.push(`updated_at = CURRENT_TIMESTAMP`);
+          userValues.push(userId);
+          await client.query(
+            `UPDATE users SET ${userFields.join(', ')} WHERE id = $${userParamIndex}`,
+            userValues
+          );
+        }
+
+        // Update trainer_profiles table
+        const trainerFields = [];
+        const trainerValues = [];
+        let trainerParamIndex = 1;
+
+        if (updates.firstName) {
+          trainerFields.push(`first_name = $${trainerParamIndex++}`);
+          trainerValues.push(updates.firstName);
+        }
+        if (updates.lastName) {
+          trainerFields.push(`last_name = $${trainerParamIndex++}`);
+          trainerValues.push(updates.lastName);
+        }
+        if (updates.email) {
+          trainerFields.push(`email = $${trainerParamIndex++}`);
+          trainerValues.push(updates.email);
+        }
+        if (updates.phone !== undefined) {
+          trainerFields.push(`phone = $${trainerParamIndex++}`);
+          trainerValues.push(updates.phone);
+        }
+        if (updates.specializations) {
+          trainerFields.push(`specializations = $${trainerParamIndex++}`);
+          trainerValues.push(updates.specializations);
+        }
+        if (updates.hourlyRate) {
+          trainerFields.push(`hourly_rate = $${trainerParamIndex++}`);
+          trainerValues.push(parseFloat(updates.hourlyRate));
+        }
+        if (updates.experienceYears) {
+          trainerFields.push(`experience_years = $${trainerParamIndex++}`);
+          trainerValues.push(parseInt(updates.experienceYears));
+        }
+        if (updates.certifications !== undefined) {
+          trainerFields.push(`certifications = $${trainerParamIndex++}`);
+          trainerValues.push(updates.certifications);
+        }
+        if (updates.bio !== undefined) {
+          trainerFields.push(`bio = $${trainerParamIndex++}`);
+          trainerValues.push(updates.bio);
+        }
+        if (updates.isAvailable !== undefined) {
+          trainerFields.push(`is_available = $${trainerParamIndex++}`);
+          trainerValues.push(updates.isAvailable);
+        }
+
+        if (trainerFields.length > 0) {
+          trainerFields.push(`updated_at = CURRENT_TIMESTAMP`);
+          trainerValues.push(trainerId);
+          await client.query(
+            `UPDATE trainer_profiles SET ${trainerFields.join(', ')} WHERE id = $${trainerParamIndex}`,
+            trainerValues
+          );
+        }
+
+        await client.query('COMMIT');
+        res.json({ message: "Trainer updated successfully in both users and trainer_profiles tables" });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
       }
-
-      res.json({ message: "Trainer updated successfully" });
     } catch (error: any) {
       console.error("Error updating trainer:", error);
       res.status(500).json({ message: error.message || "Failed to update trainer" });
+    }
+  });
+
+  // Change trainer password route (admin only)
+  app.post('/api/admin/change-trainer-password/:trainerId', async (req, res) => {
+    try {
+      const { trainerId } = req.params;
+      const { newPassword } = req.body;
+
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
+      }
+
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters long" });
+      }
+
+      // Get trainer profile to find associated user_id
+      const { rows: trainerRows } = await pool.query('SELECT user_id FROM trainer_profiles WHERE id = $1', [trainerId]);
+
+      if (trainerRows.length === 0) {
+        return res.status(404).json({ message: "Trainer not found" });
+      }
+
+      const userId = trainerRows[0].user_id;
+
+      if (!userId) {
+        return res.status(400).json({ message: "No associated user account found for this trainer" });
+      }
+
+      // Hash the new password
+      const hashedPassword = await authService.hashPassword(newPassword);
+
+      // Update user password
+      await pool.query('UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [hashedPassword, userId]);
+
+      console.log(`Password changed for trainer ID: ${trainerId}, User ID: ${userId}`);
+
+      res.json({ message: "Trainer password changed successfully" });
+    } catch (error: any) {
+      console.error("Error changing trainer password:", error);
+      res.status(500).json({ message: error.message || "Failed to change trainer password" });
     }
   });
 
@@ -1438,13 +1712,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { trainerId } = req.params;
 
-      const { rows } = await pool.query('DELETE FROM trainer_profiles WHERE id = $1 RETURNING *', [trainerId]);
+      // Get trainer profile to find associated user_id
+      const { rows: trainerRows } = await pool.query('SELECT user_id FROM trainer_profiles WHERE id = $1', [trainerId]);
 
-      if (rows.length === 0) {
+      if (trainerRows.length === 0) {
         return res.status(404).json({ message: "Trainer not found" });
       }
 
-      res.json({ message: "Trainer deleted successfully" });
+      const userId = trainerRows[0].user_id;
+      const client = await pool.connect();
+
+      try {
+        await client.query('BEGIN');
+
+        // Delete from trainer_profiles first (due to foreign key constraint)
+        await client.query('DELETE FROM trainer_profiles WHERE id = $1', [trainerId]);
+
+        // Delete from users table if user_id exists
+        if (userId) {
+          await client.query('DELETE FROM users WHERE id = $1', [userId]);
+        }
+
+        await client.query('COMMIT');
+        console.log(`Trainer deleted from both tables. TrainerID: ${trainerId}, UserID: ${userId}`);
+
+        res.json({ message: "Trainer deleted successfully from both users and trainer_profiles tables" });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error deleting trainer:", error);
       res.status(500).json({ message: error.message || "Failed to delete trainer" });

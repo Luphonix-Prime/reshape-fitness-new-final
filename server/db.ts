@@ -38,6 +38,7 @@ async function createTables() {
       last_name VARCHAR(255) NOT NULL,
       user_type VARCHAR(50) NOT NULL DEFAULT 'member',
       phone VARCHAR(20),
+      password_hash VARCHAR(255),
       stripe_subscription_id VARCHAR(255),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -273,6 +274,19 @@ async function createTables() {
     );
   `;
 
+  const createAuthTokensTable = `
+    CREATE TABLE IF NOT EXISTS auth_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      token VARCHAR(255) UNIQUE NOT NULL,
+      type VARCHAR(50) NOT NULL,
+      new_email VARCHAR(255),
+      expires_at TIMESTAMP NOT NULL,
+      used BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
   const tables = [
     createUsersTable,
     createMembershipTiersTable,
@@ -288,7 +302,8 @@ async function createTables() {
     createMemberSessionsTable,
     createInquiriesTable,
     createMemberSessionAttendanceTable,
-    createMemberTrainerAssignmentsTable
+    createMemberTrainerAssignmentsTable,
+    createAuthTokensTable
   ];
 
   for (const table of tables) {

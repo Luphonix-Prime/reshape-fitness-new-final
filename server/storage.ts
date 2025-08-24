@@ -1226,5 +1226,87 @@ export const storage = {
       console.error(`Error deleting trainer ${trainerId}:`, error);
       throw error;
     }
+  },
+
+  // Update workout plan
+  async updateWorkoutPlan(planId: string, updates: any): Promise<void> {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.planName) {
+      fields.push(`plan_name = $${paramIndex++}`);
+      values.push(updates.planName);
+    }
+    if (updates.description !== undefined) {
+      fields.push(`description = $${paramIndex++}`);
+      values.push(updates.description);
+    }
+    if (updates.duration) {
+      fields.push(`duration = $${paramIndex++}`);
+      values.push(updates.duration);
+    }
+    if (updates.exercises !== undefined) {
+      fields.push(`exercises = $${paramIndex++}`);
+      values.push(updates.exercises);
+    }
+
+    if (fields.length > 0) {
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(planId);
+      await pool.query(
+        `UPDATE workout_plans SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    }
+  },
+
+  // Delete workout plan
+  async deleteWorkoutPlan(planId: string): Promise<void> {
+    const { rows } = await pool.query('DELETE FROM workout_plans WHERE id = $1 RETURNING *', [planId]);
+    if (rows.length === 0) {
+      throw new Error(`Workout plan with id ${planId} not found`);
+    }
+  },
+
+  // Update nutrition plan
+  async updateNutritionPlan(planId: string, updates: any): Promise<void> {
+    const fields = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.planName) {
+      fields.push(`plan_name = $${paramIndex++}`);
+      values.push(updates.planName);
+    }
+    if (updates.description !== undefined) {
+      fields.push(`description = $${paramIndex++}`);
+      values.push(updates.description);
+    }
+    if (updates.calories) {
+      fields.push(`calories = $${paramIndex++}`);
+      values.push(updates.calories);
+    }
+    if (updates.meals !== undefined) {
+      fields.push(`meals = $${paramIndex++}`);
+      values.push(updates.meals);
+    }
+
+    if (fields.length > 0) {
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(planId);
+      await pool.query(
+        `UPDATE nutrition_plans SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
+    }
+  },
+
+  // Delete nutrition plan
+  async deleteNutritionPlan(planId: string): Promise<void> {
+    const { rows } = await pool.query('DELETE FROM nutrition_plans WHERE id = $1 RETURNING *', [planId]);
+    if (rows.length === 0) {
+      throw new Error(`Nutrition plan with id ${planId} not found`);
+    }
   }
 };
