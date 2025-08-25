@@ -1485,14 +1485,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
+  // Get all members
   app.get('/api/admin/members', async (req, res) => {
     try {
-      // Exclude demo users from management lists
-      const members = await storage.getAllMembers({ excludeDemo: true });
-      res.json(members);
+      const { rows } = await pool.query(`
+        SELECT
+          mp.*,
+          u.first_name as user_first_name,
+          u.last_name as user_last_name,
+          u.email as user_email,
+          mt.name as membership_tier_name,
+          mt.sessions as membership_sessions,
+          mt.duration as membership_duration,
+          mt.one_on_one_price,
+          mt.two_people_price,
+          mt.three_people_price,
+          COALESCE(s.training_type, mp.training_type, 'one_on_one') as training_type,
+          s.plan_type,
+          s.training_type as subscription_training_type,
+          s.membership_tier_id as subscription_membership_tier_id,
+          s.sessions_total,
+          s.sessions_used,
+          s.price_paid,
+          s.start_date as subscription_start_date,
+          s.end_date as subscription_end_date,
+          s.is_active as subscription_active,
+          CASE 
+            WHEN s.is_active = true THEN 'Active'
+            WHEN s.is_active = false THEN 'Inactive' 
+            ELSE 'No Subscription'
+          END as subscription_status
+        FROM member_profiles mp
+        LEFT JOIN users u ON mp.user_id = u.id
+        LEFT JOIN membership_tiers mt ON COALESCE(s.membership_tier_id, mp.membership_tier_id) = mt.id
+        LEFT JOIN subscriptions s ON mp.id = s.member_id AND s.is_active = true
+        ORDER BY mp.created_at DESC
+      `);
+      res.json(rows);
     } catch (error) {
-      console.error("Error fetching members:", error);
-      res.status(500).json({ message: "Failed to fetch members" });
+      console.error('Error fetching members:', error);
+      res.status(500).json({ error: 'Failed to fetch members' });
     }
   });
 
@@ -1807,21 +1839,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "First name, last name, and email are required" });
       }
 
-      // Create member profile
-      const member = await storage.createMemberProfile({
-        firstName: memberData.firstName,
-        lastName: memberData.lastName,
-        email: memberData.email,
-        phone: memberData.phone || null,
-        membershipTierId: memberData.membershipTierId || null,
-        emergencyContact: memberData.emergencyContact || memberData.email,
-        fitnessGoals: memberData.fitnessGoals || 'General fitness improvement'
-      });
+      const client = await pool.connect();
 
-      res.json({
-        message: "Member created successfully",
-        member
-      });
+      try {
+        await client.query('BEGIN');
+
+        // Create member profile with training type
+        const member = await storage.createMemberProfile({
+          firstName: memberData.firstName,
+          lastName: memberData.lastName,
+          email: memberData.email,
+          phone: memberData.phone || null,
+          membershipTierId: memberData.membershipTierId || null,
+          emergencyContact: memberData.emergencyContact || memberData.email,
+          fitnessGoals: memberData.fitnessGoals || 'General fitness improvement',
+          trainingType: memberData.trainingType || 'one_on_one'
+        });
+
+        // Create subscription if membership tier is selected
+        if (memberData.membershipTierId && memberData.trainingType) {
+          const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [memberData.membershipTierId]);
+          
+          if (tierRows.length > 0) {
+            const tier = tierRows[0];
+            let price = tier.one_on_one_price || 0;
+            
+            if (memberData.trainingType === 'two_people') {
+              price = tier.two_people_price || 0;
+            } else if (memberData.trainingType === 'three_people') {
+              price = tier.three_people_price || 0;
+            }
+
+            const planType = `${tier.sessions}_session`;
+            const endDate = new Date();
+            const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+            endDate.setMonth(endDate.getMonth() + durationMonths);
+
+            // Insert or update subscription
+            await client.query(`
+              INSERT INTO subscriptions (
+                member_id, membership_tier_id, plan_type, training_type, 
+                sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              ON CONFLICT (member_id) 
+              DO UPDATE SET 
+                membership_tier_id = EXCLUDED.membership_tier_id,
+                plan_type = EXCLUDED.plan_type,
+                training_type = EXCLUDED.training_type,
+                sessions_total = EXCLUDED.sessions_total,
+                price_paid = EXCLUDED.price_paid,
+                start_date = EXCLUDED.start_date,
+                end_date = EXCLUDED.end_date,
+                is_active = EXCLUDED.is_active,
+                updated_at = CURRENT_TIMESTAMP
+            `, [
+              member.id, memberData.membershipTierId, planType, memberData.trainingType,
+              tier.sessions, 0, price, new Date(), endDate, true
+            ]);
+          }
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+          message: "Member created successfully",
+          member
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error creating member:", error);
       res.status(500).json({ message: error.message || "Failed to create member" });

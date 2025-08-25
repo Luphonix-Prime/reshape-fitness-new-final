@@ -51,6 +51,7 @@ export default function AdminDashboard() {
     lastName: "",
     email: "",
     membershipTierId: "",
+    trainingType: "", // Added trainingType state
     phone: "",
     emergencyContact: "",
     fitnessGoals: ""
@@ -274,9 +275,10 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
     },
     onError: (error: any) => {
+      console.error('Update member error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to update member",
+        description: error.response?.data?.message || error.message || "Failed to update member",
         variant: "destructive",
       });
     }
@@ -665,26 +667,44 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Ensure membershipTierId is set
-    const membershipTierId = newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id);
-    if (!membershipTierId) {
-      toast({
-        title: "Error",
-        description: "Please select a membership type",
-        variant: "destructive"
-      });
-      return;
+    // For updates, membershipTierId is optional; for creates, it's required
+    if (!editingMember) {
+      const membershipTierId = newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id);
+      if (!membershipTierId) {
+        toast({
+          title: "Error",
+          description: "Please select a membership type",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     const memberData = {
-      ...newMember,
-      membershipTierId
+      firstName: newMember.firstName,
+      lastName: newMember.lastName,
+      email: newMember.email,
+      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id),
+      trainingType: newMember.trainingType || 'one_on_one',
+      phone: newMember.phone || null,
+      emergencyContact: newMember.emergencyContact || null,
+      fitnessGoals: newMember.fitnessGoals || null
     };
 
-    console.log('Creating member with data:', memberData);
+    console.log(editingMember ? 'Updating member with data:' : 'Creating member with data:', memberData);
 
     if (editingMember) {
-      updateMemberMutation.mutate({ id: editingMember.userId, memberData });
+      // Use the correct member ID from the member object
+      const memberId = editingMember.userId || editingMember.id || editingMember.user_id;
+      if (!memberId) {
+        toast({
+          title: "Error",
+          description: "Invalid member ID",
+          variant: "destructive"
+        });
+        return;
+      }
+      updateMemberMutation.mutate({ id: memberId, memberData });
     } else {
       createMemberMutation.mutate(memberData);
     }
@@ -718,16 +738,19 @@ export default function AdminDashboard() {
     }
   };
 
+  // Edit member
   const handleEditMember = (member: any) => {
+    console.log('Editing member:', member);
     setEditingMember(member);
     setNewMember({
-      firstName: member.firstName || "",
-      lastName: member.lastName || "",
-      email: member.email || "",
-      membershipTierId: member.membershipTierId || "",
-      phone: member.phone || "",
-      emergencyContact: member.emergencyContact || "",
-      fitnessGoals: member.fitnessGoals || ""
+      firstName: member.first_name || '',
+      lastName: member.last_name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      membershipTierId: member.membership_tier_id || member.subscription_membership_tier_id || '',
+      emergencyContact: member.emergency_contact || '',
+      fitnessGoals: member.fitness_goals || '',
+      trainingType: member.subscription_training_type || member.training_type || 'one_on_one'
     });
     setShowAddMemberModal(true);
   };
@@ -799,6 +822,7 @@ export default function AdminDashboard() {
     }
   };
 
+  // Close all member and trainer modals and reset their states
   const closeModals = () => {
     setShowAddMemberModal(false);
     setShowAddTrainerModal(false);
@@ -809,6 +833,7 @@ export default function AdminDashboard() {
       lastName: "",
       email: "",
       membershipTierId: "",
+      trainingType: "", // Reset trainingType
       phone: "",
       emergencyContact: "",
       fitnessGoals: ""
@@ -833,9 +858,10 @@ export default function AdminDashboard() {
 
   const handleUpdatePricing = (e: React.FormEvent) => {
     e.preventDefault();
+    // Convert string prices back to numbers for submission
     const pricingData = Object.keys(membershipPricing).map(tierId => ({
       tierId,
-      monthlyPrice: membershipPricing[tierId]
+      monthlyPrice: parseFloat(membershipPricing[tierId])
     }));
     updateMembershipPricingMutation.mutate({ pricing: pricingData });
   };
@@ -976,7 +1002,7 @@ export default function AdminDashboard() {
       date: selectedDate
     };
 
-    recordAttendanceMutation.mutate(attendanceData); // Corrected variable name from attendancedata to attendanceData
+    recordAttendanceMutation.mutate(attendanceData);
   };
 
   const closeAttendanceModal = () => {
@@ -1516,12 +1542,40 @@ export default function AdminDashboard() {
                           <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
                             <SelectValue placeholder="Select membership type" />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                            {membershipTiers?.map((tier: any) => (
-                              <SelectItem key={`member-tier-${tier._id || tier.id}`} value={tier._id || tier.id} className="focus:bg-gold focus:text-black">
-                                {tier.name}
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
+                            {membershipTiers && membershipTiers.length > 0 ? membershipTiers.map((tier: any) => (
+                              <SelectItem key={`member-tier-${tier._id || tier.id}`} value={(tier._id || tier.id).toString()} className="focus:bg-gold focus:text-black hover:bg-gold hover:text-black">
+                                {tier.name || `${tier.sessions} Sessions`}
                               </SelectItem>
-                            ))}
+                            )) : (
+                              <SelectItem value="no-tiers" disabled className="text-gray-500">
+                                No membership tiers available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Added Training Type Dropdown */}
+                      <div>
+                        <Label htmlFor="trainingType">Training Type</Label>
+                        <Select
+                          name="trainingType"
+                          value={newMember.trainingType}
+                          onValueChange={(value) => setNewMember({...newMember, trainingType: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select training type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            <SelectItem value="one_on_one" className="focus:bg-gold focus:text-black">
+                              1 on 1 Training
+                            </SelectItem>
+                            <SelectItem value="two_people" className="focus:bg-gold focus:text-black">
+                              2 People Training
+                            </SelectItem>
+                            <SelectItem value="three_people" className="focus:bg-gold focus:text-black">
+                              3 People Training
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1762,16 +1816,9 @@ export default function AdminDashboard() {
                   variant="outline"
                   className="border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black"
                   onClick={() => {
-                    // This button should probably be within the trainer list, but for now,
-                    // we'll open it if any trainer is selected or prompt the user.
-                    // A more robust solution would be a button next to each trainer row.
-                    if (trainers && trainers.length > 0) {
-                      // For demonstration, we'll just open the modal.
-                      // In a real app, you'd select a trainer first.
-                      toast({ title: "Select a trainer to change their password", description: "You can do this from the 'MANAGE MEMBERS' tab." });
-                    } else {
-                      toast({ title: "No trainers available", description: "Please add trainers first." });
-                    }
+                    // For demonstration, we'll just open the modal.
+                    // In a real app, you'd select a trainer first.
+                    toast({ title: "Select a trainer to change their password", description: "You can do this from the 'MANAGE MEMBERS' tab." });
                   }}
                 >
                   <Key className="h-4 w-4 mr-2" />
@@ -1870,21 +1917,23 @@ export default function AdminDashboard() {
                       <TableHead className="text-gray-400">Email</TableHead>
                       <TableHead className="text-gray-400">Phone</TableHead>
                       <TableHead className="text-gray-400">Membership</TableHead>
+                      <TableHead className="text-gray-400">Training Type</TableHead>
+                      <TableHead className="text-gray-400">Plan Type</TableHead>
+                      <TableHead className="text-gray-400">Sessions</TableHead>
+                      <TableHead className="text-gray-400">Price Paid</TableHead>
                       <TableHead className="text-gray-400">Join Date</TableHead>
-                      <TableHead className="text-gray-400">Trainer</TableHead> {/* Added for Trainer Assignment */}
                       <TableHead className="text-gray-400">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {members?.map((member: any) => {
-                      // Find the assigned trainer for this member using member profile ID
-                      const assignment = Array.isArray(trainerAssignments)
+                    {members?.map((member: any, index: number) => {
+                        const assignment = trainerAssignments 
                         ? trainerAssignments.find((ta: any) => ta.member_id.toString() === member.userId)
                         : null;
                       const assignedTrainerName = assignment ? assignment.trainer_name : 'Not Assigned';
 
                       return (
-                        <TableRow key={member.userId} className="border-gray-800">
+                        <TableRow key={member.userId || member.id || index} className="border-gray-800">
                           <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
                           <TableCell className="text-gray-400">{member.email}</TableCell>
                           <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
@@ -1893,11 +1942,34 @@ export default function AdminDashboard() {
                               {member.membershipTier || 'N/A'}
                             </Badge>
                           </TableCell>
+                          <TableCell className="text-white">
+                          {(member.subscription_training_type || member.training_type) ? (
+                            (member.subscription_training_type || member.training_type) === 'one_on_one' ? 'One-on-One' :
+                            (member.subscription_training_type || member.training_type) === 'two_people' ? '2 People' :
+                            (member.subscription_training_type || member.training_type) === 'three_people' ? '3 People' : 
+                            (member.subscription_training_type || member.training_type)
+                          ) : 'Not Set'}
+                        </TableCell>
+                          <TableCell className="text-white">
+                          {member.plan_type || 'No Plan'}
+                        </TableCell>
+                          <TableCell className="text-white">
+                          {member.sessions_used !== undefined && member.sessions_total !== undefined 
+                            ? `${member.sessions_used || 0}/${member.sessions_total || 0}`
+                            : member.membership_sessions || 'N/A'}
+                        </TableCell>
+                          <TableCell className="text-white">
+                          {member.price_paid 
+                            ? `₹${member.price_paid.toFixed(2)}`
+                            : member.subscription_active
+                              ? (member.subscription_training_type === 'one_on_one' ? `₹${member.one_on_one_price || 0}` :
+                                 member.subscription_training_type === 'two_people' ? `₹${member.two_people_price || 0}` :
+                                 member.subscription_training_type === 'three_people' ? `₹${member.three_people_price || 0}` : 'N/A')
+                              : 'Not Paid'
+                          }
+                        </TableCell>
                           <TableCell className="text-gray-400">
                             {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
-                          </TableCell>
-                          <TableCell className="text-white"> {/* Display assigned trainer */}
-                            {assignedTrainerName}
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
@@ -3532,8 +3604,7 @@ export default function AdminDashboard() {
                 <CardContent>
                   <form onSubmit={handleSaveGymConfiguration} className="space-y-4">
                     <div>
-                      <Label htmlFor="gymName">Gym Name</Label>
-                      <Input
+                      <Label htmlFor="gymName">Gym Name</Label><Input
                         id="gymName"
                         value={gymSettings.gymName}
                         onChange={(e) => setGymSettings({...gymSettings, gymName: e.target.value})}
@@ -3810,7 +3881,7 @@ export default function AdminDashboard() {
                           <Textarea
                             id="description"
                             value={newMembership.description}
-                            onChange={(e) => setNewMember({...newMembership, description: e.target.value})}
+                            onChange={(e) => setNewMember({...newMember, description: e.target.value})}
                             className="bg-black border-gray-700 text-white"
                             placeholder="Brief description of this membership tier"
                             rows={2}

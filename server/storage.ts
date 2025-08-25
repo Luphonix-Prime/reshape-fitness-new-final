@@ -317,12 +317,20 @@ export const storage = {
   },
 
   // Member profile operations
-  async createMemberProfile(profileData: any): Promise<any> {
+  async createMemberProfile(profileData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    membershipTierId?: string | null;
+    emergencyContact?: string;
+    fitnessGoals?: string;
+    trainingType?: string;
+  }): Promise<MemberProfile> {
     try {
       const { rows } = await pool.query(`
         INSERT INTO member_profiles (first_name, last_name, email, phone, membership_tier_id, emergency_contact, fitness_goals, training_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
       `, [
         profileData.firstName,
         profileData.lastName,
@@ -333,7 +341,7 @@ export const storage = {
         profileData.fitnessGoals,
         profileData.trainingType || 'one_on_one'
       ]);
-      return rows[0];
+      return this.mapMemberProfileFromDb(rows[0]);
     } catch (error) {
       console.error("Error creating member profile:", error);
       throw error;
@@ -367,47 +375,45 @@ export const storage = {
       membershipTierId: row.membership_tier_id,
       joinDate: row.created_at,
       emergencyContact: row.emergency_contact,
-      fitnessGoals: row.fitness_goals
+      fitnessGoals: row.fitness_goals,
+      trainingType: row.training_type
     }));
   },
 
   async updateMemberById(userId: string, updates: any): Promise<void> {
-    const userFields = [];
-    const userValues = [];
-    let paramIndex = 1;
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
 
-    if (updates.firstName) {
-      userFields.push(`first_name = $${paramIndex++}`);
-      userValues.push(updates.firstName);
-    }
-    if (updates.lastName) {
-      userFields.push(`last_name = $${paramIndex++}`);
-      userValues.push(updates.lastName);
-    }
-    if (updates.email) {
-      userFields.push(`email = $${paramIndex++}`);
-      userValues.push(updates.email);
-    }
-    if (updates.phone) {
-      userFields.push(`phone = $${paramIndex++}`);
-      userValues.push(updates.phone);
-    }
+      // First get the member profile ID
+      const { rows: memberRows } = await client.query('SELECT id FROM member_profiles WHERE id = $1 OR user_id = $1', [userId]);
+      if (memberRows.length === 0) {
+        throw new Error(`Member with id ${userId} not found`);
+      }
+      const memberId = memberRows[0].id;
 
-    if (userFields.length > 0) {
-      userFields.push(`updated_at = CURRENT_TIMESTAMP`);
-      userValues.push(userId);
-      await pool.query(
-        `UPDATE users SET ${userFields.join(', ')} WHERE id = $${paramIndex}`,
-        userValues
-      );
-    }
-
-    // Update member profile if needed
-    if (updates.fitnessGoals || updates.emergencyContact || updates.membershipTierId) {
+      // Update member profile
       const profileFields = [];
       const profileValues = [];
       let profileParamIndex = 1;
 
+      if (updates.firstName) {
+        profileFields.push(`first_name = $${profileParamIndex++}`);
+        profileValues.push(updates.firstName);
+      }
+      if (updates.lastName) {
+        profileFields.push(`last_name = $${profileParamIndex++}`);
+        profileValues.push(updates.lastName);
+      }
+      if (updates.email) {
+        profileFields.push(`email = $${profileParamIndex++}`);
+        profileValues.push(updates.email);
+      }
+      if (updates.phone !== undefined) {
+        profileFields.push(`phone = $${profileParamIndex++}`);
+        profileValues.push(updates.phone);
+      }
       if (updates.fitnessGoals) {
         profileFields.push(`fitness_goals = $${profileParamIndex++}`);
         profileValues.push(updates.fitnessGoals);
@@ -420,18 +426,81 @@ export const storage = {
         profileFields.push(`membership_tier_id = $${profileParamIndex++}`);
         profileValues.push(updates.membershipTierId);
       }
-
-
-
+      if (updates.trainingType) {
+        profileFields.push(`training_type = $${profileParamIndex++}`);
+        profileValues.push(updates.trainingType);
+      }
 
       if (profileFields.length > 0) {
         profileFields.push(`updated_at = CURRENT_TIMESTAMP`);
-        profileValues.push(userId);
-        await pool.query(
-          `UPDATE member_profiles SET ${profileFields.join(', ')} WHERE user_id = $${profileParamIndex}`,
+        profileValues.push(memberId);
+        await client.query(
+          `UPDATE member_profiles SET ${profileFields.join(', ')} WHERE id = $${profileParamIndex}`,
           profileValues
         );
       }
+
+      // Update or create subscription if membership tier and training type are provided
+      if (updates.membershipTierId && updates.trainingType) {
+        const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [updates.membershipTierId]);
+        
+        if (tierRows.length > 0) {
+          const tier = tierRows[0];
+          let price = tier.one_on_one_price || 0;
+          
+          if (updates.trainingType === 'two_people') {
+            price = tier.two_people_price || 0;
+          } else if (updates.trainingType === 'three_people') {
+            price = tier.three_people_price || 0;
+          }
+
+          const planType = `${tier.sessions}_session`;
+          const endDate = new Date();
+          const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+
+          // Check if subscription already exists
+          const { rows: existingSub } = await client.query('SELECT id FROM subscriptions WHERE member_id = $1', [memberId]);
+          
+          if (existingSub.length > 0) {
+            // Update existing subscription - fix parameter count
+            await client.query(`
+              UPDATE subscriptions SET
+                membership_tier_id = $2,
+                plan_type = $3,
+                training_type = $4,
+                sessions_total = $5,
+                price_paid = $6,
+                start_date = $7,
+                end_date = $8,
+                is_active = $9,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE member_id = $1
+            `, [
+              memberId, updates.membershipTierId, planType, updates.trainingType,
+              tier.sessions, price, new Date(), endDate, true
+            ]);
+          } else {
+            // Insert new subscription
+            await client.query(`
+              INSERT INTO subscriptions (
+                member_id, membership_tier_id, plan_type, training_type, 
+                sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `, [
+              memberId, updates.membershipTierId, planType, updates.trainingType,
+              tier.sessions, 0, price, new Date(), endDate, true
+            ]);
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   },
 

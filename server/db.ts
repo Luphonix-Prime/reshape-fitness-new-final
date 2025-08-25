@@ -30,6 +30,30 @@ export async function initializeDatabase() {
 }
 
 async function createTables() {
+  // Add training_type column to member_profiles if it doesn't exist
+  try {
+    await pool.query(`
+      ALTER TABLE member_profiles 
+      ADD COLUMN IF NOT EXISTS training_type VARCHAR(20) DEFAULT 'one_on_one'
+    `);
+  } catch (error) {
+    console.log('Column training_type might already exist or table not created yet');
+  }
+
+  // Add new columns to subscriptions table if they don't exist
+  try {
+    await pool.query(`
+      ALTER TABLE subscriptions 
+      ADD COLUMN IF NOT EXISTS plan_type VARCHAR(20) DEFAULT '12_session',
+      ADD COLUMN IF NOT EXISTS training_type VARCHAR(20) DEFAULT 'one_on_one',
+      ADD COLUMN IF NOT EXISTS sessions_total INTEGER DEFAULT 12,
+      ADD COLUMN IF NOT EXISTS sessions_used INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS price_paid DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    `);
+  } catch (error) {
+    console.log('Subscription columns might already exist or table not created yet');
+  }
   const createUsersTable = `
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -102,17 +126,23 @@ async function createTables() {
   `;
 
   const createSubscriptionsTable = `
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      id SERIAL PRIMARY KEY,
-      member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE,
-      membership_tier_id INTEGER REFERENCES membership_tiers(id),
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      is_active BOOLEAN DEFAULT true,
-      auto_renew BOOLEAN DEFAULT true,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id SERIAL PRIMARY KEY,
+        member_id INTEGER REFERENCES member_profiles(id) ON DELETE CASCADE UNIQUE,
+        membership_tier_id INTEGER REFERENCES membership_tiers(id),
+        plan_type VARCHAR(50),
+        training_type VARCHAR(50) DEFAULT 'one_on_one',
+        sessions_total INTEGER DEFAULT 0,
+        sessions_used INTEGER DEFAULT 0,
+        price_paid DECIMAL(10,2) DEFAULT 0,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        auto_renew BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
 
   const createTrainingSessionsTable = `
     CREATE TABLE IF NOT EXISTS training_sessions (
@@ -359,11 +389,12 @@ async function insertSampleData() {
       }
     }
 
-    // Insert membership tiers (always check/insert these)
+    // Insert membership tiers only if table is empty
     const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
-    // Force reinitialize membership tiers by clearing them first
-    await pool.query('DELETE FROM membership_tiers');
-    console.log('Cleared existing membership tiers');
+    if (parseInt(existingTiers[0].count) > 0) {
+      console.log('Membership tiers already exist, skipping insertion');
+      return;
+    }
 
       const tiers = [
         {
@@ -441,12 +472,12 @@ async function insertSampleData() {
       ];
 
       for (const tier of tiers) {
-      await pool.query(
-        'INSERT INTO membership_tiers (name, sessions, duration, one_on_one_price, one_on_one_per_session, two_people_price, two_people_per_session, three_people_price, three_people_per_session, tiers, features, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-        [tier.name, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.oneOnOnePerSession, tier.twoPeoplePrice, tier.twoPeoplePerSession, tier.threePeoplePrice, tier.threePeoplePerSession, tier.tiersData, tier.features, tier.description]
-      );
-    }
-    console.log('Membership tiers inserted');
+        await pool.query(
+          'INSERT INTO membership_tiers (name, sessions, duration, one_on_one_price, one_on_one_per_session, two_people_price, two_people_per_session, three_people_price, three_people_per_session, tiers, features, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+          [tier.name, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.oneOnOnePerSession, tier.twoPeoplePrice, tier.twoPeoplePerSession, tier.threePeoplePrice, tier.threePeoplePerSession, tier.tiersData, tier.features, tier.description]
+        );
+      }
+      console.log('Membership tiers inserted');
 
     // Always ensure admin, trainer, and member users exist
     const adminEmail = 'admin@reshape.com';
