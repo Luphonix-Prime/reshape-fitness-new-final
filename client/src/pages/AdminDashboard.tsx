@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   });
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
-  const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set());
+  const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set()); // This state is not used in the final logic but kept for context.
   const [newAttendance, setNewAttendance] = useState({
     trainerId: "",
     status: "present",
@@ -1030,14 +1030,39 @@ export default function AdminDashboard() {
 
       await recordAttendanceMutation.mutateAsync(attendanceData);
 
-      // Add trainer to marked set to disable buttons
-      setMarkedTrainers(prev => new Set(prev).add(trainerId));
+      // Update the attendance state to reflect the new status
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/attendance/${selectedDate}`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to record attendance",
-        variant: "destructive"
-      });
+      console.error('Error recording quick attendance:', error);
+    }
+  };
+
+  const handleCheckOut = async (trainerId: string) => {
+    try {
+      const currentTime = new Date().toTimeString().slice(0, 5);
+
+      // Find existing attendance record
+      const existingAttendance = todayAttendance?.find(att => att.trainerId.toString() === trainerId);
+
+      if (existingAttendance) {
+        const attendanceData = {
+          trainerId,
+          status: "present",
+          date: selectedDate,
+          checkInTime: existingAttendance.checkInTime,
+          checkOutTime: currentTime,
+          notes: existingAttendance.notes || ""
+        };
+
+        await recordAttendanceMutation.mutateAsync(attendanceData);
+
+        // Update the attendance state
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/attendance/${selectedDate}`] });
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] });
+      }
+    } catch (error: any) {
+      console.error('Error recording checkout:', error);
     }
   };
 
@@ -1187,6 +1212,17 @@ export default function AdminDashboard() {
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
+    // Reset member form data for conversion
+    setNewMember({
+      firstName: inquiry.firstName || "",
+      lastName: inquiry.lastName || "",
+      email: inquiry.email || "",
+      phone: inquiry.phone || "",
+      membershipTierId: membershipTiers?.[0]?._id || membershipTiers?.[0]?.id || "",
+      emergencyContact: inquiry.phone || inquiry.email || "",
+      fitnessGoals: inquiry.interest || "General fitness improvement",
+      trainingType: "one_on_one"
+    });
     setShowConvertModal(true);
   };
 
@@ -1222,7 +1258,8 @@ export default function AdminDashboard() {
     if (!selectedInquiry) return;
 
     const memberData = {
-      membershipTierId: membershipTiers?.[0]?._id || ""
+      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id) || "",
+      trainingType: newMember.trainingType || 'one_on_one'
     };
 
     convertInquiryMutation.mutate({
@@ -1329,12 +1366,22 @@ export default function AdminDashboard() {
   // Handler for submitting trainer assignment
   const handleSubmitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!selectedMemberForAssignment || !selectedTrainerForAssignment) {
+      toast({
+        title: "Error",
+        description: "Please select both a member and a trainer",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const response = await apiRequest('POST', '/api/admin/assign-trainer', {
         memberId: selectedMemberForAssignment,
         trainerId: selectedTrainerForAssignment,
-        assignedDate: assignmentData.assignedDate, // Use state for date
-        notes: assignmentData.notes // Use state for notes
+        assignedDate: assignmentData.assignedDate,
+        notes: assignmentData.notes
       });
 
       toast({
@@ -1725,12 +1772,7 @@ export default function AdminDashboard() {
                       variant="outline"
                       className="border-gold text-gold hover:bg-gold hover:text-black"
                       onClick={() => {
-                        // If a member is selected, open modal to assign a trainer
-                        if (selectedMemberForAssignment) {
-                          setShowAssignModal(true);
-                        } else {
-                          toast({ title: "Please select a member first" });
-                        }
+                        setShowAssignModal(true);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -1740,7 +1782,7 @@ export default function AdminDashboard() {
                   <DialogContent className="bg-gray-900 border-gray-800 text-white">
                     <DialogHeader>
                       <DialogTitle className="text-gold">
-                        Assign Trainer to {selectedMemberForAssignment ? members?.find(m => m.userId === selectedMemberForAssignment)?.firstName + " " + members?.find(m => m.userId === selectedMemberForAssignment)?.lastName : 'Member'}
+                        Assign Trainer to Member
                       </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmitAssignment} className="space-y-4">
@@ -1755,11 +1797,15 @@ export default function AdminDashboard() {
                             <SelectValue placeholder="Select a member" />
                           </SelectTrigger>
                           <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                            {members?.map((member: any) => (
-                              <SelectItem key={`assign-member-${member.userId}`} value={member.userId} className="focus:bg-gold focus:text-black">
-                                {member.firstName} {member.lastName}
-                              </SelectItem>
-                            ))}
+                            {members && members.length > 0 ? (
+                              members.map((member) => (
+                                <SelectItem key={member.id} value={member.id.toString()}>
+                                  {member.first_name} {member.last_name} ({member.email})
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="" disabled>No members available</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1927,49 +1973,42 @@ export default function AdminDashboard() {
                   </TableHeader>
                   <TableBody>
                     {members?.map((member: any, index: number) => {
-                        const assignment = trainerAssignments 
-                        ? trainerAssignments.find((ta: any) => ta.member_id.toString() === member.userId)
-                        : null;
+                        const assignment = trainerAssignments
+                          ? trainerAssignments.find((ta: any) => ta.member_id && ta.member_id.toString() === member.id.toString())
+                          : null;
                       const assignedTrainerName = assignment ? assignment.trainer_name : 'Not Assigned';
 
                       return (
-                        <TableRow key={member.userId || member.id || index} className="border-gray-800">
-                          <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
+                        <TableRow key={member.id || index} className="border-gray-800">
+                          <TableCell className="text-white">{member.first_name} {member.last_name}</TableCell>
                           <TableCell className="text-gray-400">{member.email}</TableCell>
                           <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className="border-gold text-gold">
-                              {member.membershipTier || 'N/A'}
+                              {member.membership_tier_name || 'N/A'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-white">
                           {(member.subscription_training_type || member.training_type) ? (
                             (member.subscription_training_type || member.training_type) === 'one_on_one' ? 'One-on-One' :
                             (member.subscription_training_type || member.training_type) === 'two_people' ? '2 People' :
-                            (member.subscription_training_type || member.training_type) === 'three_people' ? '3 People' : 
+                            (member.subscription_training_type || member.training_type) === 'three_people' ? '3 People' :
                             (member.subscription_training_type || member.training_type)
                           ) : 'Not Set'}
                         </TableCell>
                           <TableCell className="text-white">
-                          {member.plan_type || 'No Plan'}
-                        </TableCell>
+                          {member.plan_type || 'No Plan'}</TableCell>
                           <TableCell className="text-white">
-                          {member.sessions_used !== undefined && member.sessions_total !== undefined 
-                            ? `${member.sessions_used || 0}/${member.sessions_total || 0}`
-                            : member.membership_sessions || 'N/A'}
-                        </TableCell>
-                          <TableCell className="text-white">
-                          {member.price_paid 
-                            ? `₹${member.price_paid.toFixed(2)}`
-                            : member.subscription_active
-                              ? (member.subscription_training_type === 'one_on_one' ? `₹${member.one_on_one_price || 0}` :
-                                 member.subscription_training_type === 'two_people' ? `₹${member.two_people_price || 0}` :
-                                 member.subscription_training_type === 'three_people' ? `₹${member.three_people_price || 0}` : 'N/A')
-                              : 'Not Paid'
-                          }
-                        </TableCell>
+                            {member.sessions_used !== undefined && member.sessions_total !== undefined
+                              ? `${member.sessions_used || 0}/${member.sessions_total || 0}`
+                              : member.membership_sessions || 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-green-400">
+                            ₹{member.price_paid ? member.price_paid.toLocaleString() : '0'}
+                          </TableCell>
                           <TableCell className="text-gray-400">
-                            {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
+                            {member.subscription_start_date ? new Date(member.subscription_start_date).toLocaleDateString() :
+                             member.created_at ? new Date(member.created_at).toLocaleDateString() : 'N/A'}
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
@@ -1995,8 +2034,8 @@ export default function AdminDashboard() {
                                 variant="ghost"
                                 className="text-blue-500 hover:text-blue-700"
                                 onClick={() => {
-                                  setSelectedMemberForAssignment(member.userId);
-                                  const assignment = Array.isArray(trainerAssignments) ? trainerAssignments.find((ta: any) => ta.member_id === member.userId) : null;
+                                  setSelectedMemberForAssignment(member.id.toString());
+                                  const assignment = Array.isArray(trainerAssignments) ? trainerAssignments.find((ta: any) => ta.member_id.toString() === member.id.toString()) : null;
                                   setAssignmentData({
                                     trainerId: assignment ? assignment.trainer_id : "",
                                     assignedDate: assignment ? new Date(assignment.assigned_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -2343,7 +2382,23 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Convert Inquiry Modal */}
-            <Dialog open={showConvertModal} onOpenChange={setShowConvertModal}>
+            <Dialog open={showConvertModal} onOpenChange={(open) => {
+              setShowConvertModal(open);
+              if (!open) {
+                // Reset form when modal closes
+                setNewMember({
+                  firstName: "",
+                  lastName: "",
+                  email: "",
+                  membershipTierId: "",
+                  trainingType: "one_on_one",
+                  phone: "",
+                  emergencyContact: "",
+                  fitnessGoals: ""
+                });
+                setSelectedInquiry(null);
+              }
+            }}>
               <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-gold">
@@ -2374,6 +2429,59 @@ export default function AdminDashboard() {
                       <div className="col-span-2">
                         <span className="text-gray-400">Message:</span>
                         <span className="text-white ml-2">{selectedInquiry?.message}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Membership Selection */}
+                  <div className="space-y-4 p-4 bg-black rounded-lg">
+                    <h3 className="text-lg font-semibold text-gold">Membership Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="membershipTierId">Membership Type</Label>
+                        <Select
+                          name="membershipTierId"
+                          value={newMember.membershipTierId}
+                          onValueChange={(value) => setNewMember({...newMember, membershipTierId: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select membership type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
+                            {membershipTiers && membershipTiers.length > 0 ? membershipTiers.map((tier: any) => (
+                              <SelectItem key={`convert-tier-${tier._id || tier.id}`} value={(tier._id || tier.id).toString()} className="focus:bg-gold focus:text-black hover:bg-gold hover:text-black">
+                                {tier.name || `${tier.sessions} Sessions`}
+                              </SelectItem>
+                            )) : (
+                              <SelectItem value="no-tiers" disabled className="text-gray-500">
+                                No membership tiers available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="trainingType">Training Type</Label>
+                        <Select
+                          name="trainingType"
+                          value={newMember.trainingType}
+                          onValueChange={(value) => setNewMember({...newMember, trainingType: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select training type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            <SelectItem value="one_on_one" className="focus:bg-gold focus:text-black">
+                              1 on 1 Training
+                            </SelectItem>
+                            <SelectItem value="two_people" className="focus:bg-gold focus:text-black">
+                              2 People Training
+                            </SelectItem>
+                            <SelectItem value="three_people" className="focus:bg-gold focus:text-black">
+                              3 People Training
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
@@ -2706,16 +2814,13 @@ export default function AdminDashboard() {
                     {/* Advice */}
                     <div className="space-y-4 p-4 bg-black rounded-lg">
                       <h4 className="text-md font-semibold text-gold">Professional Advice</h4>
-                      <div>
-                        <Label htmlFor="advice">Recommendations and Advice</Label>
-                        <Textarea
-                          value={newAssessment.advice}
-                          onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
-                          className="bg-black border-gray-700 text-white"
-                          rows={4}
-                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
-                        />
-                      </div>
+                      <Textarea
+                        value={newAssessment.advice}
+                        onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        rows={4}
+                        placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
+                      />
                     </div>
                   </div>
 
@@ -3059,7 +3164,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.waist}
-                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
+                              onChange={(e)=> setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -3231,7 +3336,8 @@ export default function AdminDashboard() {
                   value={selectedDate}
                   onChange={(e) => {
                     setSelectedDate(e.target.value);
-                    setMarkedTrainers(new Set()); // Reset marked trainers when date changes
+                    // Marked trainers state is no longer used in the current logic, can be removed if not needed elsewhere.
+                    // setMarkedTrainers(new Set());
                   }}
                   className="bg-black border-gray-700 text-white"
                 />
@@ -3336,14 +3442,30 @@ export default function AdminDashboard() {
             {/* Attendance Statistics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="bg-gray-900 border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-gold">Today's Attendance</CardTitle>
-                </CardHeader>
                 <CardContent className="p-6">
-                  <div className="text-2xl font-bold text-white">
-                    {Array.isArray(todayAttendance) ? todayAttendance.filter((a: any) => a.status === 'present').length : 0} / {Array.isArray(todayAttendance) ? todayAttendance.length : 0}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gold">Today's Attendance</h3>
                   </div>
-                  <p className="text-gray-400">Present / Total</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Present / Total</span>
+                      <span className="text-white font-bold">
+                        {todayAttendance?.filter(att => att.status === 'present').length || 0} / {trainers?.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Absent</span>
+                      <span className="text-red-400 font-bold">
+                        {todayAttendance?.filter(att => att.status === 'absent').length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Not Marked</span>
+                      <span className="text-yellow-400 font-bold">
+                        {(trainers?.length || 0) - (todayAttendance?.length || 0)}
+                      </span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -3381,46 +3503,79 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {trainers?.map((trainer: any) => {
-                      const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
-                      const isMarked = markedTrainers.has(trainer.userId);
-                      const showButtons = !hasAttendance && !isMarked;
+                      const hasAttendance = todayAttendance?.find(attendance => attendance.trainerId?.toString() === trainer.userId);
 
                       return (
-                        <div key={`quick-attendance-${trainer.userId}`} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
-                          <div>
-                            <p className="text-white font-medium">{trainer.firstName} {trainer.lastName}</p>
-                            <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ')}</p>
-                          </div>
-                          <div className="flex space-x-2">
-                            {showButtons ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                  onClick={() => handleQuickAttendance(trainer.userId, "present")}
-                                  disabled={recordAttendanceMutation.isPending}
-                                >
-                                  Present
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="bg-red-600 hover:bg-red-700 text-white"
-                                  onClick={() => handleQuickAttendance(trainer.userId, "absent")}
-                                  disabled={recordAttendanceMutation.isPending}
-                                >
-                                  Absent
-                                </Button>
-                              </>
-                            ) : hasAttendance ? (
-                              <div className="flex items-center space-x-2">
-                                {getAttendanceStatusBadge(hasAttendance.status)}
-                                <span className="text-xs text-gray-400">{hasAttendance.checkInTime}</span>
+                        <div key={trainer.userId} className="bg-black rounded-lg p-4 border border-gray-800">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center">
+                                <span className="text-black font-bold text-sm">
+                                  {trainer.firstName?.charAt(0)}{trainer.lastName?.charAt(0)}
+                                </span>
                               </div>
-                            ) : (
-                              <div className="flex items-center space-x-2">
-                                <Badge className="bg-gray-600 text-white">Marked</Badge>
+                              <div>
+                                <h3 className="text-white font-semibold">{trainer.firstName} {trainer.lastName}</h3>
+                                <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ') || 'General Training'}</p>
                               </div>
-                            )}
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              {!hasAttendance ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "present")}
+                                  >
+                                    Present
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "absent")}
+                                  >
+                                    Absent
+                                  </Button>
+                                </>
+                              ) : hasAttendance.status === "present" && !hasAttendance.checkOutTime ? (
+                                <div className="flex flex-col items-end space-y-1">
+                                  <div className="flex items-center space-x-2">
+                                    <Badge className="bg-green-600 text-white">Present</Badge>
+                                    <span className="text-xs text-gray-400">In: {hasAttendance.checkInTime}</span>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => handleCheckOut(trainer.userId)}
+                                  >
+                                    Check Out
+                                  </Button>
+                                </div>
+                              ) : hasAttendance.status === "present" && hasAttendance.checkOutTime ? (
+                                <div className="flex flex-col items-end space-y-1">
+                                  <Badge className="bg-green-600 text-white">Present</Badge>
+                                  <div className="text-xs text-gray-400">
+                                    <div>In: {hasAttendance.checkInTime}</div>
+                                    <div>Out: {hasAttendance.checkOutTime}</div>
+                                  </div>
+                                </div>
+                              ) : hasAttendance.status === "absent" ? (
+                                <div className="flex flex-col items-end">
+                                  <Badge className="bg-red-600 text-white">Absent</Badge>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2">
+                                  {getAttendanceStatusBadge(hasAttendance.status)}
+                                  {hasAttendance.checkInTime && (
+                                    <span className="text-xs text-gray-400">In: {hasAttendance.checkInTime}</span>
+                                  )}
+                                  {hasAttendance.checkOutTime && (
+                                    <span className="text-xs text-gray-400">Out: {hasAttendance.checkOutTime}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

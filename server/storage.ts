@@ -382,7 +382,7 @@ export const storage = {
 
   async updateMemberById(userId: string, updates: any): Promise<void> {
     const client = await pool.connect();
-    
+
     try {
       await client.query('BEGIN');
 
@@ -443,11 +443,11 @@ export const storage = {
       // Update or create subscription if membership tier and training type are provided
       if (updates.membershipTierId && updates.trainingType) {
         const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [updates.membershipTierId]);
-        
+
         if (tierRows.length > 0) {
           const tier = tierRows[0];
           let price = tier.one_on_one_price || 0;
-          
+
           if (updates.trainingType === 'two_people') {
             price = tier.two_people_price || 0;
           } else if (updates.trainingType === 'three_people') {
@@ -461,7 +461,7 @@ export const storage = {
 
           // Check if subscription already exists
           const { rows: existingSub } = await client.query('SELECT id FROM subscriptions WHERE member_id = $1', [memberId]);
-          
+
           if (existingSub.length > 0) {
             // Update existing subscription - fix parameter count
             await client.query(`
@@ -1049,15 +1049,22 @@ export const storage = {
     const { rows } = await pool.query(`
       INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes)
       VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (trainer_id, date)
-      DO UPDATE SET
+      ON CONFLICT (trainer_id, date) 
+      DO UPDATE SET 
         status = EXCLUDED.status,
         check_in_time = EXCLUDED.check_in_time,
         check_out_time = EXCLUDED.check_out_time,
         notes = EXCLUDED.notes,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
-    `, [data.trainerId, data.date, data.status, data.checkInTime, data.checkOutTime, data.notes]);
+    `, [
+      data.trainerId,
+      data.date,
+      data.status,
+      data.checkInTime,
+      data.checkOutTime,
+      data.notes
+    ]);
 
     return rows[0];
   },
@@ -1201,15 +1208,15 @@ export const storage = {
   async getMemberTrainerAssignments(filters: any = {}) {
     let query = `
       SELECT mta.*,
-             CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
+             COALESCE(CONCAT(mp.first_name, ' ', mp.last_name), 'Unknown Member') as member_name,
              mp.email as member_email,
              mp.phone as member_phone,
-             CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name,
+             COALESCE(CONCAT(tp.first_name, ' ', tp.last_name), 'Unknown Trainer') as trainer_name,
              tp.email as trainer_email,
              tp.specializations
       FROM member_trainer_assignments mta
-      JOIN member_profiles mp ON mta.member_id = mp.id
-      JOIN trainer_profiles tp ON mta.trainer_id = tp.id
+      LEFT JOIN member_profiles mp ON mta.member_id = mp.id
+      LEFT JOIN trainer_profiles tp ON mta.trainer_id = tp.id
       WHERE mta.is_active = true
     `;
     const values: any[] = [];
@@ -1224,16 +1231,47 @@ export const storage = {
       values.push(filters.trainerId);
     }
 
-    query += ' ORDER BY mta.assigned_date DESC';
+    query += ` ORDER BY mta.assigned_date DESC, mta.created_at DESC`;
+
+    console.log('Executing trainer assignments query:', query, 'with values:', values);
 
     const { rows } = await pool.query(query, values);
-    return rows;
+    
+    console.log(`Found ${rows.length} trainer assignments:`, rows.map(r => ({ 
+      id: r.id, 
+      member_id: r.member_id, 
+      trainer_id: r.trainer_id, 
+      member_name: r.member_name, 
+      trainer_name: r.trainer_name 
+    })));
+
+    return rows.map(row => ({
+      id: row.id,
+      member_id: row.member_id,
+      trainer_id: row.trainer_id,
+      memberId: row.member_id,
+      trainerId: row.trainer_id,
+      memberName: row.member_name,
+      member_name: row.member_name,
+      memberEmail: row.member_email,
+      memberPhone: row.member_phone,
+      trainerName: row.trainer_name,
+      trainer_name: row.trainer_name,
+      trainerEmail: row.trainer_email,
+      specializations: row.specializations || [],
+      assignedDate: row.assigned_date,
+      assigned_date: row.assigned_date,
+      notes: row.notes,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
   },
 
   async removeTrainerFromMember(memberId: string, trainerId: string) {
     const { rows } = await pool.query(`
-      UPDATE member_trainer_assignments 
-      SET is_active = false
+      UPDATE member_trainer_assignments
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
       WHERE member_id = $1 AND trainer_id = $2
       RETURNING *
     `, [memberId, trainerId]);

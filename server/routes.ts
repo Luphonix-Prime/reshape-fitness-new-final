@@ -1349,7 +1349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Handle 12-hour format (HH:MM AM/PM)
         const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = timeStr.match(time12Pattern);
+        const match = time12Pattern.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -1490,7 +1490,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { rows } = await pool.query(`
         SELECT
-          mp.*,
+          mp.id,
+          mp.first_name,
+          mp.last_name,
+          mp.email,
+          mp.phone,
+          mp.fitness_goals,
+          mp.emergency_contact,
+          mp.created_at,
+          mp.updated_at,
           u.first_name as user_first_name,
           u.last_name as user_last_name,
           u.email as user_email,
@@ -1500,25 +1508,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           mt.one_on_one_price,
           mt.two_people_price,
           mt.three_people_price,
-          COALESCE(s.training_type, mp.training_type, 'one_on_one') as training_type,
-          s.plan_type,
-          s.training_type as subscription_training_type,
-          s.membership_tier_id as subscription_membership_tier_id,
-          s.sessions_total,
-          s.sessions_used,
-          s.price_paid,
-          s.start_date as subscription_start_date,
-          s.end_date as subscription_end_date,
-          s.is_active as subscription_active,
+          COALESCE(sub.training_type, mp.training_type, 'one_on_one') as training_type,
+          sub.plan_type,
+          sub.training_type as subscription_training_type,
+          sub.membership_tier_id as subscription_membership_tier_id,
+          sub.sessions_total,
+          sub.sessions_used,
+          sub.price_paid,
+          sub.start_date as subscription_start_date,
+          sub.end_date as subscription_end_date,
+          sub.is_active as subscription_active,
           CASE 
-            WHEN s.is_active = true THEN 'Active'
-            WHEN s.is_active = false THEN 'Inactive' 
+            WHEN sub.is_active = true THEN 'Active'
+            WHEN sub.is_active = false THEN 'Inactive' 
             ELSE 'No Subscription'
           END as subscription_status
         FROM member_profiles mp
         LEFT JOIN users u ON mp.user_id = u.id
-        LEFT JOIN membership_tiers mt ON COALESCE(s.membership_tier_id, mp.membership_tier_id) = mt.id
-        LEFT JOIN subscriptions s ON mp.id = s.member_id AND s.is_active = true
+        LEFT JOIN subscriptions sub ON mp.id = sub.member_id AND sub.is_active = true
+        LEFT JOIN membership_tiers mt ON COALESCE(sub.membership_tier_id, mp.membership_tier_id) = mt.id
         ORDER BY mp.created_at DESC
       `);
       res.json(rows);
@@ -1859,11 +1867,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create subscription if membership tier is selected
         if (memberData.membershipTierId && memberData.trainingType) {
           const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [memberData.membershipTierId]);
-          
+
           if (tierRows.length > 0) {
             const tier = tierRows[0];
             let price = tier.one_on_one_price || 0;
-            
+
             if (memberData.trainingType === 'two_people') {
               price = tier.two_people_price || 0;
             } else if (memberData.trainingType === 'three_people') {
@@ -2147,8 +2155,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: inquiry.phone,
         membershipTierId: req.body.memberData?.membershipTierId || null,
         emergencyContact: inquiry.phone || inquiry.email,
-        fitnessGoals: "Converted from inquiry - General fitness improvement"
+        fitnessGoals: "Converted from inquiry - General fitness improvement",
+        trainingType: req.body.memberData?.trainingType || 'one_on_one'
       });
+
+      // Create subscription if membership tier and training type are selected
+      if (req.body.memberData?.membershipTierId && req.body.memberData?.trainingType) {
+        const { rows: tierRows } = await pool.query('SELECT * FROM membership_tiers WHERE id = $1', [req.body.memberData.membershipTierId]);
+
+        if (tierRows.length > 0) {
+          const tier = tierRows[0];
+          let price = tier.one_on_one_price || 0;
+
+          if (req.body.memberData.trainingType === 'two_people') {
+            price = tier.two_people_price || 0;
+          } else if (req.body.memberData.trainingType === 'three_people') {
+            price = tier.three_people_price || 0;
+          }
+
+          const planType = `${tier.sessions}_session`;
+          const endDate = new Date();
+          const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+
+          // Insert subscription
+          await pool.query(`
+            INSERT INTO subscriptions (
+              member_id, membership_tier_id, plan_type, training_type, 
+              sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+            memberProfile.id, req.body.memberData.membershipTierId, planType, req.body.memberData.trainingType,
+            tier.sessions, 0, price, new Date(), endDate, true
+          ]);
+        }
+      }
 
       // Create body assessment if provided with proper validation
       if (req.body.assessmentData && Object.keys(req.body.assessmentData).length > 0) {
@@ -2262,18 +2303,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid check-out time format. Use HH:MM or HH:MM AM/PM format." });
       }
 
-      const attendance = await storage.recordTrainerAttendance({
-        trainerId,
-        date,
-        status,
-        checkInTime: convertedCheckInTime,
-        checkOutTime: convertedCheckOutTime,
-        notes: notes || null
-      });
+      // Check if attendance already exists for this trainer and date
+      const { rows: existingAttendance } = await pool.query(`
+        SELECT id FROM trainer_attendance 
+        WHERE trainer_id = $1 AND date = $2
+      `, [trainerId, date]);
+
+      let attendance;
+
+      if (existingAttendance.length > 0) {
+        // Update existing attendance
+        const { rows } = await pool.query(`
+          UPDATE trainer_attendance 
+          SET status = $1, check_in_time = $2, check_out_time = $3, notes = $4, updated_at = CURRENT_TIMESTAMP
+          WHERE trainer_id = $5 AND date = $6
+          RETURNING *
+        `, [status, convertedCheckInTime, convertedCheckOutTime, notes || null, trainerId, date]);
+        attendance = rows[0];
+      } else {
+        // Create new attendance record
+        const { rows } = await pool.query(`
+          INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `, [trainerId, date, status, convertedCheckInTime, convertedCheckOutTime, notes || null]);
+        attendance = rows[0];
+      }
+
+      console.log(`Trainer attendance recorded: ${status} for trainer ${trainerId} on ${date}`);
 
       res.json({
         message: "Attendance recorded successfully",
-        attendance
+        attendance: {
+          ...attendance,
+          _id: attendance.id,
+          trainerId: attendance.trainer_id,
+          checkInTime: attendance.check_in_time,
+          checkOutTime: attendance.check_out_time
+        }
       });
     } catch (error: any) {
       console.error("Error recording attendance:", error);
@@ -2395,6 +2462,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!memberId || !trainerId) {
         return res.status(400).json({ message: "Missing required fields: memberId, trainerId" });
+      }
+
+      // Validate that the member exists in member_profiles
+      const { rows: memberRows } = await pool.query('SELECT id FROM member_profiles WHERE id = $1', [memberId]);
+      if (memberRows.length === 0) {
+        return res.status(400).json({ message: "Invalid member ID - member not found" });
+      }
+
+      // Validate that the trainer exists in trainer_profiles  
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE id = $1', [trainerId]);
+      if (trainerRows.length === 0) {
+        return res.status(400).json({ message: "Invalid trainer ID - trainer not found" });
       }
 
       const assignment = await storage.assignTrainerToMember({
