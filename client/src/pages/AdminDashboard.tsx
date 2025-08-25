@@ -140,6 +140,23 @@ export default function AdminDashboard() {
 
   const [settingsLoading, setSettingsLoading] = useState(false);
 
+  // Membership Management State
+  const [showAddMembershipModal, setShowAddMembershipModal] = useState(false);
+  const [editingMembership, setEditingMembership] = useState<any>(null);
+  const [newMembership, setNewMembership] = useState({
+    name: "",
+    sessions: 0,
+    duration: "",
+    oneOnOnePrice: 0,
+    oneOnOnePerSession: 0,
+    twoPeoplePrice: 0,
+    twoPeoplePerSession: 0,
+    threePeoplePrice: 0,
+    threePeoplePerSession: 0,
+    features: "",
+    description: ""
+  });
+
   // Trainer Assignment State
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedMemberForAssignment, setSelectedMemberForAssignment] = useState<string>('');
@@ -163,7 +180,7 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/stats'],
   });
 
-  const { data: membershipTiers } = useQuery({
+  const { data: membershipTiers, refetch: refetchMembershipTiers } = useQuery({
     queryKey: ['/api/membership-tiers'],
   });
 
@@ -339,6 +356,63 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to update pricing",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Membership Tier Mutations
+  const createMembershipMutation = useMutation({
+    mutationFn: (membershipData: any) => apiRequest('POST', '/api/admin/membership-tiers', membershipData),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Added",
+        description: "New membership tier created successfully."
+      });
+      setShowAddMembershipModal(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create membership tier",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateMembershipMutation = useMutation({
+    mutationFn: ({ id, membershipData }: { id: string, membershipData: any }) => apiRequest('PUT', `/api/admin/membership-tiers/${id}`, membershipData),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Updated",
+        description: "Membership tier updated successfully."
+      });
+      closeMemershipModal();
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update membership tier",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteMembershipMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/membership-tiers/${id}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Deleted",
+        description: "Membership tier deleted successfully."
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete membership tier",
         variant: "destructive"
       });
     }
@@ -538,7 +612,7 @@ export default function AdminDashboard() {
 
   const handleScheduleSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newSessionData.memberId || !newSessionData.trainerId || !newSessionData.sessionType || !newSessionData.date || !newSessionData.time) {
       toast({
         title: "Error",
@@ -574,6 +648,7 @@ export default function AdminDashboard() {
       refetchAssessments();
       refetchInquiries();
       refetchTrainerAssignments();
+      refetchMembershipTiers();
     }
   }, [user]);
 
@@ -777,6 +852,58 @@ export default function AdminDashboard() {
     }
   }, [membershipTiers]);
 
+  // Membership Management Handlers
+  const handleAddMembership = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingMembership) {
+      updateMembershipMutation.mutate({ id: editingMembership.id || editingMembership._id, membershipData: newMembership });
+    } else {
+      createMembershipMutation.mutate(newMembership);
+    }
+  };
+
+  const handleEditMembership = (tier: any) => {
+    setEditingMembership(tier);
+    setNewMembership({
+      name: tier.name || "",
+      sessions: tier.sessions || 0,
+      duration: tier.duration || "",
+      oneOnOnePrice: tier.one_on_one_price || tier.oneOnOnePrice || 0,
+      oneOnOnePerSession: tier.one_on_one_per_session || tier.oneOnOnePerSession || 0,
+      twoPeoplePrice: tier.two_people_price || tier.twoPeoplePrice || 0,
+      twoPeoplePerSession: tier.two_people_per_session || tier.twoPeoplePerSession || 0,
+      threePeoplePrice: tier.three_people_price || tier.threePeoplePrice || 0,
+      threePeoplePerSession: tier.three_people_per_session || tier.threePeoplePerSession || 0,
+      features: Array.isArray(tier.features) ? tier.features.join(', ') : tier.features || "",
+      description: tier.description || ""
+    });
+    setShowAddMembershipModal(true);
+  };
+
+  const handleDeleteMembership = async (tier: any) => {
+    if (confirm(`Are you sure you want to delete membership tier "${tier.name}"?`)) {
+      await deleteMembershipMutation.mutateAsync(tier.id || tier._id);
+    }
+  };
+
+  const closeMemershipModal = () => {
+    setShowAddMembershipModal(false);
+    setEditingMembership(null);
+    setNewMembership({
+      name: "",
+      sessions: 0,
+      duration: "",
+      oneOnOnePrice: 0,
+      oneOnOnePerSession: 0,
+      twoPeoplePrice: 0,
+      twoPeoplePerSession: 0,
+      threePeoplePrice: 0,
+      threePeoplePerSession: 0,
+      features: "",
+      description: ""
+    });
+  };
+
   // Handler for changing trainer password
   const handleSubmitPasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -849,7 +976,7 @@ export default function AdminDashboard() {
       date: selectedDate
     };
 
-    recordAttendanceMutation.mutate(attendanceData);
+    recordAttendanceMutation.mutate(attendanceData); // Corrected variable name from attendancedata to attendanceData
   };
 
   const closeAttendanceModal = () => {
@@ -1750,9 +1877,9 @@ export default function AdminDashboard() {
                   </TableHeader>
                   <TableBody>
                     {members?.map((member: any) => {
-                      // Find the assigned trainer for this member
+                      // Find the assigned trainer for this member using member profile ID
                       const assignment = Array.isArray(trainerAssignments)
-                        ? trainerAssignments.find((ta: any) => ta.member_id === member.userId)
+                        ? trainerAssignments.find((ta: any) => ta.member_id.toString() === member.userId)
                         : null;
                       const assignedTrainerName = assignment ? assignment.trainer_name : 'Not Assigned';
 
@@ -2830,10 +2957,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.neck}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2843,10 +2967,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.shoulders}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2856,10 +2977,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.chest}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -3401,9 +3519,12 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
-            <h2 className="text-2xl font-bold text-gold">System Settings</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">System Settings</h2>
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              {/* Gym Configuration */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
                   <CardTitle className="text-gold">Gym Configuration</CardTitle>
@@ -3421,7 +3542,7 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <Label htmlFor="address">Address</Label>
-                      <Textarea
+                      <Input
                         id="address"
                         value={gymSettings.address}
                         onChange={(e) => setGymSettings({...gymSettings, address: e.target.value})}
@@ -3429,9 +3550,9 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="hours">Operating Hours</Label>
+                      <Label htmlFor="operatingHours">Operating Hours</Label>
                       <Input
-                        id="hours"
+                        id="operatingHours"
                         value={gymSettings.operatingHours}
                         onChange={(e) => setGymSettings({...gymSettings, operatingHours: e.target.value})}
                         className="bg-black border-gray-700 text-white focus:ring-gold"
@@ -3448,9 +3569,10 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
+              {/* Membership Pricing */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-gold">Membership Settings</CardTitle>
+                  <CardTitle className="text-gold">Membership Pricing</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleUpdatePricing} className="space-y-4">
@@ -3471,7 +3593,7 @@ export default function AdminDashboard() {
                               value={membershipPricing[tierId] || ''}
                               onChange={(e) => setMembershipPricing({
                                 ...membershipPricing,
-                                [tierId]: e.target.value
+                                [tierId]: e.target.value // Keep as string for input, parse on submit
                               })}
                               className="bg-black border-gray-700 text-white focus:ring-gold pl-8"
                               placeholder="0.00"
@@ -3492,6 +3614,272 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Membership Subscription Management */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-gold">Membership Subscription Management</CardTitle>
+                  <Dialog open={showAddMembershipModal} onOpenChange={(open) => {
+                    if (!open) closeMemershipModal();
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        className="bg-gold text-black hover:bg-white"
+                        onClick={() => setShowAddMembershipModal(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Membership
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="text-gold">
+                          {editingMembership ? 'Edit Membership Tier' : 'Add New Membership Tier'}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleAddMembership} className="space-y-6">
+                        {/* Basic Info */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="name">Name</Label>
+                            <Input
+                              id="name"
+                              required
+                              value={newMembership.name}
+                              onChange={(e) => setNewMembership({...newMembership, name: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                              placeholder="e.g., ONE_ON_ONE_12_SESSIONS"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="sessions">Sessions</Label>
+                            <Input
+                              id="sessions"
+                              type="number"
+                              required
+                              value={newMembership.sessions}
+                              onChange={(e) => {
+                                const sessions = parseInt(e.target.value) || 0;
+                                setNewMembership({
+                                  ...newMembership,
+                                  sessions,
+                                  oneOnOnePerSession: sessions > 0 ? Math.round((newMembership.oneOnOnePrice / sessions) * 100) / 100 : 0,
+                                  twoPeoplePerSession: sessions > 0 ? Math.round((newMembership.twoPeoplePrice / sessions) * 100) / 100 : 0,
+                                  threePeoplePerSession: sessions > 0 ? Math.round((newMembership.threePeoplePrice / sessions) * 100) / 100 : 0
+                                });
+                              }}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="duration">Duration</Label>
+                          <Input
+                            id="duration"
+                            required
+                            value={newMembership.duration}
+                            onChange={(e) => setNewMembership({...newMembership, duration: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., 1 month, 3 months, 6 months"
+                          />
+                        </div>
+
+                        {/* Pricing Section */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gold">Pricing Structure</h3>
+
+                          {/* One-on-One */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="oneOnOnePrice">One-on-One Total Price</Label>
+                              <Input
+                                id="oneOnOnePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.oneOnOnePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    oneOnOnePrice: price,
+                                    oneOnOnePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="oneOnOnePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="oneOnOnePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.oneOnOnePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Two People */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="twoPeoplePrice">Two People Total Price</Label>
+                              <Input
+                                id="twoPeoplePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.twoPeoplePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    twoPeoplePrice: price,
+                                    twoPeoplePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="twoPeoplePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="twoPeoplePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.twoPeoplePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Three People */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="threePeoplePrice">Three People Total Price</Label>
+                              <Input
+                                id="threePeoplePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.threePeoplePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    threePeoplePrice: price,
+                                    threePeoplePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="threePeoplePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="threePeoplePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.threePeoplePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="features">Features (comma separated)</Label>
+                          <Textarea
+                            id="features"
+                            value={newMembership.features}
+                            onChange={(e) => setNewMembership({...newMembership, features: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="Personal Training Sessions, Body Analysis, Workout Plans, etc."
+                            rows={3}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="description">Description</Label>
+                          <Textarea
+                            id="description"
+                            value={newMembership.description}
+                            onChange={(e) => setNewMember({...newMembership, description: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="Brief description of this membership tier"
+                            rows={2}
+                          />
+                        </div>
+
+                        <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createMembershipMutation.isPending || updateMembershipMutation.isPending}>
+                          {editingMembership ? (updateMembershipMutation.isPending ? "Updating..." : "Update Membership") : (createMembershipMutation.isPending ? "Creating..." : "Create Membership")}
+                        </Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Sessions</TableHead>
+                      <TableHead className="text-gray-400">Duration</TableHead>
+                      <TableHead className="text-gray-400">One-on-One Price</TableHead>
+                      <TableHead className="text-gray-400">Two People Price</TableHead>
+                      <TableHead className="text-gray-400">Three People Price</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {membershipTiers?.map((tier: any) => (
+                      <TableRow key={tier.id} className="border-gray-800">
+                        <TableCell className="text-white">{tier.name}</TableCell>
+                        <TableCell className="text-gray-400">{tier.sessions}</TableCell>
+                        <TableCell className="text-gray-400">{tier.duration}</TableCell>
+                        <TableCell className="text-gray-400">${tier.one_on_one_price || tier.oneOnOnePrice}</TableCell>
+                        <TableCell className="text-gray-400">${tier.two_people_price || tier.twoPeoplePrice}</TableCell>
+                        <TableCell className="text-gray-400">${tier.three_people_price || tier.threePeoplePrice}</TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => handleEditMembership(tier)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:bg-red-400 hover:text-white"
+                              onClick={() => handleDeleteMembership(tier)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!membershipTiers || membershipTiers.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400">
+                          No membership tiers found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

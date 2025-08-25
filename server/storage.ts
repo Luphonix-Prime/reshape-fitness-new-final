@@ -134,34 +134,34 @@ export const storage = {
     try {
       await client.query('BEGIN');
 
-      // First check if user exists
-      const userCheck = await client.query('SELECT * FROM users WHERE id = $1', [id]);
-      if (userCheck.rows.length === 0) {
-        throw new Error(`User with id ${id} not found`);
+      // Check if member profile exists
+      const memberCheck = await client.query('SELECT * FROM member_profiles WHERE id = $1', [id]);
+      if (memberCheck.rows.length === 0) {
+        throw new Error(`Member with id ${id} not found`);
       }
 
-      const user = userCheck.rows[0];
-      console.log(`Deleting user: ${user.first_name} ${user.last_name} (${user.user_type})`);
+      const member = memberCheck.rows[0];
+      console.log(`Deleting member: ${member.first_name} ${member.last_name}`);
 
-      // Delete related records first (if they exist) - using user_id for profile tables
-      await client.query('DELETE FROM member_profiles WHERE user_id = $1', [id]);
-      await client.query('DELETE FROM trainer_profiles WHERE user_id = $1', [id]);
+      // Delete related records first (foreign key constraints)
+      await client.query('DELETE FROM member_trainer_assignments WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM member_sessions WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM body_assessments WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM workout_plans WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM nutrition_plans WHERE member_id = $1', [id]);
 
-      // For other tables that might use the profile IDs, we need to handle them differently
-      // But for now, let's just delete the user and let CASCADE handle it if set up
-
-      // Finally delete the user
-      const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+      // Finally delete the member profile
+      const result = await client.query('DELETE FROM member_profiles WHERE id = $1 RETURNING *', [id]);
 
       if (result.rows.length === 0) {
-        throw new Error(`Failed to delete user with id ${id}`);
+        throw new Error(`Failed to delete member with id ${id}`);
       }
 
       await client.query('COMMIT');
-      console.log(`Successfully deleted user with id: ${id} (${user.first_name} ${user.last_name})`);
+      console.log(`Successfully deleted member with id: ${id} (${member.first_name} ${member.last_name})`);
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error(`Error deleting user ${id}:`, error);
+      console.error(`Error deleting member ${id}:`, error);
       throw error;
     } finally {
       client.release();
@@ -183,7 +183,38 @@ export const storage = {
       return result.rows;
     } catch (error) {
       console.error('Error fetching membership tiers:', error);
-      throw error;
+
+      // If the above query fails, try with alternative column names
+      try {
+        console.log('Trying alternative column names...');
+        const fallbackResult = await pool.query(`
+          SELECT id, name, sessions, duration,
+                 COALESCE(one_on_one_price, oneononeprice) as one_on_one_price,
+                 COALESCE(one_on_one_per_session, oneononepersession) as one_on_one_per_session,
+                 COALESCE(two_people_price, twopeopleprice) as two_people_price,
+                 COALESCE(two_people_per_session, twopeoplepersession) as two_people_per_session,
+                 COALESCE(three_people_price, threepeopleprice) as three_people_price,
+                 COALESCE(three_people_per_session, threepeoplepersession) as three_people_per_session,
+                 tiers, features, description, created_at
+          FROM membership_tiers 
+          ORDER BY sessions ASC
+        `);
+        return fallbackResult.rows;
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
+
+        // Last resort: get basic columns only
+        try {
+          console.log('Using basic query...');
+          const basicResult = await pool.query(`
+            SELECT * FROM membership_tiers ORDER BY sessions ASC
+          `);
+          return basicResult.rows;
+        } catch (basicError) {
+          console.error('Basic query failed:', basicError);
+          throw error;
+        }
+      }
     }
   },
 
@@ -191,6 +222,98 @@ export const storage = {
     const { rows } = await pool.query('SELECT * FROM membership_tiers WHERE id = $1', [id]);
     if (rows.length === 0) return null;
     return this.mapMembershipTierFromDb(rows[0]);
+  },
+
+  async createMembershipTier(tierData: any): Promise<MembershipTier> {
+    try {
+      const { rows } = await pool.query(`
+        INSERT INTO membership_tiers (
+          name, sessions, duration, one_on_one_price, one_on_one_per_session,
+          two_people_price, two_people_per_session, three_people_price, three_people_per_session,
+          features, description, tiers
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *
+      `, [
+        tierData.name,
+        tierData.sessions,
+        tierData.duration,
+        tierData.oneOnOnePrice,
+        tierData.oneOnOnePerSession,
+        tierData.twoPeoplePrice,
+        tierData.twoPeoplePerSession,
+        tierData.threePeoplePrice,
+        tierData.threePeoplePerSession,
+        Array.isArray(tierData.features) ? `{${tierData.features.map(f => `"${f}"`).join(',')}}` : '{}',
+        tierData.description || '',
+        '[]'
+      ]);
+
+      return this.mapMembershipTierFromDb(rows[0]);
+    } catch (error) {
+      console.error('Error creating membership tier:', error);
+      throw error;
+    }
+  },
+
+  async updateMembershipTier(id: string, updates: any): Promise<MembershipTier> {
+    try {
+      // Parse and validate numeric fields
+      const sessions = parseInt(updates.sessions) || 0;
+      const oneOnOnePrice = parseFloat(updates.oneOnOnePrice) || 0;
+      const oneOnOnePerSession = parseFloat(updates.oneOnOnePerSession) || 0;
+      const twoPeoplePrice = parseFloat(updates.twoPeoplePrice) || 0;
+      const twoPeoplePerSession = parseFloat(updates.twoPeoplePerSession) || 0;
+      const threePeoplePrice = parseFloat(updates.threePeoplePrice) || 0;
+      const threePeoplePerSession = parseFloat(updates.threePeoplePerSession) || 0;
+
+      const result = await pool.query(`
+        UPDATE membership_tiers 
+        SET name = $2, sessions = $3, duration = $4,
+            one_on_one_price = $5, one_on_one_per_session = $6,
+            two_people_price = $7, two_people_per_session = $8,
+            three_people_price = $9, three_people_per_session = $10,
+            tiers = $11, features = $12, description = $13
+        WHERE id = $1 
+        RETURNING *
+      `, [
+        id,
+        updates.name || '',
+        sessions,
+        updates.duration || '',
+        oneOnOnePrice,
+        oneOnOnePerSession,
+        twoPeoplePrice,
+        twoPeoplePerSession,
+        threePeoplePrice,
+        threePeoplePerSession,
+        updates.tiers || [],
+        Array.isArray(updates.features) ? updates.features : (updates.features ? updates.features.split(',').map(f => f.trim()) : []),
+        updates.description || ''
+      ]);
+
+      if (result.rows.length === 0) {
+        throw new Error('Membership tier not found');
+      }
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating membership tier:', error);
+      throw error;
+    }
+  },
+
+  async deleteMembershipTier(id: string): Promise<void> {
+    try {
+      const { rows } = await pool.query('DELETE FROM membership_tiers WHERE id = $1 RETURNING *', [id]);
+      if (rows.length === 0) {
+        throw new Error(`Membership tier with id ${id} not found`);
+      }
+      console.log(`Successfully deleted membership tier with id: ${id}`);
+    } catch (error) {
+      console.error(`Error deleting membership tier ${id}:`, error);
+      throw error;
+    }
   },
 
   // Member profile operations
@@ -224,12 +347,11 @@ export const storage = {
   },
 
   async getAllMembers(): Promise<any[]> {
-    // Get only member profiles (exclude demo users completely)
+    // Get member profiles with membership tier information
     const { rows } = await pool.query(`
-      SELECT mp.*, mt.name as membership_tier, mt.price as membership_tier_price
+      SELECT mp.*, mt.name as membership_tier
       FROM member_profiles mp
       LEFT JOIN membership_tiers mt ON mp.membership_tier_id = mt.id
-      WHERE mp.user_id IS NULL
       ORDER BY mp.created_at DESC
     `);
 

@@ -560,11 +560,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Membership tiers
   app.get('/api/membership-tiers', async (req, res) => {
     try {
+      console.log('Fetching membership tiers...');
       const tiers = await storage.getMembershipTiers();
+      console.log('Membership tiers fetched:', tiers.length);
       res.json(tiers);
     } catch (error) {
       console.error("Error fetching membership tiers:", error);
-      res.status(500).json({ message: "Failed to fetch membership tiers" });
+      res.status(500).json({ message: "Failed to fetch membership tiers", error: error.message });
+    }
+  });
+
+  // Admin membership tier management
+  app.post('/api/admin/membership-tiers', async (req, res) => {
+    try {
+      const tierData = req.body;
+
+      // Validate required fields
+      if (!tierData.name || !tierData.sessions || !tierData.duration) {
+        return res.status(400).json({ message: "Name, sessions, and duration are required" });
+      }
+
+      const tier = await storage.createMembershipTier(tierData);
+      res.json({
+        message: "Membership tier created successfully",
+        tier
+      });
+    } catch (error: any) {
+      console.error("Error creating membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to create membership tier" });
+    }
+  });
+
+  app.put('/api/admin/membership-tiers/:tierId', async (req, res) => {
+    try {
+      const { tierId } = req.params;
+      const updates = req.body;
+
+      await storage.updateMembershipTier(tierId, updates);
+      res.json({ message: "Membership tier updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to update membership tier" });
+    }
+  });
+
+  app.delete('/api/admin/membership-tiers/:tierId', async (req, res) => {
+    try {
+      const { tierId } = req.params;
+
+      await storage.deleteMembershipTier(tierId);
+      res.json({ message: "Membership tier deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to delete membership tier" });
     }
   });
 
@@ -1798,7 +1846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/delete-member/:memberId', async (req, res) => {
     try {
       const { memberId } = req.params;
-      await storage.deleteUser(memberId);
+      await storage.deleteUser(memberId); // This now handles member_profiles deletion
       res.json({ message: "Member deleted successfully" });
     } catch (error: any) {
       console.error("Error deleting member:", error);

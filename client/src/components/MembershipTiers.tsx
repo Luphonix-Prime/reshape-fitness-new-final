@@ -18,8 +18,18 @@ export default function MembershipTiers() {
     }
   });
 
-  const handleSelectPlan = (tier: any) => {
-    localStorage.setItem('selectedTier', JSON.stringify(tier));
+  const handleSelectPlan = (tier: any, trainingType: string) => {
+    const selectedPlan = {
+      ...tier,
+      trainingType,
+      price: trainingType === 'one_on_one' ? tier.one_on_one_price :
+             trainingType === 'two_people' ? tier.two_people_price :
+             tier.three_people_price,
+      perSessionRate: trainingType === 'one_on_one' ? tier.one_on_one_per_session :
+                     trainingType === 'two_people' ? tier.two_people_per_session :
+                     tier.three_people_per_session
+    };
+    localStorage.setItem('selectedTier', JSON.stringify(selectedPlan));
     setLocation('/subscribe');
   };
 
@@ -66,7 +76,7 @@ export default function MembershipTiers() {
               <Card
                 key={`one-on-one-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-gold/30 hover:border-gold/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20"
-                onClick={() => handleSelectPlan({ ...tier, trainingType: 'one_on_one', price: tier.one_on_one_price })}
+                onClick={() => handleSelectPlan(tier, 'one_on_one')}
               >
                 <CardContent className="p-6">
                   <div className="text-center">
@@ -87,7 +97,7 @@ export default function MembershipTiers() {
               <Card
                 key={`two-people-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-gray-400/30 hover:border-gray-400/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gray-400/20"
-                onClick={() => handleSelectPlan({ ...tier, trainingType: 'two_people', price: tier.two_people_price })}
+                onClick={() => handleSelectPlan(tier, 'two_people')}
               >
                 <CardContent className="p-6">
                   <div className="text-center">
@@ -108,7 +118,7 @@ export default function MembershipTiers() {
               <Card
                 key={`three-people-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-yellow-600/30 hover:border-yellow-600/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-yellow-600/20"
-                onClick={() => handleSelectPlan({ ...tier, trainingType: 'three_people', price: tier.three_people_price })}
+                onClick={() => handleSelectPlan(tier, 'three_people')}
               >
                 <CardContent className="p-6">
                   <div className="text-center">

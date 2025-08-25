@@ -86,6 +86,7 @@ export default function TrainerDashboard() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
   const [showAddAssessment, setShowAddAssessment] = useState(false); // State for the new assessment dialog
+  const [showEditWorkoutModal, setShowEditWorkoutModal] = useState(false);
 
 
   // State for New Assessment Form

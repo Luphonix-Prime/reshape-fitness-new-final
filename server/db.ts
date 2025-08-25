@@ -322,11 +322,48 @@ async function createTables() {
 
 async function insertSampleData() {
   try {
+    // Check if table exists and has correct schema
+    try {
+      await pool.query('SELECT one_on_one_price FROM membership_tiers LIMIT 1');
+    } catch (schemaError) {
+      console.log('Schema issue detected, attempting to fix...');
+
+      // Drop and recreate table if schema is wrong
+      try {
+        await pool.query('DROP TABLE IF EXISTS membership_tiers CASCADE');
+        console.log('Dropped membership_tiers table');
+
+        // Recreate the table
+        const createMembershipTiersTable = `
+          CREATE TABLE membership_tiers (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            sessions INTEGER NOT NULL,
+            duration VARCHAR(50) NOT NULL,
+            one_on_one_price DECIMAL(10,2) NOT NULL,
+            one_on_one_per_session DECIMAL(10,2) NOT NULL,
+            two_people_price DECIMAL(10,2) NOT NULL,
+            two_people_per_session DECIMAL(10,2) NOT NULL,
+            three_people_price DECIMAL(10,2) NOT NULL,
+            three_people_per_session DECIMAL(10,2) NOT NULL,
+            tiers JSONB DEFAULT '[]',
+            features TEXT[],
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
+        await pool.query(createMembershipTiersTable);
+        console.log('Recreated membership_tiers table with correct schema');
+      } catch (recreateError) {
+        console.error('Failed to recreate table:', recreateError);
+      }
+    }
+
     // Insert membership tiers (always check/insert these)
     const { rows: existingTiers } = await pool.query('SELECT COUNT(*) FROM membership_tiers');
-    if (parseInt(existingTiers[0].count) === 0) {
-      // Clear existing membership tiers to avoid conflicts
-      await pool.query('DELETE FROM membership_tiers');
+    // Force reinitialize membership tiers by clearing them first
+    await pool.query('DELETE FROM membership_tiers');
+    console.log('Cleared existing membership tiers');
 
       const tiers = [
         {
@@ -345,13 +382,7 @@ async function insertSampleData() {
             { type: 'three_people', price: 12000, perSession: 1000 }
           ]),
           description: '12 sessions in 1 month',
-          features: JSON.stringify([
-            '12 Personal Training Sessions',
-            'Body Composition Analysis',
-            'Customized Workout Plans',
-            'Nutrition Guidance',
-            'Progress Tracking'
-          ])
+          features: ["12 Personal Training Sessions","Body Composition Analysis","Customized Workout Plans","Nutrition Guidance","Progress Tracking"]
         },
         {
           name: '24 Session Package',
@@ -369,14 +400,7 @@ async function insertSampleData() {
             { type: 'three_people', price: 22800, perSession: 950 }
           ]),
           description: '24 sessions in 1 month',
-          features: JSON.stringify([
-            '24 Personal Training Sessions',
-            'Advanced Body Analysis',
-            'Personalized Meal Plans',
-            'Weekly Progress Reviews',
-            'Priority Booking',
-            'Supplement Guidance'
-          ])
+          features: ["24 Personal Training Sessions","Advanced Body Analysis","Comprehensive Workout Plans","Detailed Nutrition Plans","Monthly Progress Reviews","Priority Booking"]
         },
         {
           name: '36 Session Package',
@@ -394,14 +418,7 @@ async function insertSampleData() {
             { type: 'three_people', price: 32400, perSession: 900 }
           ]),
           description: '36 sessions in 3 months',
-          features: JSON.stringify([
-            '36 Personal Training Sessions',
-            'Comprehensive Health Assessment',
-            'Custom Nutrition & Meal Planning',
-            'Bi-weekly Progress Evaluations',
-            'VIP Access to Equipment',
-            'Recovery & Mobility Sessions'
-          ])
+          features: ["36 Personal Training Sessions","Complete Body Transformation Analysis","Elite Workout Programming","Advanced Nutrition Coaching","Bi-weekly Progress Reviews","VIP Booking Priority","Supplement Guidance"]
         },
         {
           name: '72 Session Package',
@@ -419,26 +436,17 @@ async function insertSampleData() {
             { type: 'three_people', price: 57600, perSession: 800 }
           ]),
           description: '72 sessions in 6 months',
-          features: JSON.stringify([
-            '72 Personal Training Sessions',
-            'Complete Transformation Program',
-            'Advanced Nutritional Coaching',
-            'Monthly Body Composition Analysis',
-            'Lifestyle & Habit Coaching',
-            'Exclusive Member Events',
-            'Long-term Health Planning'
-          ])
+          features: ["72 Personal Training Sessions","Ultimate Transformation Package","Premium Body Analysis Quarterly","Elite Personal Training","Advanced Nutrition & Meal Planning","Weekly Progress Reviews","VIP Access & Priority Booking","Supplement & Recovery Guidance","Lifestyle Coaching"]
         }
       ];
 
       for (const tier of tiers) {
-        await pool.query(
-          'INSERT INTO membership_tiers (name, sessions, duration, one_on_one_price, one_on_one_per_session, two_people_price, two_people_per_session, three_people_price, three_people_per_session, tiers, features, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-          [tier.name, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.oneOnOnePerSession, tier.twoPeoplePrice, tier.twoPeoplePerSession, tier.threePeoplePrice, tier.threePeoplePerSession, tier.tiersData, tier.features, tier.description]
-        );
-      }
-      console.log('Membership tiers inserted');
+      await pool.query(
+        'INSERT INTO membership_tiers (name, sessions, duration, one_on_one_price, one_on_one_per_session, two_people_price, two_people_per_session, three_people_price, three_people_per_session, tiers, features, description) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        [tier.name, tier.sessions, tier.duration, tier.oneOnOnePrice, tier.oneOnOnePerSession, tier.twoPeoplePrice, tier.twoPeoplePerSession, tier.threePeoplePrice, tier.threePeoplePerSession, tier.tiersData, tier.features, tier.description]
+      );
     }
+    console.log('Membership tiers inserted');
 
     // Always ensure admin, trainer, and member users exist
     const adminEmail = 'admin@reshape.com';
@@ -483,7 +491,7 @@ async function insertSampleData() {
 
       // Create member profile with a membership tier and category
       if (memberRows[0]) {
-        const { rows: tierRowsBronze } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['TIER 1']);
+        const { rows: tierRowsBronze } = await pool.query('SELECT id FROM membership_tiers WHERE name = $1 LIMIT 1', ['12 Session Package']);
         if (tierRowsBronze[0]) {
           await pool.query(
             'INSERT INTO member_profiles (user_id, membership_tier_id, fitness_goals, emergency_contact, tier_category) VALUES ($1, $2, $3, $4, $5)',
@@ -560,7 +568,7 @@ async function insertSampleData() {
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      
+
       const sampleSessions = [
         {
           member_name: 'dhyey patel',
