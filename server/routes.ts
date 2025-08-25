@@ -912,22 +912,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/attendance/:date', async (req, res) => {
     try {
       const { date } = req.params;
+      console.log(`Fetching attendance for date: ${date}`);
+
       const { rows } = await pool.query(`
-        SELECT ta.*, u.first_name, u.last_name, u.email,
-               CONCAT(u.first_name, ' ', u.last_name) as trainerName
+        SELECT ta.*, 
+               COALESCE(tp.first_name, u.first_name) as first_name,
+               COALESCE(tp.last_name, u.last_name) as last_name,
+               COALESCE(tp.email, u.email) as email,
+               CONCAT(COALESCE(tp.first_name, u.first_name), ' ', COALESCE(tp.last_name, u.last_name)) as trainerName
         FROM trainer_attendance ta
-        JOIN users u ON ta.trainer_id = u.id
+        LEFT JOIN users u ON ta.trainer_id = u.id
+        LEFT JOIN trainer_profiles tp ON ta.trainer_id = tp.id
         WHERE ta.date = $1
-        ORDER BY ta.check_in_time DESC NULLS LAST
+        ORDER BY ta.created_at DESC, ta.check_in_time DESC NULLS LAST
       `, [date]);
-      res.json(rows.map(row => ({
+
+      console.log(`Found ${rows.length} attendance records for date ${date}:`, rows.map(r => ({ id: r.id, trainer: r.trainername, status: r.status })));
+
+      const attendanceRecords = rows.map(row => ({
         ...row,
         _id: row.id,
         trainerId: row.trainer_id,
-        trainerName: row.trainername,
+        trainerName: row.trainername || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
         checkInTime: row.check_in_time,
-        checkOutTime: row.check_out_time
-      })));
+        checkOutTime: row.check_out_time,
+        status: row.status,
+        notes: row.notes,
+        date: row.date
+      }));
+
+      res.json(attendanceRecords);
     } catch (error: any) {
       console.error("Error fetching attendance:", error);
       if (error.message?.includes('relation "trainer_attendance" does not exist')) {
@@ -1260,14 +1274,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
         const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
@@ -1279,10 +1293,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       let convertedScheduledTime = scheduledTime;
@@ -1341,15 +1362,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = time12Pattern.match(time12Pattern);
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -1360,10 +1381,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       if (updates.scheduledTime && updates.scheduledTime.trim() !== '') {
@@ -2267,15 +2295,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = time12Pattern.match(time12Pattern);
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -2286,10 +2314,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       const convertedCheckInTime = checkInTime ? validateAndConvertTime(checkInTime) : null;
@@ -2305,20 +2340,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if attendance already exists for this trainer and date
       const { rows: existingAttendance } = await pool.query(`
-        SELECT id FROM trainer_attendance 
+        SELECT * FROM trainer_attendance 
         WHERE trainer_id = $1 AND date = $2
       `, [trainerId, date]);
 
       let attendance;
 
       if (existingAttendance.length > 0) {
-        // Update existing attendance
+        // Update existing attendance record
+        const existing = existingAttendance[0];
+
+        // If updating checkout time, preserve existing check-in time
+        const finalCheckInTime = convertedCheckInTime || existing.check_in_time;
+        const finalCheckOutTime = convertedCheckOutTime || existing.check_out_time;
+
         const { rows } = await pool.query(`
           UPDATE trainer_attendance 
           SET status = $1, check_in_time = $2, check_out_time = $3, notes = $4, updated_at = CURRENT_TIMESTAMP
           WHERE trainer_id = $5 AND date = $6
           RETURNING *
-        `, [status, convertedCheckInTime, convertedCheckOutTime, notes || null, trainerId, date]);
+        `, [status, finalCheckInTime, finalCheckOutTime, notes || existing.notes, trainerId, date]);
         attendance = rows[0];
       } else {
         // Create new attendance record
@@ -2330,7 +2371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         attendance = rows[0];
       }
 
-      console.log(`Trainer attendance recorded: ${status} for trainer ${trainerId} on ${date}`);
+      console.log(`Trainer attendance recorded: ${status} for trainer ${trainerId} on ${date} - CheckIn: ${attendance.check_in_time}, CheckOut: ${attendance.check_out_time}`);
 
       res.json({
         message: "Attendance recorded successfully",

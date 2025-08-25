@@ -187,7 +187,12 @@ export default function AdminDashboard() {
 
   const { data: todayAttendance, refetch: refetchAttendance } = useQuery({
     queryKey: ['/api/admin/attendance', selectedDate],
-    queryFn: () => apiRequest('GET', `/api/admin/attendance/${selectedDate}`),
+    queryFn: () => {
+      console.log(`Fetching attendance for date: ${selectedDate}`);
+      return apiRequest('GET', `/api/admin/attendance/${selectedDate}`);
+    },
+    staleTime: 0, // Always refetch when query is called
+    cacheTime: 0, // Don't cache results
   });
 
   const { data: attendanceStats } = useQuery({
@@ -1018,7 +1023,11 @@ export default function AdminDashboard() {
 
   const handleQuickAttendance = async (trainerId: string, status: string) => {
     try {
-      const currentTime = new Date().toTimeString().slice(0, 5);
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
+      
       const attendanceData = {
         trainerId,
         status,
@@ -1028,22 +1037,36 @@ export default function AdminDashboard() {
         notes: ""
       };
 
+      console.log('Recording attendance:', attendanceData);
       await recordAttendanceMutation.mutateAsync(attendanceData);
 
-      // Update the attendance state to reflect the new status
-      queryClient.invalidateQueries({ queryKey: [`/api/admin/attendance/${selectedDate}`] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] });
+      // Force refresh attendance data
+      queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
+        refetchAttendance()
+      ]);
+      
+      console.log('Attendance data refreshed');
     } catch (error: any) {
       console.error('Error recording quick attendance:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to record attendance",
+        variant: "destructive"
+      });
     }
   };
 
   const handleCheckOut = async (trainerId: string) => {
     try {
-      const currentTime = new Date().toTimeString().slice(0, 5);
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
 
       // Find existing attendance record
-      const existingAttendance = todayAttendance?.find(att => att.trainerId.toString() === trainerId);
+      const existingAttendance = todayAttendance?.find(att => att.trainerId?.toString() === trainerId);
 
       if (existingAttendance) {
         const attendanceData = {
@@ -1055,14 +1078,25 @@ export default function AdminDashboard() {
           notes: existingAttendance.notes || ""
         };
 
+        console.log('Recording checkout:', attendanceData);
         await recordAttendanceMutation.mutateAsync(attendanceData);
 
-        // Update the attendance state
-        queryClient.invalidateQueries({ queryKey: [`/api/admin/attendance/${selectedDate}`] });
-        queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] });
+        // Force refresh attendance data
+        queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
+          refetchAttendance()
+        ]);
+        
+        console.log('Checkout recorded and data refreshed');
       }
     } catch (error: any) {
       console.error('Error recording checkout:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to record checkout",
+        variant: "destructive"
+      });
     }
   };
 
@@ -3335,16 +3369,26 @@ export default function AdminDashboard() {
                   type="date"
                   value={selectedDate}
                   onChange={(e) => {
-                    setSelectedDate(e.target.value);
-                    // Marked trainers state is no longer used in the current logic, can be removed if not needed elsewhere.
-                    // setMarkedTrainers(new Set());
+                    const newDate = e.target.value;
+                    console.log(`Changing date to: ${newDate}`);
+                    setSelectedDate(newDate);
+                    // Force refresh attendance data when the date changes
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance', newDate] });
+                    setTimeout(() => refetchAttendance(), 100);
                   }}
                   className="bg-black border-gray-700 text-white"
                 />
                 <Button
                   variant="outline"
                   className="border-gold text-gold hover:bg-gold hover:text-black"
-                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    console.log(`Setting date to today: ${today}`);
+                    setSelectedDate(today);
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance'] });
+                    setTimeout(() => refetchAttendance(), 100);
+                  }}
                 >
                   Today
                 </Button>
@@ -3528,20 +3572,20 @@ export default function AdminDashboard() {
                                     className="bg-green-600 hover:bg-green-700 text-white"
                                     onClick={() => handleQuickAttendance(trainer.userId, "present")}
                                   >
-                                    Present
+                                    Check In
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="destructive"
                                     onClick={() => handleQuickAttendance(trainer.userId, "absent")}
                                   >
-                                    Absent
+                                    Mark Absent
                                   </Button>
                                 </>
                               ) : hasAttendance.status === "present" && !hasAttendance.checkOutTime ? (
                                 <div className="flex flex-col items-end space-y-1">
                                   <div className="flex items-center space-x-2">
-                                    <Badge className="bg-green-600 text-white">Present</Badge>
+                                    <Badge className="bg-green-600 text-white">Checked In</Badge>
                                     <span className="text-xs text-gray-400">In: {hasAttendance.checkInTime}</span>
                                   </div>
                                   <Button
@@ -3554,15 +3598,22 @@ export default function AdminDashboard() {
                                 </div>
                               ) : hasAttendance.status === "present" && hasAttendance.checkOutTime ? (
                                 <div className="flex flex-col items-end space-y-1">
-                                  <Badge className="bg-green-600 text-white">Present</Badge>
+                                  <Badge className="bg-green-600 text-white">Completed</Badge>
                                   <div className="text-xs text-gray-400">
                                     <div>In: {hasAttendance.checkInTime}</div>
                                     <div>Out: {hasAttendance.checkOutTime}</div>
                                   </div>
                                 </div>
                               ) : hasAttendance.status === "absent" ? (
-                                <div className="flex flex-col items-end">
+                                <div className="flex flex-col items-end space-y-1">
                                   <Badge className="bg-red-600 text-white">Absent</Badge>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "present")}
+                                  >
+                                    Mark Present
+                                  </Button>
                                 </div>
                               ) : (
                                 <div className="flex items-center space-x-2">
