@@ -67,9 +67,11 @@ export default {
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
+        heading: ["var(--font-heading)"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
         inter: ['Inter', 'sans-serif'],
+        poppins: ['Poppins', 'sans-serif'],
       },
       backdropBlur: {
         xs: '2px',
@@ -95,6 +97,13 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-in": "fadeInUp 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "slide-in-left": "slideInLeft 1s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "slide-in-right": "slideInRight 1s cubic-bezier(0.4, 0, 0.2, 1) forwards",
+        "float": "smoothFloat 8s ease-in-out infinite",
+        "shimmer": "advancedShimmer 3s linear infinite",
+        "border-glow": "borderGlow 2s ease-in-out infinite alternate",
+        "magnetic-pulse": "magneticPulse 0.6s ease-out",
       },
     },
   },

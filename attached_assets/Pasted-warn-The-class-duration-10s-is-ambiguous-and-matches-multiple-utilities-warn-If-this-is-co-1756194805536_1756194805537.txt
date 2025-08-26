@@ -1,0 +1,27 @@
+warn - The class `duration-[10s]` is ambiguous and matches multiple utilities.
+warn - If this is content and not a class, replace it with `duration-&lsqb;10s&rsqb;` to silence this warning.
+7:53:05 AM [vite] Internal server error: [postcss] /home/runner/workspace/client/src/index.css:101:5: The `hover:shadow-gold/20` class does not exist. If `hover:shadow-gold/20` is a custom class, make sure it is defined within a `@layer` directive.
+  Plugin: vite:css
+  File: /home/runner/workspace/client/src/index.css:101:4
+  99 |  @layer components {
+  100|    .premium-card {
+  101|      @apply bg-gradient-to-br from-white/5 to-white/10 backdrop-blur-md border border-white/20 
+     |      ^
+  102|             transition-all duration-700 hover:from-white/10 hover:to-white/15 
+  103|             hover:-translate-y-3 hover:shadow-2xl hover:shadow-gold/20
+      at Input.error (/home/runner/workspace/node_modules/postcss/lib/input.js:106:16)
+      at AtRule.error (/home/runner/workspace/node_modules/postcss/lib/node.js:115:32)
+      at processApply (/home/runner/workspace/node_modules/tailwindcss/lib/lib/expandApplyAtRules.js:380:29)
+      at /home/runner/workspace/node_modules/tailwindcss/lib/lib/expandApplyAtRules.js:551:9
+      at /home/runner/workspace/node_modules/tailwindcss/lib/processTailwindFeatures.js:55:50
+      at async plugins (/home/runner/workspace/node_modules/tailwindcss/lib/plugin.js:38:17)
+      at async LazyResult.runAsync (/home/runner/workspace/node_modules/postcss/lib/lazy-result.js:261:11)
+      at async compileCSS (/home/runner/workspace/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:36898:21)
+      at async TransformPluginContext.transform (/home/runner/workspace/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:36171:11)
+      at async PluginContainer.transform (/home/runner/workspace/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49099:18)
+      at async loadAndTransform (/home/runner/workspace/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:51977:27)
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 11.5.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.5.2
+npm notice To update run: npm install -g npm@11.5.2
+npm notice
