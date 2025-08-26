@@ -1513,6 +1513,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
+  // Get admin dashboard statistics
+  app.get('/api/admin/stats', async (req, res) => {
+    try {
+      // Get total members count
+      const { rows: memberCount } = await pool.query('SELECT COUNT(*) as count FROM member_profiles');
+      const totalMembers = parseInt(memberCount[0].count) || 0;
+
+      // Get total trainers count
+      const { rows: trainerCount } = await pool.query('SELECT COUNT(*) as count FROM trainer_profiles');
+      const totalTrainers = parseInt(trainerCount[0].count) || 0;
+
+      // Calculate monthly revenue from active subscriptions
+      const { rows: revenueData } = await pool.query(`
+        SELECT COALESCE(SUM(price_paid), 0) as total_revenue
+        FROM subscriptions 
+        WHERE is_active = true 
+        AND start_date >= date_trunc('month', CURRENT_DATE)
+        AND start_date < date_trunc('month', CURRENT_DATE) + interval '1 month'
+      `);
+      const monthlyRevenue = parseInt(revenueData[0].total_revenue) || 0;
+
+      // Get total training sessions count
+      const { rows: sessionCount } = await pool.query('SELECT COUNT(*) as count FROM member_sessions');
+      const totalSessions = parseInt(sessionCount[0].count) || 0;
+
+      const stats = {
+        totalMembers,
+        totalTrainers,
+        monthlyRevenue,
+        totalSessions
+      };
+
+      console.log('Admin stats calculated:', stats);
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching admin stats:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch admin statistics",
+        totalMembers: 0,
+        totalTrainers: 0,
+        monthlyRevenue: 0,
+        totalSessions: 0
+      });
+    }
+  });
+
   // Get all members
   app.get('/api/admin/members', async (req, res) => {
     try {
@@ -1577,15 +1623,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Creating trainer with data:', trainerData);
 
       // Check if user with this email already exists in users table
-      const { rows: existingUser } = await pool.query('SELECT * FROM users WHERE email = $1', [trainerData.email]);
+      const { rows: existingUser } = await pool.query('SELECT id, user_type FROM users WHERE email = $1', [trainerData.email]);
       if (existingUser.length > 0) {
-        return res.status(400).json({ message: "A user with this email already exists" });
+        console.log('Found existing user:', existingUser[0]);
+        return res.status(400).json({ message: `A user with this email already exists (ID: ${existingUser[0].id}, Type: ${existingUser[0].user_type})` });
       }
 
       // Check if trainer with this email already exists in trainer_profiles table
-      const { rows: existingTrainer } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [trainerData.email]);
+      const { rows: existingTrainer } = await pool.query('SELECT id, user_id FROM trainer_profiles WHERE email = $1', [trainerData.email]);
       if (existingTrainer.length > 0) {
-        return res.status(400).json({ message: "A trainer with this email already exists" });
+        console.log('Found existing trainer profile:', existingTrainer[0]);
+        return res.status(400).json({ message: `A trainer with this email already exists (Profile ID: ${existingTrainer[0].id}, User ID: ${existingTrainer[0].user_id})` });
       }
 
       const client = await pool.connect();
@@ -1823,36 +1871,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get trainer deletion details
+  app.get('/api/admin/trainer-deletion-details/:trainerId', async (req, res) => {
+    try {
+      const { trainerId } = req.params;
+      
+      // Get counts of related data that will be deleted
+      const sessionsCount = await pool.query('SELECT COUNT(*) as count FROM member_sessions WHERE trainer_id = $1', [trainerId]);
+      const assessmentsCount = await pool.query('SELECT COUNT(*) as count FROM body_assessments WHERE trainer_id = $1', [trainerId]);
+      const workoutPlansCount = await pool.query('SELECT COUNT(*) as count FROM workout_plans WHERE trainer_id = $1', [trainerId]);
+      const nutritionPlansCount = await pool.query('SELECT COUNT(*) as count FROM nutrition_plans WHERE trainer_id = $1', [trainerId]);
+      const trainerAssignmentsCount = await pool.query('SELECT COUNT(*) as count FROM member_trainer_assignments WHERE trainer_id = $1', [trainerId]);
+      const attendanceCount = await pool.query('SELECT COUNT(*) as count FROM trainer_attendance WHERE trainer_id = $1', [trainerId]);
+      const sessionAttendanceCount = await pool.query('SELECT COUNT(*) as count FROM member_session_attendance WHERE trainer_id = $1', [trainerId]);
+      
+      const details = {
+        sessions: parseInt(sessionsCount.rows[0].count) || 0,
+        assessments: parseInt(assessmentsCount.rows[0].count) || 0,
+        workoutPlans: parseInt(workoutPlansCount.rows[0].count) || 0,
+        nutritionPlans: parseInt(nutritionPlansCount.rows[0].count) || 0,
+        trainerAssignments: parseInt(trainerAssignmentsCount.rows[0].count) || 0,
+        attendance: parseInt(attendanceCount.rows[0].count) || 0,
+        sessionAttendance: parseInt(sessionAttendanceCount.rows[0].count) || 0
+      };
+      
+      res.json(details);
+    } catch (error: any) {
+      console.error("Error getting trainer deletion details:", error);
+      res.status(500).json({ message: error.message || "Failed to get deletion details" });
+    }
+  });
+
   // Delete trainer route
   app.delete('/api/admin/delete-trainer/:trainerId', async (req, res) => {
     try {
       const { trainerId } = req.params;
 
-      // Get trainer profile to find associated user_id
-      const { rows: trainerRows } = await pool.query('SELECT user_id FROM trainer_profiles WHERE id = $1', [trainerId]);
+      // Get trainer profile to find associated user_id and email
+      const { rows: trainerRows } = await pool.query('SELECT user_id, email FROM trainer_profiles WHERE id = $1', [trainerId]);
 
       if (trainerRows.length === 0) {
         return res.status(404).json({ message: "Trainer not found" });
       }
 
       const userId = trainerRows[0].user_id;
+      const trainerEmail = trainerRows[0].email;
       const client = await pool.connect();
 
       try {
         await client.query('BEGIN');
 
-        // Delete from trainer_profiles first (due to foreign key constraint)
+        // Delete all related data in the correct order (child tables first)
+        await client.query('DELETE FROM member_session_attendance WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM member_trainer_assignments WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM trainer_attendance WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM member_sessions WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM body_assessments WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM workout_plans WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM nutrition_plans WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM training_sessions WHERE trainer_id = $1', [trainerId]);
+
+        // Delete from trainer_profiles
         await client.query('DELETE FROM trainer_profiles WHERE id = $1', [trainerId]);
 
-        // Delete from users table if user_id exists
+        // Delete from users table using either user_id or email
         if (userId) {
           await client.query('DELETE FROM users WHERE id = $1', [userId]);
+          console.log(`Deleted user by ID: ${userId}`);
+        } else if (trainerEmail) {
+          // Fallback: delete by email if user_id is not available
+          await client.query('DELETE FROM users WHERE email = $1', [trainerEmail]);
+          console.log(`Deleted user by email: ${trainerEmail}`);
         }
 
         await client.query('COMMIT');
-        console.log(`Trainer deleted from both tables. TrainerID: ${trainerId}, UserID: ${userId}`);
+        console.log(`Trainer ${trainerId} and all related data deleted successfully. UserID: ${userId}, Email: ${trainerEmail}`);
 
-        res.json({ message: "Trainer deleted successfully from both users and trainer_profiles tables" });
+        res.json({ message: "Trainer and all related data deleted successfully" });
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -1967,12 +2062,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get member deletion details
+  app.get('/api/admin/member-deletion-details/:memberId', async (req, res) => {
+    try {
+      const { memberId } = req.params;
+      
+      // Get counts of related data that will be deleted
+      const subscriptionsCount = await pool.query('SELECT COUNT(*) as count FROM subscriptions WHERE member_id = $1', [memberId]);
+      const sessionsCount = await pool.query('SELECT COUNT(*) as count FROM member_sessions WHERE member_id = $1', [memberId]);
+      const assessmentsCount = await pool.query('SELECT COUNT(*) as count FROM body_assessments WHERE member_id = $1', [memberId]);
+      const workoutPlansCount = await pool.query('SELECT COUNT(*) as count FROM workout_plans WHERE member_id = $1', [memberId]);
+      const nutritionPlansCount = await pool.query('SELECT COUNT(*) as count FROM nutrition_plans WHERE member_id = $1', [memberId]);
+      const trainerAssignmentsCount = await pool.query('SELECT COUNT(*) as count FROM member_trainer_assignments WHERE member_id = $1', [memberId]);
+      const sessionAttendanceCount = await pool.query('SELECT COUNT(*) as count FROM member_session_attendance WHERE member_id = $1', [memberId]);
+      
+      const details = {
+        subscriptions: parseInt(subscriptionsCount.rows[0].count) || 0,
+        sessions: parseInt(sessionsCount.rows[0].count) || 0,
+        assessments: parseInt(assessmentsCount.rows[0].count) || 0,
+        workoutPlans: parseInt(workoutPlansCount.rows[0].count) || 0,
+        nutritionPlans: parseInt(nutritionPlansCount.rows[0].count) || 0,
+        trainerAssignments: parseInt(trainerAssignmentsCount.rows[0].count) || 0,
+        sessionAttendance: parseInt(sessionAttendanceCount.rows[0].count) || 0
+      };
+      
+      res.json(details);
+    } catch (error: any) {
+      console.error("Error getting member deletion details:", error);
+      res.status(500).json({ message: error.message || "Failed to get deletion details" });
+    }
+  });
+
   // Delete member route
   app.delete('/api/admin/delete-member/:memberId', async (req, res) => {
     try {
       const { memberId } = req.params;
-      await storage.deleteUser(memberId); // This now handles member_profiles deletion
-      res.json({ message: "Member deleted successfully" });
+      
+      // Get member profile to find associated user_id and email
+      const { rows: memberProfileRows } = await pool.query('SELECT user_id, email FROM member_profiles WHERE id = $1', [memberId]);
+
+      if (memberProfileRows.length === 0) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      const userId = memberProfileRows[0].user_id;
+      const memberEmail = memberProfileRows[0].email;
+      
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        // Delete all related data in the correct order (child tables first)
+        await client.query('DELETE FROM member_session_attendance WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM member_trainer_assignments WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM subscriptions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM member_sessions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM body_assessments WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM workout_plans WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM nutrition_plans WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM training_sessions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM attendance WHERE member_id = $1', [memberId]);
+        
+        // Delete member profile
+        await client.query('DELETE FROM member_profiles WHERE id = $1', [memberId]);
+        
+        // Delete from users table using either user_id or email
+        if (userId) {
+          await client.query('DELETE FROM users WHERE id = $1', [userId]);
+          console.log(`Deleted user by ID: ${userId}`);
+        } else if (memberEmail) {
+          // Fallback: delete by email if user_id is not available
+          await client.query('DELETE FROM users WHERE email = $1', [memberEmail]);
+          console.log(`Deleted user by email: ${memberEmail}`);
+        }
+        
+        await client.query('COMMIT');
+        console.log(`Member ${memberId} and all related data deleted successfully. UserID: ${userId}, Email: ${memberEmail}`);
+        res.json({ message: "Member and all related data deleted successfully" });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error deleting member:", error);
       res.status(500).json({ message: error.message || "Failed to delete member" });

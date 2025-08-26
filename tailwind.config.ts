@@ -100,7 +100,7 @@ export default {
         "fade-in": "fadeInUp 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "slide-in-left": "slideInLeft 1s cubic-bezier(0.4, 0, 0.2, 1) forwards",
         "slide-in-right": "slideInRight 1s cubic-bezier(0.4, 0, 0.2, 1) forwards",
-        "float": "smoothFloat 8s ease-in-out infinite",
+        "float": "smoothFloat 6s ease-in-out infinite",
         "shimmer": "advancedShimmer 3s linear infinite",
         "border-glow": "borderGlow 2s ease-in-out infinite alternate",
         "magnetic-pulse": "magneticPulse 0.6s ease-out",

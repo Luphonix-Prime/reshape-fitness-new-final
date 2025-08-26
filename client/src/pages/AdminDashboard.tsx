@@ -776,56 +776,99 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteMember = async (member: any) => {
-    if (confirm(`Are you sure you want to delete member ${member.firstName} ${member.lastName}?`)) {
-      try {
-        const response = await apiRequest('DELETE', `/api/admin/delete-member/${member.userId}`, {});
+    try {
+      // First, get details about what will be deleted
+      const response = await apiRequest('GET', `/api/admin/member-deletion-details/${member.id}`);
+      const details = response || {};
 
-        if (response) {
+      const detailsMessage = `This will permanently delete the following data:
+
+• Member Profile: ${member.first_name} ${member.last_name} (${member.email})
+• User Account: Basic account information
+• Subscriptions: ${details.subscriptions || 0} subscription record(s)
+• Training Sessions: ${details.sessions || 0} session record(s)
+• Body Assessments: ${details.assessments || 0} assessment record(s)
+• Workout Plans: ${details.workoutPlans || 0} workout plan(s)
+• Nutrition Plans: ${details.nutritionPlans || 0} nutrition plan(s)
+• Trainer Assignments: ${details.trainerAssignments || 0} assignment record(s)
+• Member Session Attendance: ${details.sessionAttendance || 0} attendance record(s)
+
+This action cannot be undone. Are you sure you want to continue?`;
+
+      if (confirm(detailsMessage)) {
+        const deleteResponse = await apiRequest('DELETE', `/api/admin/delete-member/${member.id}`);
+
+        if (deleteResponse) {
           // Refresh all related data
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] }),
-            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/member-sessions'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/body-assessments'] })
           ]);
           toast({
             title: "Success",
-            description: "Member deleted successfully!",
+            description: "Member and all related data deleted successfully!",
           });
         }
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to delete member",
-          variant: "destructive",
-        });
       }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete member",
+        variant: "destructive",
+      });
     }
   };
 
   const handleDeleteTrainer = async (trainer: any) => {
-    if (confirm(`Are you sure you want to delete trainer ${trainer.firstName} ${trainer.lastName}?`)) {
-      try {
-        const response = await apiRequest('DELETE', `/api/admin/delete-trainer/${trainer.userId}`, {});
+    try {
+      // First, get details about what will be deleted
+      const response = await apiRequest('GET', `/api/admin/trainer-deletion-details/${trainer.userId}`);
+      const details = response || {};
 
-        if (response) {
+      const detailsMessage = `This will permanently delete the following data:
+
+• Trainer Profile: ${trainer.firstName} ${trainer.lastName} (${trainer.email})
+• User Account: Basic account information
+• Training Sessions: ${details.sessions || 0} session record(s)
+• Body Assessments: ${details.assessments || 0} assessment record(s)
+• Workout Plans: ${details.workoutPlans || 0} workout plan(s)
+• Nutrition Plans: ${details.nutritionPlans || 0} nutrition plan(s)
+• Trainer Assignments: ${details.trainerAssignments || 0} assignment record(s)
+• Trainer Attendance: ${details.attendance || 0} attendance record(s)
+• Member Session Attendance: ${details.sessionAttendance || 0} attendance record(s)
+
+This action cannot be undone. Are you sure you want to continue?`;
+
+      if (confirm(detailsMessage)) {
+        const deleteResponse = await apiRequest('DELETE', `/api/admin/delete-trainer/${trainer.userId}`);
+
+        if (deleteResponse) {
           // Refresh all related data
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['/api/admin/trainers'] }),
-            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/member-sessions'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/body-assessments'] })
           ]);
           toast({
             title: "Success",
-            description: "Trainer deleted successfully!",
+            description: "Trainer and all related data deleted successfully!",
           });
         }
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to delete trainer",
-          variant: "destructive",
-        });
       }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete trainer",
+        variant: "destructive",
+      });
     }
   };
+
 
   // Close all member and trainer modals and reset their states
   const closeModals = () => {
@@ -1027,7 +1070,7 @@ export default function AdminDashboard() {
       const hours = now.getHours().toString().padStart(2, '0');
       const minutes = now.getMinutes().toString().padStart(2, '0');
       const currentTime = `${hours}:${minutes}`;
-      
+
       const attendanceData = {
         trainerId,
         status,
@@ -1046,7 +1089,7 @@ export default function AdminDashboard() {
         queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
         refetchAttendance()
       ]);
-      
+
       console.log('Attendance data refreshed');
     } catch (error: any) {
       console.error('Error recording quick attendance:', error);
@@ -1087,7 +1130,7 @@ export default function AdminDashboard() {
           queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
           refetchAttendance()
         ]);
-        
+
         console.log('Checkout recorded and data refreshed');
       }
     } catch (error: any) {
