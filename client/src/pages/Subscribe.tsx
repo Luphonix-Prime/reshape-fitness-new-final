@@ -11,7 +11,7 @@ import { useLocation } from "wouter";
 import { CheckCircle, CreditCard, User, Mail, Phone } from "lucide-react";
 
 const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
-  const { toast } = useToast();
+  const { toast } = useUseToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
@@ -34,7 +34,8 @@ const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
 
       // Create membership
       const response = await apiRequest("POST", "/api/create-membership", {
-        membershipTierId: selectedTier.id
+        membershipTierId: selectedTier.id,
+        trainingType: selectedTier.trainingType, // Include training type
       });
 
       const data = await response.json();
@@ -44,7 +45,7 @@ const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
 
       toast({
         title: "Welcome to Reshape Fitness!",
-        description: `Your ${selectedTier.name} membership is now active.`,
+        description: `Your ${selectedTier.name} membership (${selectedTier.trainingType}) is now active.`,
       });
 
       setTimeout(() => {
@@ -317,7 +318,7 @@ export default function Subscribe() {
                       <p className="text-gray-300">Premium fitness experience</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-light">${selectedTier.monthlyPrice}</div>
+                      <div className="text-2xl font-light">${selectedTier.price?.toLocaleString()}</div>
                       <div className="text-sm text-gray-400">per month</div>
                     </div>
                   </div>
@@ -383,36 +384,26 @@ export default function Subscribe() {
             <div className="text-center">
               <h3 className="text-4xl font-bold text-gold mb-8">ONE ON ONE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('ONE_ON_ONE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`one-on-one-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-gold/30 hover:border-gold/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'one_on_one'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
                         <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                          {tier.sessions} Sessions
                         </h4>
                         <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                          ({tier.duration})
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-gold">₹{tier.price?.toLocaleString()}</span>
+                        <div className="text-3xl font-bold text-gold mb-2">
+                          ₹{tier.one_on_one_price?.toLocaleString() || '0'}/-
                         </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1500' : 
-                              tier.name.includes('_24_') ? '1425' : 
-                              tier.name.includes('_36_') ? '1350' : '1200'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.one_on_one_per_session || '0'} per session)
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -424,36 +415,26 @@ export default function Subscribe() {
             <div className="text-center">
               <h3 className="text-4xl font-bold text-gray-300 mb-8">2 PEOPLE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('TWO_PEOPLE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`two-people-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-gray-400/30 hover:border-gray-400/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gray-400/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'two_people'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
                         <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                          {tier.sessions} Sessions
                         </h4>
                         <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                          ({tier.duration})
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-gray-300">₹{tier.price?.toLocaleString()}</span>
+                        <div className="text-3xl font-bold text-gray-300 mb-2">
+                          ₹{tier.two_people_price?.toLocaleString() || '0'}/-
                         </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1200' : 
-                              tier.name.includes('_24_') ? '1140' : 
-                              tier.name.includes('_36_') ? '1080' : '960'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.two_people_per_session || '0'} per session)
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -465,36 +446,26 @@ export default function Subscribe() {
             <div className="text-center">
               <h3 className="text-4xl font-bold text-yellow-600 mb-8">3 PEOPLE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('THREE_PEOPLE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`three-people-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-yellow-600/30 hover:border-yellow-600/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-yellow-600/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'three_people'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
                         <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                          {tier.sessions} Sessions
                         </h4>
                         <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                          ({tier.duration})
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-yellow-600">₹{tier.price?.toLocaleString()}</span>
+                        <div className="text-3xl font-bold text-yellow-600 mb-2">
+                          ₹{tier.three_people_price?.toLocaleString() || '0'}/-
                         </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1000' : 
-                              tier.name.includes('_24_') ? '950' : 
-                              tier.name.includes('_36_') ? '900' : '800'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.three_people_per_session || '0'} per session)
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
