@@ -1497,7 +1497,7 @@ This action cannot be undone. Are you sure you want to continue?`;
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pt-20">
       <Navigation />
 
       <div className="container mx-auto px-6 py-8">

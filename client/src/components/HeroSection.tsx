@@ -11,7 +11,7 @@ export default function HeroSection() {
   };
 
   return (
-    <section id="home" className="relative h-screen flex items-center justify-center overflow-hidden">
+    <section id="home" className="relative h-screen flex items-center justify-center overflow-hidden pt-20">
       {/* Background Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat scale-110 transition-transform duration-[10s] hover:scale-105"
@@ -58,7 +58,11 @@ export default function HeroSection() {
         </div>
 
         <div className="opacity-0 animate-fade-in flex flex-col sm:flex-row gap-6 justify-center items-center mb-20" style={{ animationDelay: '0.6s' }}>
-          <Button size="lg" className={`${buttonVariants.primary} px-12 py-6 text-lg font-bold tracking-wide`}>
+          <Button 
+            size="lg" 
+            onClick={() => window.location.href = '/login'}
+            className={`${buttonVariants.primary} px-12 py-6 text-lg font-bold tracking-wide`}
+          >
             <Sparkles className="mr-3 h-6 w-6" />
             Start Your Journey
             <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform duration-300" />

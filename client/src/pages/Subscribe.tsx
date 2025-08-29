@@ -11,7 +11,7 @@ import { useLocation } from "wouter";
 import { CheckCircle, CreditCard, User, Mail, Phone } from "lucide-react";
 
 const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
-  const { toast } = useUseToast();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
