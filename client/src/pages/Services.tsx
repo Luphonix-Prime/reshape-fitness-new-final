@@ -119,13 +119,13 @@ export default function Services() {
       <Navigation />
       
       {/* Hero Section */}
-      <section className="pt-20 pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-7xl font-light mb-8 tracking-wider">
+      <section className="pt-32 sm:pt-40 pb-12 sm:pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light mb-6 sm:mb-8 tracking-wider">
               OUR <span className="text-gold font-medium">SERVICES</span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed px-4">
               Comprehensive wellness solutions designed for the discerning individual 
               who demands excellence in every aspect of their fitness journey.
             </p>
@@ -134,41 +134,41 @@ export default function Services() {
       </section>
 
       {/* Main Services */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             PREMIUM SERVICES
           </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
             {mainServices.map((service, index) => (
               <Card key={index} className="bg-white/5 border-white/10 overflow-hidden">
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  <div className="aspect-square md:aspect-auto">
+                <div className="grid grid-cols-1 lg:grid-cols-2">
+                  <div className="aspect-[4/3] lg:aspect-auto">
                     <img
                       src={service.image}
                       alt={service.title}
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <div className="p-8">
-                    <div className="flex items-center mb-4">
-                      <service.icon className="h-8 w-8 text-gold mr-3" />
-                      <h3 className="text-2xl font-bold text-white tracking-wider">
+                  <div className="p-4 sm:p-6 lg:p-8">
+                    <div className="flex items-center mb-3 sm:mb-4">
+                      <service.icon className="h-6 w-6 sm:h-8 sm:w-8 text-gold mr-2 sm:mr-3" />
+                      <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-white tracking-wider">
                         {service.title}
                       </h3>
                     </div>
-                    <p className="text-gray-300 mb-6">{service.description}</p>
-                    <ul className="space-y-2 mb-6">
+                    <p className="text-gray-300 mb-4 sm:mb-6 text-sm sm:text-base">{service.description}</p>
+                    <ul className="space-y-1 sm:space-y-2 mb-4 sm:mb-6">
                       {service.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="text-gray-300 text-sm flex items-center">
-                          <Star className="h-4 w-4 text-gold mr-2 flex-shrink-0" />
+                        <li key={featureIndex} className="text-gray-300 text-xs sm:text-sm flex items-center">
+                          <Star className="h-3 w-3 sm:h-4 sm:w-4 text-gold mr-2 flex-shrink-0" />
                           {feature}
                         </li>
                       ))}
                     </ul>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gold font-bold text-lg">{service.price}</span>
-                      <Button className="bg-gold text-black hover:bg-white">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+                      <span className="text-gold font-bold text-base sm:text-lg">{service.price}</span>
+                      <Button className="bg-gold text-black hover:bg-white text-sm sm:text-base px-4 py-2">
                         Learn More
                       </Button>
                     </div>
@@ -181,28 +181,28 @@ export default function Services() {
       </section>
 
       {/* Class Schedule */}
-      <section className="py-20 bg-dark-gray">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20 bg-dark-gray">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             TODAY'S CLASS SCHEDULE
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {classSchedule.map((session, index) => (
               <Card key={index} className="bg-black/50 border-gold/20">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-2xl font-bold text-gold">{session.time}</span>
-                    <Clock className="h-5 w-5 text-gray-400" />
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-3 sm:mb-4">
+                    <span className="text-lg sm:text-xl lg:text-2xl font-bold text-gold">{session.time}</span>
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2">{session.class}</h3>
-                  <p className="text-gray-300 mb-2">with {session.instructor}</p>
-                  <p className="text-sm text-gray-400">{session.duration}</p>
+                  <h3 className="text-base sm:text-lg font-bold text-white mb-2">{session.class}</h3>
+                  <p className="text-gray-300 mb-2 text-sm sm:text-base">with {session.instructor}</p>
+                  <p className="text-xs sm:text-sm text-gray-400">{session.duration}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
-          <div className="text-center mt-12">
-            <Button className="bg-gold text-black hover:bg-white px-8 py-3">
+          <div className="text-center mt-8 sm:mt-12">
+            <Button className="bg-gold text-black hover:bg-white px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base">
               View Full Schedule
             </Button>
           </div>
@@ -210,21 +210,21 @@ export default function Services() {
       </section>
 
       {/* Special Programs */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             SPECIALIZED PROGRAMS
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
             {specialPrograms.map((program, index) => (
-              <Card key={index} className="bg-white/5 border-white/10 text-center p-8">
+              <Card key={index} className="bg-white/5 border-white/10 text-center p-4 sm:p-6 lg:p-8">
                 <CardContent className="p-0">
-                  <program.icon className="h-16 w-16 text-gold mx-auto mb-6" />
-                  <h3 className="text-xl font-bold text-white mb-4 tracking-wider">
+                  <program.icon className="h-10 w-10 sm:h-12 sm:w-12 lg:h-16 lg:w-16 text-gold mx-auto mb-3 sm:mb-4 lg:mb-6" />
+                  <h3 className="text-sm sm:text-base lg:text-xl font-bold text-white mb-2 sm:mb-3 lg:mb-4 tracking-wider">
                     {program.title}
                   </h3>
-                  <p className="text-gray-300 mb-4 text-sm">{program.description}</p>
-                  <p className="text-gold font-semibold text-sm">{program.duration}</p>
+                  <p className="text-gray-300 mb-2 sm:mb-3 lg:mb-4 text-xs sm:text-sm">{program.description}</p>
+                  <p className="text-gold font-semibold text-xs sm:text-sm">{program.duration}</p>
                 </CardContent>
               </Card>
             ))}

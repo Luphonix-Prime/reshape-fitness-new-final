@@ -42,15 +42,15 @@ export default function HeroSection() {
       </div>
 
       {/* Enhanced Content */}
-      <div className="relative z-10 text-center max-w-6xl mx-auto px-6">
+      <div className="relative z-10 text-center max-w-6xl mx-auto px-4 sm:px-6 pt-40 sm:pt-32 lg:pt-24">
         <div className="opacity-0 animate-fade-in">
-          <h1 className={`${textVariants.heading} text-6xl md:text-8xl lg:text-9xl font-black mb-8 tracking-wider`}>
+          <h1 className={`${textVariants.heading} text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black mb-4 sm:mb-6 lg:mb-8 tracking-wider leading-tight`}>
             FORGE YOUR <span className="gradient-text inline-block animate-shimmer">LEGEND</span>
           </h1>
         </div>
 
         <div className="opacity-0 animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <p className={`${textVariants.body} text-xl md:text-2xl font-light leading-relaxed text-gray-200 mb-12 max-w-4xl mx-auto`}>
+          <p className={`${textVariants.body} text-lg sm:text-xl md:text-2xl font-light leading-relaxed text-gray-200 mb-8 sm:mb-10 lg:mb-12 max-w-4xl mx-auto`}>
             Step into a world where <span className="text-gold font-semibold">strength meets luxury</span>. 
             Our premium facilities and expert guidance transform ordinary moments into 
             <span className="text-gold font-semibold"> extraordinary achievements</span>.
@@ -78,7 +78,7 @@ export default function HeroSection() {
         </div>
 
         {/* Enhanced Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 max-w-5xl mx-auto">
           {[
             { number: "2500+", label: "Active Members", delay: "0.9s" },
             { number: "15+", label: "Years Experience", delay: "1.1s" },
@@ -86,13 +86,13 @@ export default function HeroSection() {
           ].map((stat, index) => (
             <div 
               key={index}
-              className={`${cardVariants.default} text-center p-6 opacity-0 animate-fade-in hover:scale-110 transition-transform duration-300`}
+              className={`${cardVariants.default} text-center p-4 sm:p-6 opacity-0 animate-fade-in hover:scale-110 transition-transform duration-300`}
               style={{ animationDelay: stat.delay }}
             >
-              <div className={`${textVariants.heading} text-4xl md:text-5xl font-black mb-3 animate-shimmer`}>
+              <div className={`${textVariants.heading} text-3xl sm:text-4xl md:text-5xl font-black mb-2 sm:mb-3 animate-shimmer`}>
                 {stat.number}
               </div>
-              <div className={`${textVariants.caption} uppercase tracking-widest font-medium`}>
+              <div className={`${textVariants.caption} uppercase tracking-wide sm:tracking-wider lg:tracking-widest font-medium text-xs sm:text-sm md:text-base`}>
                 {stat.label}
               </div>
             </div>

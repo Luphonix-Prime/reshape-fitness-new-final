@@ -41,13 +41,13 @@ export default function About() {
       <Navigation />
       
       {/* Hero Section */}
-      <section className="pt-40 pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-7xl font-light mb-8 tracking-wider">
+      <section className="pt-32 sm:pt-40 pb-12 sm:pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light mb-6 sm:mb-8 tracking-wider">
               ABOUT <span className="text-gold font-medium">RESHAPE</span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed px-4">
               Where luxury meets performance. We don't just build bodies—we reshape lives, 
               one transformation at a time.
             </p>
@@ -56,29 +56,29 @@ export default function About() {
       </section>
 
       {/* Mission & Vision */}
-      <section className="py-20 bg-dark-gray">
-        <div className="max-w-6xl mx-auto px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+      <section className="py-12 sm:py-16 lg:py-20 bg-dark-gray">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16">
             <div>
-              <h2 className="text-4xl font-bold text-gold mb-8 tracking-wider">OUR MISSION</h2>
-              <p className="text-lg text-gray-300 leading-relaxed mb-6">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gold mb-6 sm:mb-8 tracking-wider">OUR MISSION</h2>
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed mb-4 sm:mb-6">
                 To redefine the fitness experience by creating an environment where luxury, 
                 innovation, and results converge. We believe fitness is not just about physical 
                 transformation—it's about empowering individuals to unlock their full potential.
               </p>
-              <p className="text-lg text-gray-300 leading-relaxed">
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed">
                 Every member receives personalized attention, cutting-edge equipment, and 
                 world-class facilities designed to inspire and motivate your journey to greatness.
               </p>
             </div>
             <div>
-              <h2 className="text-4xl font-bold text-gold mb-8 tracking-wider">OUR VISION</h2>
-              <p className="text-lg text-gray-300 leading-relaxed mb-6">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gold mb-6 sm:mb-8 tracking-wider">OUR VISION</h2>
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed mb-4 sm:mb-6">
                 To be the premier destination for discerning individuals who demand excellence 
                 in their fitness journey. We envision a community where achievement knows no bounds 
                 and every goal is within reach.
               </p>
-              <p className="text-lg text-gray-300 leading-relaxed">
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed">
                 Through innovation, dedication, and unwavering commitment to quality, we're 
                 building the future of luxury fitness—one member at a time.
               </p>
@@ -88,18 +88,18 @@ export default function About() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             BY THE NUMBERS
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
             {stats.map((stat, index) => (
-              <Card key={index} className="bg-white/5 border-white/10 text-center p-8">
+              <Card key={index} className="bg-white/5 border-white/10 text-center p-4 sm:p-6 lg:p-8">
                 <CardContent className="p-0">
-                  <stat.icon className="h-16 w-16 text-gold mx-auto mb-6" />
-                  <h3 className="text-4xl font-bold text-white mb-2">{stat.value}</h3>
-                  <p className="text-gray-400 text-lg">{stat.label}</p>
+                  <stat.icon className="h-10 w-10 sm:h-12 sm:w-12 lg:h-16 lg:w-16 text-gold mx-auto mb-3 sm:mb-4 lg:mb-6" />
+                  <h3 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white mb-1 sm:mb-2">{stat.value}</h3>
+                  <p className="text-gray-400 text-sm sm:text-base lg:text-lg">{stat.label}</p>
                 </CardContent>
               </Card>
             ))}
@@ -140,12 +140,12 @@ export default function About() {
       </section>
 
       {/* Team Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             MEET OUR EXPERTS
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
             {team.map((member, index) => (
               <Card key={index} className="bg-white/5 border-white/10 overflow-hidden">
                 <div className="aspect-square overflow-hidden">
@@ -155,17 +155,17 @@ export default function About() {
                     className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
                   />
                 </div>
-                <CardContent className="p-8">
-                  <h3 className="text-2xl font-bold text-white mb-2">{member.name}</h3>
-                  <p className="text-gold text-lg mb-4">{member.role}</p>
-                  <p className="text-gray-300 mb-6">{member.bio}</p>
+                <CardContent className="p-4 sm:p-6 lg:p-8">
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-2">{member.name}</h3>
+                  <p className="text-gold text-base sm:text-lg mb-3 sm:mb-4">{member.role}</p>
+                  <p className="text-gray-300 mb-4 sm:mb-6 text-sm sm:text-base">{member.bio}</p>
                   <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-gold tracking-wider uppercase">Specialties</h4>
+                    <h4 className="text-xs sm:text-sm font-semibold text-gold tracking-wider uppercase">Specialties</h4>
                     <div className="flex flex-wrap gap-2">
                       {member.specialties.map((specialty, specIndex) => (
                         <span
                           key={specIndex}
-                          className="bg-gold/20 text-gold px-3 py-1 rounded-full text-sm"
+                          className="bg-gold/20 text-gold px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm"
                         >
                           {specialty}
                         </span>

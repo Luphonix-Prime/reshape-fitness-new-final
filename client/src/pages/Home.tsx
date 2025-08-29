@@ -82,30 +82,30 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="min-h-screen flex items-center justify-center">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <h1 className="text-6xl md:text-8xl font-light mb-8 tracking-wider">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-8xl font-light mb-6 sm:mb-8 tracking-wider">
             WELCOME TO
             <br />
             <span className="text-gold font-medium">RESHAPE</span>
           </h1>
 
-          <p className="text-xl md:text-2xl mb-12 font-light tracking-wide text-gray-300">
+          <p className="text-lg sm:text-xl md:text-2xl mb-8 sm:mb-12 font-light tracking-wide text-gray-300">
             Your luxury fitness journey continues
           </p>
 
-          <Card className="bg-white/5 backdrop-blur-sm border border-white/10 max-w-md mx-auto mb-8">
+          <Card className="bg-white/5 backdrop-blur-sm border border-white/10 max-w-md mx-auto mb-6 sm:mb-8">
             <CardHeader>
-              <CardTitle className="text-gold text-xl tracking-wider">
+              <CardTitle className="text-gold text-lg sm:text-xl tracking-wider">
                 {getRoleDisplayName()} Portal
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-300 mb-6">
+              <p className="text-gray-300 mb-4 sm:mb-6 text-sm sm:text-base">
                 Access your personalized dashboard to manage your fitness journey.
               </p>
               <Button
                 onClick={() => setLocation(getDashboardPath())}
-                className="w-full bg-gold text-black hover:bg-white transition-all duration-300 font-medium tracking-widest uppercase"
+                className="w-full bg-gold text-black hover:bg-white transition-all duration-300 font-medium tracking-widest uppercase text-sm sm:text-base py-2 sm:py-3"
               >
                 Go to Dashboard
               </Button>
@@ -114,14 +114,14 @@ export default function Home() {
 
           {user?.userType === 'member' && !user?.stripeSubscriptionId && (
             <Card className="bg-white/5 backdrop-blur-sm border border-white/10 max-w-md mx-auto">
-              <CardContent className="pt-6">
-                <p className="text-gray-300 mb-4">
+              <CardContent className="pt-4 sm:pt-6">
+                <p className="text-gray-300 mb-3 sm:mb-4 text-sm sm:text-base">
                   Complete your membership setup
                 </p>
                 <Button
                   onClick={() => setLocation('/subscribe')}
                   variant="outline"
-                  className="w-full border-gold text-gold hover:bg-gold hover:text-black"
+                  className="w-full border-gold text-gold hover:bg-gold hover:text-black text-sm sm:text-base py-2 sm:py-3"
                 >
                   Choose Membership
                 </Button>

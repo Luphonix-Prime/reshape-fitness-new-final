@@ -158,13 +158,13 @@ export default function Contact() {
       <Navigation />
       
       {/* Hero Section */}
-      <section className="pt-20 pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h1 className="text-5xl md:text-7xl font-light mb-8 tracking-wider">
+      <section className="pt-32 sm:pt-40 pb-12 sm:pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12 sm:mb-16">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-light mb-6 sm:mb-8 tracking-wider">
               CONTACT <span className="text-gold font-medium">US</span>
             </h1>
-            <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed px-4">
               Ready to begin your transformation? Our team is here to guide you 
               every step of the way.
             </p>
@@ -173,39 +173,39 @@ export default function Contact() {
       </section>
 
       {/* Contact Methods */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             GET IN TOUCH
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8 mb-12 sm:mb-16 lg:mb-20">
             {contactMethods.map((method, index) => (
-              <Card key={index} className="bg-white/5 border-white/10 text-center p-8">
+              <Card key={index} className="bg-white/5 border-white/10 text-center p-4 sm:p-6 lg:p-8">
                 <CardContent className="p-0">
-                  <method.icon className="h-16 w-16 text-gold mx-auto mb-6" />
-                  <h3 className="text-xl font-bold text-white mb-4">{method.title}</h3>
-                  <p className="text-gold text-lg font-semibold mb-2">{method.details}</p>
-                  <p className="text-gray-400 text-sm">{method.subtext}</p>
+                  <method.icon className="h-10 w-10 sm:h-12 sm:w-12 lg:h-16 lg:w-16 text-gold mx-auto mb-3 sm:mb-4 lg:mb-6" />
+                  <h3 className="text-sm sm:text-base lg:text-xl font-bold text-white mb-2 sm:mb-3 lg:mb-4">{method.title}</h3>
+                  <p className="text-gold text-sm sm:text-base lg:text-lg font-semibold mb-1 sm:mb-2">{method.details}</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">{method.subtext}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
           {/* Contact Form */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16">
             <div>
-              <h3 className="text-3xl font-bold text-gold mb-8 tracking-wider">
+              <h3 className="text-2xl sm:text-3xl font-bold text-gold mb-6 sm:mb-8 tracking-wider">
                 SEND US A MESSAGE
               </h3>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <Input
                     name="firstName"
                     type="text"
                     placeholder="First Name"
                     value={formData.firstName}
                     onChange={handleInputChange}
-                    className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold text-sm sm:text-base"
                     required
                   />
                   <Input
@@ -214,7 +214,7 @@ export default function Contact() {
                     placeholder="Last Name"
                     value={formData.lastName}
                     onChange={handleInputChange}
-                    className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold"
+                    className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold text-sm sm:text-base"
                     required
                   />
                 </div>
@@ -224,7 +224,7 @@ export default function Contact() {
                   placeholder="Email Address"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold text-sm sm:text-base"
                   required
                 />
                 <Input
@@ -233,14 +233,14 @@ export default function Contact() {
                   placeholder="Phone Number"
                   value={formData.phone}
                   onChange={handleInputChange}
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold text-sm sm:text-base"
                   required
                 />
                 <select 
                   name="location"
                   value={formData.location}
                   onChange={handleInputChange}
-                  className="w-full p-3 bg-white/5 border border-white/20 rounded-md text-white focus:border-gold focus:outline-none"
+                  className="w-full p-2 sm:p-3 bg-white/5 border border-white/20 rounded-md text-white focus:border-gold focus:outline-none text-sm sm:text-base"
                   required
                 >
                   <option value="">Select Location</option>
@@ -253,7 +253,7 @@ export default function Contact() {
                   name="interest"
                   value={formData.interest}
                   onChange={handleInputChange}
-                  className="w-full p-3 bg-white/5 border border-white/20 rounded-md text-white focus:border-gold focus:outline-none"
+                  className="w-full p-2 sm:p-3 bg-white/5 border border-white/20 rounded-md text-white focus:border-gold focus:outline-none text-sm sm:text-base"
                   required
                 >
                   <option value="">I'm interested in...</option>
@@ -266,16 +266,16 @@ export default function Contact() {
                 <Textarea
                   name="message"
                   placeholder="Tell us about your fitness goals..."
-                  rows={6}
+                  rows={5}
                   value={formData.message}
                   onChange={handleInputChange}
-                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold"
+                  className="bg-white/5 border-white/20 text-white placeholder:text-gray-400 focus:border-gold text-sm sm:text-base"
                   required
                 />
                 <Button 
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-gold text-black hover:bg-white py-3 text-lg font-semibold tracking-wider transition-colors duration-300"
+                  className="w-full bg-gold text-black hover:bg-white py-2 sm:py-3 text-base sm:text-lg font-semibold tracking-wider transition-colors duration-300"
                 >
                   {isSubmitting ? "SENDING..." : "SEND MESSAGE"}
                 </Button>
@@ -283,10 +283,10 @@ export default function Contact() {
             </div>
 
             <div>
-              <h3 className="text-3xl font-bold text-gold mb-8 tracking-wider">
+              <h3 className="text-2xl sm:text-3xl font-bold text-gold mb-6 sm:mb-8 tracking-wider">
                 VISIT US TODAY
               </h3>
-              <p className="text-gray-300 text-lg mb-8 leading-relaxed">
+              <p className="text-gray-300 text-base sm:text-lg mb-6 sm:mb-8 leading-relaxed">
                 Experience the Reshape difference firsthand. Schedule your complimentary 
                 tour and consultation with one of our fitness experts.
               </p>
@@ -335,16 +335,16 @@ export default function Contact() {
       </section>
 
       {/* Locations */}
-      <section className="py-20 bg-dark-gray">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <h2 className="text-4xl font-bold text-center text-gold mb-16 tracking-wider">
+      <section className="py-12 sm:py-16 lg:py-20 bg-dark-gray">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center text-gold mb-12 sm:mb-16 tracking-wider">
             OUR LOCATIONS
           </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
             {locations.map((location, index) => (
               <Card key={index} className="bg-black/50 border-gold/20">
-                <CardContent className="p-8">
-                  <h3 className="text-2xl font-bold text-gold mb-6">{location.name}</h3>
+                <CardContent className="p-4 sm:p-6 lg:p-8">
+                  <h3 className="text-xl sm:text-2xl font-bold text-gold mb-4 sm:mb-6">{location.name}</h3>
                   
                   <div className="space-y-4">
                     <div className="flex items-start">
