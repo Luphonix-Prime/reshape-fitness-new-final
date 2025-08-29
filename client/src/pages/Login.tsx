@@ -87,12 +87,12 @@ export default function Login() {
             Access your premium fitness experience
           </CardDescription>
           <Button
-            onClick={() => setLocation('/landing')}
+            onClick={() => setLocation('/')}
             variant="ghost"
             size="sm"
             className="text-gold hover:text-white mt-2"
           >
-            ← Back to Landing Page
+            ← Back to Home
           </Button>
         </CardHeader>
         <CardContent>
@@ -107,13 +107,6 @@ export default function Login() {
             </TabsList>
 
             <TabsContent value="login">
-              <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-gold/20">
-                <p className="text-xs text-gray-300 mb-1">Demo Credentials:</p>
-                <p className="text-xs text-gold">Admin: admin / admin</p>
-                <p className="text-xs text-gold">Trainer: trainer / trainer</p>
-                <p className="text-xs text-gold">Member: member / member</p>
-              </div>
-
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email" className="text-white">Username/Email</Label>

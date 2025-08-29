@@ -134,34 +134,34 @@ export const storage = {
     try {
       await client.query('BEGIN');
 
-      // First check if user exists
-      const userCheck = await client.query('SELECT * FROM users WHERE id = $1', [id]);
-      if (userCheck.rows.length === 0) {
-        throw new Error(`User with id ${id} not found`);
+      // Check if member profile exists
+      const memberCheck = await client.query('SELECT * FROM member_profiles WHERE id = $1', [id]);
+      if (memberCheck.rows.length === 0) {
+        throw new Error(`Member with id ${id} not found`);
       }
 
-      const user = userCheck.rows[0];
-      console.log(`Deleting user: ${user.first_name} ${user.last_name} (${user.user_type})`);
+      const member = memberCheck.rows[0];
+      console.log(`Deleting member: ${member.first_name} ${member.last_name}`);
 
-      // Delete related records first (if they exist) - using user_id for profile tables
-      await client.query('DELETE FROM member_profiles WHERE user_id = $1', [id]);
-      await client.query('DELETE FROM trainer_profiles WHERE user_id = $1', [id]);
+      // Delete related records first (foreign key constraints)
+      await client.query('DELETE FROM member_trainer_assignments WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM member_sessions WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM body_assessments WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM workout_plans WHERE member_id = $1', [id]);
+      await client.query('DELETE FROM nutrition_plans WHERE member_id = $1', [id]);
 
-      // For other tables that might use the profile IDs, we need to handle them differently
-      // But for now, let's just delete the user and let CASCADE handle it if set up
-
-      // Finally delete the user
-      const result = await client.query('DELETE FROM users WHERE id = $1 RETURNING *', [id]);
+      // Finally delete the member profile
+      const result = await client.query('DELETE FROM member_profiles WHERE id = $1 RETURNING *', [id]);
 
       if (result.rows.length === 0) {
-        throw new Error(`Failed to delete user with id ${id}`);
+        throw new Error(`Failed to delete member with id ${id}`);
       }
 
       await client.query('COMMIT');
-      console.log(`Successfully deleted user with id: ${id} (${user.first_name} ${user.last_name})`);
+      console.log(`Successfully deleted member with id: ${id} (${member.first_name} ${member.last_name})`);
     } catch (error) {
       await client.query('ROLLBACK');
-      console.error(`Error deleting user ${id}:`, error);
+      console.error(`Error deleting member ${id}:`, error);
       throw error;
     } finally {
       client.release();
@@ -183,7 +183,38 @@ export const storage = {
       return result.rows;
     } catch (error) {
       console.error('Error fetching membership tiers:', error);
-      throw error;
+
+      // If the above query fails, try with alternative column names
+      try {
+        console.log('Trying alternative column names...');
+        const fallbackResult = await pool.query(`
+          SELECT id, name, sessions, duration,
+                 COALESCE(one_on_one_price, oneononeprice) as one_on_one_price,
+                 COALESCE(one_on_one_per_session, oneononepersession) as one_on_one_per_session,
+                 COALESCE(two_people_price, twopeopleprice) as two_people_price,
+                 COALESCE(two_people_per_session, twopeoplepersession) as two_people_per_session,
+                 COALESCE(three_people_price, threepeopleprice) as three_people_price,
+                 COALESCE(three_people_per_session, threepeoplepersession) as three_people_per_session,
+                 tiers, features, description, created_at
+          FROM membership_tiers 
+          ORDER BY sessions ASC
+        `);
+        return fallbackResult.rows;
+      } catch (fallbackError) {
+        console.error('Fallback query also failed:', fallbackError);
+
+        // Last resort: get basic columns only
+        try {
+          console.log('Using basic query...');
+          const basicResult = await pool.query(`
+            SELECT * FROM membership_tiers ORDER BY sessions ASC
+          `);
+          return basicResult.rows;
+        } catch (basicError) {
+          console.error('Basic query failed:', basicError);
+          throw error;
+        }
+      }
     }
   },
 
@@ -193,13 +224,113 @@ export const storage = {
     return this.mapMembershipTierFromDb(rows[0]);
   },
 
+  async createMembershipTier(tierData: any): Promise<MembershipTier> {
+    try {
+      const { rows } = await pool.query(`
+        INSERT INTO membership_tiers (
+          name, sessions, duration, one_on_one_price, one_on_one_per_session,
+          two_people_price, two_people_per_session, three_people_price, three_people_per_session,
+          features, description, tiers
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *
+      `, [
+        tierData.name,
+        tierData.sessions,
+        tierData.duration,
+        tierData.oneOnOnePrice,
+        tierData.oneOnOnePerSession,
+        tierData.twoPeoplePrice,
+        tierData.twoPeoplePerSession,
+        tierData.threePeoplePrice,
+        tierData.threePeoplePerSession,
+        Array.isArray(tierData.features) ? `{${tierData.features.map(f => `"${f}"`).join(',')}}` : '{}',
+        tierData.description || '',
+        '[]'
+      ]);
+
+      return this.mapMembershipTierFromDb(rows[0]);
+    } catch (error) {
+      console.error('Error creating membership tier:', error);
+      throw error;
+    }
+  },
+
+  async updateMembershipTier(id: string, updates: any): Promise<MembershipTier> {
+    try {
+      // Parse and validate numeric fields
+      const sessions = parseInt(updates.sessions) || 0;
+      const oneOnOnePrice = parseFloat(updates.oneOnOnePrice) || 0;
+      const oneOnOnePerSession = parseFloat(updates.oneOnOnePerSession) || 0;
+      const twoPeoplePrice = parseFloat(updates.twoPeoplePrice) || 0;
+      const twoPeoplePerSession = parseFloat(updates.twoPeoplePerSession) || 0;
+      const threePeoplePrice = parseFloat(updates.threePeoplePrice) || 0;
+      const threePeoplePerSession = parseFloat(updates.threePeoplePerSession) || 0;
+
+      const result = await pool.query(`
+        UPDATE membership_tiers 
+        SET name = $2, sessions = $3, duration = $4,
+            one_on_one_price = $5, one_on_one_per_session = $6,
+            two_people_price = $7, two_people_per_session = $8,
+            three_people_price = $9, three_people_per_session = $10,
+            tiers = $11, features = $12, description = $13
+        WHERE id = $1 
+        RETURNING *
+      `, [
+        id,
+        updates.name || '',
+        sessions,
+        updates.duration || '',
+        oneOnOnePrice,
+        oneOnOnePerSession,
+        twoPeoplePrice,
+        twoPeoplePerSession,
+        threePeoplePrice,
+        threePeoplePerSession,
+        updates.tiers || [],
+        Array.isArray(updates.features) ? updates.features : (updates.features ? updates.features.split(',').map(f => f.trim()) : []),
+        updates.description || ''
+      ]);
+
+      if (result.rows.length === 0) {
+        throw new Error('Membership tier not found');
+      }
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating membership tier:', error);
+      throw error;
+    }
+  },
+
+  async deleteMembershipTier(id: string): Promise<void> {
+    try {
+      const { rows } = await pool.query('DELETE FROM membership_tiers WHERE id = $1 RETURNING *', [id]);
+      if (rows.length === 0) {
+        throw new Error(`Membership tier with id ${id} not found`);
+      }
+      console.log(`Successfully deleted membership tier with id: ${id}`);
+    } catch (error) {
+      console.error(`Error deleting membership tier ${id}:`, error);
+      throw error;
+    }
+  },
+
   // Member profile operations
-  async createMemberProfile(profileData: any): Promise<any> {
+  async createMemberProfile(profileData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    membershipTierId?: string | null;
+    emergencyContact?: string;
+    fitnessGoals?: string;
+    trainingType?: string;
+  }): Promise<MemberProfile> {
     try {
       const { rows } = await pool.query(`
         INSERT INTO member_profiles (first_name, last_name, email, phone, membership_tier_id, emergency_contact, fitness_goals, training_type)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        RETURNING *
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
       `, [
         profileData.firstName,
         profileData.lastName,
@@ -210,7 +341,7 @@ export const storage = {
         profileData.fitnessGoals,
         profileData.trainingType || 'one_on_one'
       ]);
-      return rows[0];
+      return this.mapMemberProfileFromDb(rows[0]);
     } catch (error) {
       console.error("Error creating member profile:", error);
       throw error;
@@ -224,12 +355,11 @@ export const storage = {
   },
 
   async getAllMembers(): Promise<any[]> {
-    // Get only member profiles (exclude demo users completely)
+    // Get member profiles with membership tier information
     const { rows } = await pool.query(`
-      SELECT mp.*, mt.name as membership_tier, mt.price as membership_tier_price
+      SELECT mp.*, mt.name as membership_tier
       FROM member_profiles mp
       LEFT JOIN membership_tiers mt ON mp.membership_tier_id = mt.id
-      WHERE mp.user_id IS NULL
       ORDER BY mp.created_at DESC
     `);
 
@@ -245,47 +375,45 @@ export const storage = {
       membershipTierId: row.membership_tier_id,
       joinDate: row.created_at,
       emergencyContact: row.emergency_contact,
-      fitnessGoals: row.fitness_goals
+      fitnessGoals: row.fitness_goals,
+      trainingType: row.training_type
     }));
   },
 
   async updateMemberById(userId: string, updates: any): Promise<void> {
-    const userFields = [];
-    const userValues = [];
-    let paramIndex = 1;
+    const client = await pool.connect();
 
-    if (updates.firstName) {
-      userFields.push(`first_name = $${paramIndex++}`);
-      userValues.push(updates.firstName);
-    }
-    if (updates.lastName) {
-      userFields.push(`last_name = $${paramIndex++}`);
-      userValues.push(updates.lastName);
-    }
-    if (updates.email) {
-      userFields.push(`email = $${paramIndex++}`);
-      userValues.push(updates.email);
-    }
-    if (updates.phone) {
-      userFields.push(`phone = $${paramIndex++}`);
-      userValues.push(updates.phone);
-    }
+    try {
+      await client.query('BEGIN');
 
-    if (userFields.length > 0) {
-      userFields.push(`updated_at = CURRENT_TIMESTAMP`);
-      userValues.push(userId);
-      await pool.query(
-        `UPDATE users SET ${userFields.join(', ')} WHERE id = $${paramIndex}`,
-        userValues
-      );
-    }
+      // First get the member profile ID
+      const { rows: memberRows } = await client.query('SELECT id FROM member_profiles WHERE id = $1 OR user_id = $1', [userId]);
+      if (memberRows.length === 0) {
+        throw new Error(`Member with id ${userId} not found`);
+      }
+      const memberId = memberRows[0].id;
 
-    // Update member profile if needed
-    if (updates.fitnessGoals || updates.emergencyContact || updates.membershipTierId) {
+      // Update member profile
       const profileFields = [];
       const profileValues = [];
       let profileParamIndex = 1;
 
+      if (updates.firstName) {
+        profileFields.push(`first_name = $${profileParamIndex++}`);
+        profileValues.push(updates.firstName);
+      }
+      if (updates.lastName) {
+        profileFields.push(`last_name = $${profileParamIndex++}`);
+        profileValues.push(updates.lastName);
+      }
+      if (updates.email) {
+        profileFields.push(`email = $${profileParamIndex++}`);
+        profileValues.push(updates.email);
+      }
+      if (updates.phone !== undefined) {
+        profileFields.push(`phone = $${profileParamIndex++}`);
+        profileValues.push(updates.phone);
+      }
       if (updates.fitnessGoals) {
         profileFields.push(`fitness_goals = $${profileParamIndex++}`);
         profileValues.push(updates.fitnessGoals);
@@ -298,18 +426,81 @@ export const storage = {
         profileFields.push(`membership_tier_id = $${profileParamIndex++}`);
         profileValues.push(updates.membershipTierId);
       }
-
-
-
+      if (updates.trainingType) {
+        profileFields.push(`training_type = $${profileParamIndex++}`);
+        profileValues.push(updates.trainingType);
+      }
 
       if (profileFields.length > 0) {
         profileFields.push(`updated_at = CURRENT_TIMESTAMP`);
-        profileValues.push(userId);
-        await pool.query(
-          `UPDATE member_profiles SET ${profileFields.join(', ')} WHERE user_id = $${profileParamIndex}`,
+        profileValues.push(memberId);
+        await client.query(
+          `UPDATE member_profiles SET ${profileFields.join(', ')} WHERE id = $${profileParamIndex}`,
           profileValues
         );
       }
+
+      // Update or create subscription if membership tier and training type are provided
+      if (updates.membershipTierId && updates.trainingType) {
+        const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [updates.membershipTierId]);
+
+        if (tierRows.length > 0) {
+          const tier = tierRows[0];
+          let price = tier.one_on_one_price || 0;
+
+          if (updates.trainingType === 'two_people') {
+            price = tier.two_people_price || 0;
+          } else if (updates.trainingType === 'three_people') {
+            price = tier.three_people_price || 0;
+          }
+
+          const planType = `${tier.sessions}_session`;
+          const endDate = new Date();
+          const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+
+          // Check if subscription already exists
+          const { rows: existingSub } = await client.query('SELECT id FROM subscriptions WHERE member_id = $1', [memberId]);
+
+          if (existingSub.length > 0) {
+            // Update existing subscription - fix parameter count
+            await client.query(`
+              UPDATE subscriptions SET
+                membership_tier_id = $2,
+                plan_type = $3,
+                training_type = $4,
+                sessions_total = $5,
+                price_paid = $6,
+                start_date = $7,
+                end_date = $8,
+                is_active = $9,
+                updated_at = CURRENT_TIMESTAMP
+              WHERE member_id = $1
+            `, [
+              memberId, updates.membershipTierId, planType, updates.trainingType,
+              tier.sessions, price, new Date(), endDate, true
+            ]);
+          } else {
+            // Insert new subscription
+            await client.query(`
+              INSERT INTO subscriptions (
+                member_id, membership_tier_id, plan_type, training_type, 
+                sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `, [
+              memberId, updates.membershipTierId, planType, updates.trainingType,
+              tier.sessions, 0, price, new Date(), endDate, true
+            ]);
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
   },
 
@@ -858,15 +1049,22 @@ export const storage = {
     const { rows } = await pool.query(`
       INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes)
       VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (trainer_id, date)
-      DO UPDATE SET
+      ON CONFLICT (trainer_id, date) 
+      DO UPDATE SET 
         status = EXCLUDED.status,
         check_in_time = EXCLUDED.check_in_time,
         check_out_time = EXCLUDED.check_out_time,
         notes = EXCLUDED.notes,
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
-    `, [data.trainerId, data.date, data.status, data.checkInTime, data.checkOutTime, data.notes]);
+    `, [
+      data.trainerId,
+      data.date,
+      data.status,
+      data.checkInTime,
+      data.checkOutTime,
+      data.notes
+    ]);
 
     return rows[0];
   },
@@ -1010,15 +1208,15 @@ export const storage = {
   async getMemberTrainerAssignments(filters: any = {}) {
     let query = `
       SELECT mta.*,
-             CONCAT(mp.first_name, ' ', mp.last_name) as member_name,
+             COALESCE(CONCAT(mp.first_name, ' ', mp.last_name), 'Unknown Member') as member_name,
              mp.email as member_email,
              mp.phone as member_phone,
-             CONCAT(tp.first_name, ' ', tp.last_name) as trainer_name,
+             COALESCE(CONCAT(tp.first_name, ' ', tp.last_name), 'Unknown Trainer') as trainer_name,
              tp.email as trainer_email,
              tp.specializations
       FROM member_trainer_assignments mta
-      JOIN member_profiles mp ON mta.member_id = mp.id
-      JOIN trainer_profiles tp ON mta.trainer_id = tp.id
+      LEFT JOIN member_profiles mp ON mta.member_id = mp.id
+      LEFT JOIN trainer_profiles tp ON mta.trainer_id = tp.id
       WHERE mta.is_active = true
     `;
     const values: any[] = [];
@@ -1033,16 +1231,47 @@ export const storage = {
       values.push(filters.trainerId);
     }
 
-    query += ' ORDER BY mta.assigned_date DESC';
+    query += ` ORDER BY mta.assigned_date DESC, mta.created_at DESC`;
+
+    console.log('Executing trainer assignments query:', query, 'with values:', values);
 
     const { rows } = await pool.query(query, values);
-    return rows;
+    
+    console.log(`Found ${rows.length} trainer assignments:`, rows.map(r => ({ 
+      id: r.id, 
+      member_id: r.member_id, 
+      trainer_id: r.trainer_id, 
+      member_name: r.member_name, 
+      trainer_name: r.trainer_name 
+    })));
+
+    return rows.map(row => ({
+      id: row.id,
+      member_id: row.member_id,
+      trainer_id: row.trainer_id,
+      memberId: row.member_id,
+      trainerId: row.trainer_id,
+      memberName: row.member_name,
+      member_name: row.member_name,
+      memberEmail: row.member_email,
+      memberPhone: row.member_phone,
+      trainerName: row.trainer_name,
+      trainer_name: row.trainer_name,
+      trainerEmail: row.trainer_email,
+      specializations: row.specializations || [],
+      assignedDate: row.assigned_date,
+      assigned_date: row.assigned_date,
+      notes: row.notes,
+      isActive: row.is_active,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
   },
 
   async removeTrainerFromMember(memberId: string, trainerId: string) {
     const { rows } = await pool.query(`
-      UPDATE member_trainer_assignments 
-      SET is_active = false
+      UPDATE member_trainer_assignments
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
       WHERE member_id = $1 AND trainer_id = $2
       RETURNING *
     `, [memberId, trainerId]);

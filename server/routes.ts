@@ -560,11 +560,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Membership tiers
   app.get('/api/membership-tiers', async (req, res) => {
     try {
+      console.log('Fetching membership tiers...');
       const tiers = await storage.getMembershipTiers();
+      console.log('Membership tiers fetched:', tiers.length);
       res.json(tiers);
     } catch (error) {
       console.error("Error fetching membership tiers:", error);
-      res.status(500).json({ message: "Failed to fetch membership tiers" });
+      res.status(500).json({ message: "Failed to fetch membership tiers", error: error.message });
+    }
+  });
+
+  // Admin membership tier management
+  app.post('/api/admin/membership-tiers', async (req, res) => {
+    try {
+      const tierData = req.body;
+
+      // Validate required fields
+      if (!tierData.name || !tierData.sessions || !tierData.duration) {
+        return res.status(400).json({ message: "Name, sessions, and duration are required" });
+      }
+
+      const tier = await storage.createMembershipTier(tierData);
+      res.json({
+        message: "Membership tier created successfully",
+        tier
+      });
+    } catch (error: any) {
+      console.error("Error creating membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to create membership tier" });
+    }
+  });
+
+  app.put('/api/admin/membership-tiers/:tierId', async (req, res) => {
+    try {
+      const { tierId } = req.params;
+      const updates = req.body;
+
+      await storage.updateMembershipTier(tierId, updates);
+      res.json({ message: "Membership tier updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to update membership tier" });
+    }
+  });
+
+  app.delete('/api/admin/membership-tiers/:tierId', async (req, res) => {
+    try {
+      const { tierId } = req.params;
+
+      await storage.deleteMembershipTier(tierId);
+      res.json({ message: "Membership tier deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting membership tier:", error);
+      res.status(500).json({ message: error.message || "Failed to delete membership tier" });
     }
   });
 
@@ -864,22 +912,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/admin/attendance/:date', async (req, res) => {
     try {
       const { date } = req.params;
+      console.log(`Fetching attendance for date: ${date}`);
+
       const { rows } = await pool.query(`
-        SELECT ta.*, u.first_name, u.last_name, u.email,
-               CONCAT(u.first_name, ' ', u.last_name) as trainerName
+        SELECT ta.*, 
+               COALESCE(tp.first_name, u.first_name) as first_name,
+               COALESCE(tp.last_name, u.last_name) as last_name,
+               COALESCE(tp.email, u.email) as email,
+               CONCAT(COALESCE(tp.first_name, u.first_name), ' ', COALESCE(tp.last_name, u.last_name)) as trainerName
         FROM trainer_attendance ta
-        JOIN users u ON ta.trainer_id = u.id
+        LEFT JOIN users u ON ta.trainer_id = u.id
+        LEFT JOIN trainer_profiles tp ON ta.trainer_id = tp.id
         WHERE ta.date = $1
-        ORDER BY ta.check_in_time DESC NULLS LAST
+        ORDER BY ta.created_at DESC, ta.check_in_time DESC NULLS LAST
       `, [date]);
-      res.json(rows.map(row => ({
+
+      console.log(`Found ${rows.length} attendance records for date ${date}:`, rows.map(r => ({ id: r.id, trainer: r.trainername, status: r.status })));
+
+      const attendanceRecords = rows.map(row => ({
         ...row,
         _id: row.id,
         trainerId: row.trainer_id,
-        trainerName: row.trainername,
+        trainerName: row.trainername || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
         checkInTime: row.check_in_time,
-        checkOutTime: row.check_out_time
-      })));
+        checkOutTime: row.check_out_time,
+        status: row.status,
+        notes: row.notes,
+        date: row.date
+      }));
+
+      res.json(attendanceRecords);
     } catch (error: any) {
       console.error("Error fetching attendance:", error);
       if (error.message?.includes('relation "trainer_attendance" does not exist')) {
@@ -1212,14 +1274,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
         const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
@@ -1231,10 +1293,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       let convertedScheduledTime = scheduledTime;
@@ -1293,14 +1362,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
         const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
@@ -1312,10 +1381,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       if (updates.scheduledTime && updates.scheduledTime.trim() !== '') {
@@ -1437,14 +1513,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
+  // Get admin dashboard statistics
+  app.get('/api/admin/stats', async (req, res) => {
+    try {
+      // Get total members count
+      const { rows: memberCount } = await pool.query('SELECT COUNT(*) as count FROM member_profiles');
+      const totalMembers = parseInt(memberCount[0].count) || 0;
+
+      // Get total trainers count
+      const { rows: trainerCount } = await pool.query('SELECT COUNT(*) as count FROM trainer_profiles');
+      const totalTrainers = parseInt(trainerCount[0].count) || 0;
+
+      // Calculate monthly revenue from active subscriptions
+      const { rows: revenueData } = await pool.query(`
+        SELECT COALESCE(SUM(price_paid), 0) as total_revenue
+        FROM subscriptions 
+        WHERE is_active = true 
+        AND start_date >= date_trunc('month', CURRENT_DATE)
+        AND start_date < date_trunc('month', CURRENT_DATE) + interval '1 month'
+      `);
+      const monthlyRevenue = parseInt(revenueData[0].total_revenue) || 0;
+
+      // Get total training sessions count
+      const { rows: sessionCount } = await pool.query('SELECT COUNT(*) as count FROM member_sessions');
+      const totalSessions = parseInt(sessionCount[0].count) || 0;
+
+      const stats = {
+        totalMembers,
+        totalTrainers,
+        monthlyRevenue,
+        totalSessions
+      };
+
+      console.log('Admin stats calculated:', stats);
+      res.json(stats);
+    } catch (error) {
+      console.error('Error fetching admin stats:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch admin statistics",
+        totalMembers: 0,
+        totalTrainers: 0,
+        monthlyRevenue: 0,
+        totalSessions: 0
+      });
+    }
+  });
+
+  // Get all members
   app.get('/api/admin/members', async (req, res) => {
     try {
-      // Exclude demo users from management lists
-      const members = await storage.getAllMembers({ excludeDemo: true });
-      res.json(members);
+      const { rows } = await pool.query(`
+        SELECT
+          mp.id,
+          mp.first_name,
+          mp.last_name,
+          mp.email,
+          mp.phone,
+          mp.fitness_goals,
+          mp.emergency_contact,
+          mp.created_at,
+          mp.updated_at,
+          u.first_name as user_first_name,
+          u.last_name as user_last_name,
+          u.email as user_email,
+          mt.name as membership_tier_name,
+          mt.sessions as membership_sessions,
+          mt.duration as membership_duration,
+          mt.one_on_one_price,
+          mt.two_people_price,
+          mt.three_people_price,
+          COALESCE(sub.training_type, mp.training_type, 'one_on_one') as training_type,
+          sub.plan_type,
+          sub.training_type as subscription_training_type,
+          sub.membership_tier_id as subscription_membership_tier_id,
+          sub.sessions_total,
+          sub.sessions_used,
+          sub.price_paid,
+          sub.start_date as subscription_start_date,
+          sub.end_date as subscription_end_date,
+          sub.is_active as subscription_active,
+          CASE 
+            WHEN sub.is_active = true THEN 'Active'
+            WHEN sub.is_active = false THEN 'Inactive' 
+            ELSE 'No Subscription'
+          END as subscription_status
+        FROM member_profiles mp
+        LEFT JOIN users u ON mp.user_id = u.id
+        LEFT JOIN subscriptions sub ON mp.id = sub.member_id AND sub.is_active = true
+        LEFT JOIN membership_tiers mt ON COALESCE(sub.membership_tier_id, mp.membership_tier_id) = mt.id
+        ORDER BY mp.created_at DESC
+      `);
+      res.json(rows);
     } catch (error) {
-      console.error("Error fetching members:", error);
-      res.status(500).json({ message: "Failed to fetch members" });
+      console.error('Error fetching members:', error);
+      res.status(500).json({ error: 'Failed to fetch members' });
     }
   });
 
@@ -1461,15 +1623,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Creating trainer with data:', trainerData);
 
       // Check if user with this email already exists in users table
-      const { rows: existingUser } = await pool.query('SELECT * FROM users WHERE email = $1', [trainerData.email]);
+      const { rows: existingUser } = await pool.query('SELECT id, user_type FROM users WHERE email = $1', [trainerData.email]);
       if (existingUser.length > 0) {
-        return res.status(400).json({ message: "A user with this email already exists" });
+        console.log('Found existing user:', existingUser[0]);
+        return res.status(400).json({ message: `A user with this email already exists (ID: ${existingUser[0].id}, Type: ${existingUser[0].user_type})` });
       }
 
       // Check if trainer with this email already exists in trainer_profiles table
-      const { rows: existingTrainer } = await pool.query('SELECT * FROM trainer_profiles WHERE email = $1', [trainerData.email]);
+      const { rows: existingTrainer } = await pool.query('SELECT id, user_id FROM trainer_profiles WHERE email = $1', [trainerData.email]);
       if (existingTrainer.length > 0) {
-        return res.status(400).json({ message: "A trainer with this email already exists" });
+        console.log('Found existing trainer profile:', existingTrainer[0]);
+        return res.status(400).json({ message: `A trainer with this email already exists (Profile ID: ${existingTrainer[0].id}, User ID: ${existingTrainer[0].user_id})` });
       }
 
       const client = await pool.connect();
@@ -1707,36 +1871,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get trainer deletion details
+  app.get('/api/admin/trainer-deletion-details/:trainerId', async (req, res) => {
+    try {
+      const { trainerId } = req.params;
+      
+      // Get counts of related data that will be deleted
+      const sessionsCount = await pool.query('SELECT COUNT(*) as count FROM member_sessions WHERE trainer_id = $1', [trainerId]);
+      const assessmentsCount = await pool.query('SELECT COUNT(*) as count FROM body_assessments WHERE trainer_id = $1', [trainerId]);
+      const workoutPlansCount = await pool.query('SELECT COUNT(*) as count FROM workout_plans WHERE trainer_id = $1', [trainerId]);
+      const nutritionPlansCount = await pool.query('SELECT COUNT(*) as count FROM nutrition_plans WHERE trainer_id = $1', [trainerId]);
+      const trainerAssignmentsCount = await pool.query('SELECT COUNT(*) as count FROM member_trainer_assignments WHERE trainer_id = $1', [trainerId]);
+      const attendanceCount = await pool.query('SELECT COUNT(*) as count FROM trainer_attendance WHERE trainer_id = $1', [trainerId]);
+      const sessionAttendanceCount = await pool.query('SELECT COUNT(*) as count FROM member_session_attendance WHERE trainer_id = $1', [trainerId]);
+      
+      const details = {
+        sessions: parseInt(sessionsCount.rows[0].count) || 0,
+        assessments: parseInt(assessmentsCount.rows[0].count) || 0,
+        workoutPlans: parseInt(workoutPlansCount.rows[0].count) || 0,
+        nutritionPlans: parseInt(nutritionPlansCount.rows[0].count) || 0,
+        trainerAssignments: parseInt(trainerAssignmentsCount.rows[0].count) || 0,
+        attendance: parseInt(attendanceCount.rows[0].count) || 0,
+        sessionAttendance: parseInt(sessionAttendanceCount.rows[0].count) || 0
+      };
+      
+      res.json(details);
+    } catch (error: any) {
+      console.error("Error getting trainer deletion details:", error);
+      res.status(500).json({ message: error.message || "Failed to get deletion details" });
+    }
+  });
+
   // Delete trainer route
   app.delete('/api/admin/delete-trainer/:trainerId', async (req, res) => {
     try {
       const { trainerId } = req.params;
 
-      // Get trainer profile to find associated user_id
-      const { rows: trainerRows } = await pool.query('SELECT user_id FROM trainer_profiles WHERE id = $1', [trainerId]);
+      // Get trainer profile to find associated user_id and email
+      const { rows: trainerRows } = await pool.query('SELECT user_id, email FROM trainer_profiles WHERE id = $1', [trainerId]);
 
       if (trainerRows.length === 0) {
         return res.status(404).json({ message: "Trainer not found" });
       }
 
       const userId = trainerRows[0].user_id;
+      const trainerEmail = trainerRows[0].email;
       const client = await pool.connect();
 
       try {
         await client.query('BEGIN');
 
-        // Delete from trainer_profiles first (due to foreign key constraint)
+        // Delete all related data in the correct order (child tables first)
+        await client.query('DELETE FROM member_session_attendance WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM member_trainer_assignments WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM trainer_attendance WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM member_sessions WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM body_assessments WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM workout_plans WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM nutrition_plans WHERE trainer_id = $1', [trainerId]);
+        await client.query('DELETE FROM training_sessions WHERE trainer_id = $1', [trainerId]);
+
+        // Delete from trainer_profiles
         await client.query('DELETE FROM trainer_profiles WHERE id = $1', [trainerId]);
 
-        // Delete from users table if user_id exists
+        // Delete from users table using either user_id or email
         if (userId) {
           await client.query('DELETE FROM users WHERE id = $1', [userId]);
+          console.log(`Deleted user by ID: ${userId}`);
+        } else if (trainerEmail) {
+          // Fallback: delete by email if user_id is not available
+          await client.query('DELETE FROM users WHERE email = $1', [trainerEmail]);
+          console.log(`Deleted user by email: ${trainerEmail}`);
         }
 
         await client.query('COMMIT');
-        console.log(`Trainer deleted from both tables. TrainerID: ${trainerId}, UserID: ${userId}`);
+        console.log(`Trainer ${trainerId} and all related data deleted successfully. UserID: ${userId}, Email: ${trainerEmail}`);
 
-        res.json({ message: "Trainer deleted successfully from both users and trainer_profiles tables" });
+        res.json({ message: "Trainer and all related data deleted successfully" });
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -1759,21 +1970,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "First name, last name, and email are required" });
       }
 
-      // Create member profile
-      const member = await storage.createMemberProfile({
-        firstName: memberData.firstName,
-        lastName: memberData.lastName,
-        email: memberData.email,
-        phone: memberData.phone || null,
-        membershipTierId: memberData.membershipTierId || null,
-        emergencyContact: memberData.emergencyContact || memberData.email,
-        fitnessGoals: memberData.fitnessGoals || 'General fitness improvement'
-      });
+      const client = await pool.connect();
 
-      res.json({
-        message: "Member created successfully",
-        member
-      });
+      try {
+        await client.query('BEGIN');
+
+        // Create member profile with training type
+        const member = await storage.createMemberProfile({
+          firstName: memberData.firstName,
+          lastName: memberData.lastName,
+          email: memberData.email,
+          phone: memberData.phone || null,
+          membershipTierId: memberData.membershipTierId || null,
+          emergencyContact: memberData.emergencyContact || memberData.email,
+          fitnessGoals: memberData.fitnessGoals || 'General fitness improvement',
+          trainingType: memberData.trainingType || 'one_on_one'
+        });
+
+        // Create subscription if membership tier is selected
+        if (memberData.membershipTierId && memberData.trainingType) {
+          const { rows: tierRows } = await client.query('SELECT * FROM membership_tiers WHERE id = $1', [memberData.membershipTierId]);
+
+          if (tierRows.length > 0) {
+            const tier = tierRows[0];
+            let price = tier.one_on_one_price || 0;
+
+            if (memberData.trainingType === 'two_people') {
+              price = tier.two_people_price || 0;
+            } else if (memberData.trainingType === 'three_people') {
+              price = tier.three_people_price || 0;
+            }
+
+            const planType = `${tier.sessions}_session`;
+            const endDate = new Date();
+            const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+            endDate.setMonth(endDate.getMonth() + durationMonths);
+
+            // Insert or update subscription
+            await client.query(`
+              INSERT INTO subscriptions (
+                member_id, membership_tier_id, plan_type, training_type, 
+                sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              ON CONFLICT (member_id) 
+              DO UPDATE SET 
+                membership_tier_id = EXCLUDED.membership_tier_id,
+                plan_type = EXCLUDED.plan_type,
+                training_type = EXCLUDED.training_type,
+                sessions_total = EXCLUDED.sessions_total,
+                price_paid = EXCLUDED.price_paid,
+                start_date = EXCLUDED.start_date,
+                end_date = EXCLUDED.end_date,
+                is_active = EXCLUDED.is_active,
+                updated_at = CURRENT_TIMESTAMP
+            `, [
+              member.id, memberData.membershipTierId, planType, memberData.trainingType,
+              tier.sessions, 0, price, new Date(), endDate, true
+            ]);
+          }
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+          message: "Member created successfully",
+          member
+        });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error creating member:", error);
       res.status(500).json({ message: error.message || "Failed to create member" });
@@ -1794,12 +2062,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get member deletion details
+  app.get('/api/admin/member-deletion-details/:memberId', async (req, res) => {
+    try {
+      const { memberId } = req.params;
+      
+      // Get counts of related data that will be deleted
+      const subscriptionsCount = await pool.query('SELECT COUNT(*) as count FROM subscriptions WHERE member_id = $1', [memberId]);
+      const sessionsCount = await pool.query('SELECT COUNT(*) as count FROM member_sessions WHERE member_id = $1', [memberId]);
+      const assessmentsCount = await pool.query('SELECT COUNT(*) as count FROM body_assessments WHERE member_id = $1', [memberId]);
+      const workoutPlansCount = await pool.query('SELECT COUNT(*) as count FROM workout_plans WHERE member_id = $1', [memberId]);
+      const nutritionPlansCount = await pool.query('SELECT COUNT(*) as count FROM nutrition_plans WHERE member_id = $1', [memberId]);
+      const trainerAssignmentsCount = await pool.query('SELECT COUNT(*) as count FROM member_trainer_assignments WHERE member_id = $1', [memberId]);
+      const sessionAttendanceCount = await pool.query('SELECT COUNT(*) as count FROM member_session_attendance WHERE member_id = $1', [memberId]);
+      
+      const details = {
+        subscriptions: parseInt(subscriptionsCount.rows[0].count) || 0,
+        sessions: parseInt(sessionsCount.rows[0].count) || 0,
+        assessments: parseInt(assessmentsCount.rows[0].count) || 0,
+        workoutPlans: parseInt(workoutPlansCount.rows[0].count) || 0,
+        nutritionPlans: parseInt(nutritionPlansCount.rows[0].count) || 0,
+        trainerAssignments: parseInt(trainerAssignmentsCount.rows[0].count) || 0,
+        sessionAttendance: parseInt(sessionAttendanceCount.rows[0].count) || 0
+      };
+      
+      res.json(details);
+    } catch (error: any) {
+      console.error("Error getting member deletion details:", error);
+      res.status(500).json({ message: error.message || "Failed to get deletion details" });
+    }
+  });
+
   // Delete member route
   app.delete('/api/admin/delete-member/:memberId', async (req, res) => {
     try {
       const { memberId } = req.params;
-      await storage.deleteUser(memberId);
-      res.json({ message: "Member deleted successfully" });
+      
+      // Get member profile to find associated user_id and email
+      const { rows: memberProfileRows } = await pool.query('SELECT user_id, email FROM member_profiles WHERE id = $1', [memberId]);
+
+      if (memberProfileRows.length === 0) {
+        return res.status(404).json({ message: "Member not found" });
+      }
+
+      const userId = memberProfileRows[0].user_id;
+      const memberEmail = memberProfileRows[0].email;
+      
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        
+        // Delete all related data in the correct order (child tables first)
+        await client.query('DELETE FROM member_session_attendance WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM member_trainer_assignments WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM subscriptions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM member_sessions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM body_assessments WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM workout_plans WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM nutrition_plans WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM training_sessions WHERE member_id = $1', [memberId]);
+        await client.query('DELETE FROM attendance WHERE member_id = $1', [memberId]);
+        
+        // Delete member profile
+        await client.query('DELETE FROM member_profiles WHERE id = $1', [memberId]);
+        
+        // Delete from users table using either user_id or email
+        if (userId) {
+          await client.query('DELETE FROM users WHERE id = $1', [userId]);
+          console.log(`Deleted user by ID: ${userId}`);
+        } else if (memberEmail) {
+          // Fallback: delete by email if user_id is not available
+          await client.query('DELETE FROM users WHERE email = $1', [memberEmail]);
+          console.log(`Deleted user by email: ${memberEmail}`);
+        }
+        
+        await client.query('COMMIT');
+        console.log(`Member ${memberId} and all related data deleted successfully. UserID: ${userId}, Email: ${memberEmail}`);
+        res.json({ message: "Member and all related data deleted successfully" });
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       console.error("Error deleting member:", error);
       res.status(500).json({ message: error.message || "Failed to delete member" });
@@ -2010,8 +2355,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         phone: inquiry.phone,
         membershipTierId: req.body.memberData?.membershipTierId || null,
         emergencyContact: inquiry.phone || inquiry.email,
-        fitnessGoals: "Converted from inquiry - General fitness improvement"
+        fitnessGoals: "Converted from inquiry - General fitness improvement",
+        trainingType: req.body.memberData?.trainingType || 'one_on_one'
       });
+
+      // Create subscription if membership tier and training type are selected
+      if (req.body.memberData?.membershipTierId && req.body.memberData?.trainingType) {
+        const { rows: tierRows } = await pool.query('SELECT * FROM membership_tiers WHERE id = $1', [req.body.memberData.membershipTierId]);
+
+        if (tierRows.length > 0) {
+          const tier = tierRows[0];
+          let price = tier.one_on_one_price || 0;
+
+          if (req.body.memberData.trainingType === 'two_people') {
+            price = tier.two_people_price || 0;
+          } else if (req.body.memberData.trainingType === 'three_people') {
+            price = tier.three_people_price || 0;
+          }
+
+          const planType = `${tier.sessions}_session`;
+          const endDate = new Date();
+          const durationMonths = tier.duration === '1 month' ? 1 : tier.duration === '3 months' ? 3 : 6;
+          endDate.setMonth(endDate.getMonth() + durationMonths);
+
+          // Insert subscription
+          await pool.query(`
+            INSERT INTO subscriptions (
+              member_id, membership_tier_id, plan_type, training_type, 
+              sessions_total, sessions_used, price_paid, start_date, end_date, is_active
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+            memberProfile.id, req.body.memberData.membershipTierId, planType, req.body.memberData.trainingType,
+            tier.sessions, 0, price, new Date(), endDate, true
+          ]);
+        }
+      }
 
       // Create body assessment if provided with proper validation
       if (req.body.assessmentData && Object.keys(req.body.assessmentData).length > 0) {
@@ -2089,15 +2467,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validateAndConvertTime = (timeStr: string): string | null => {
         if (!timeStr || timeStr.trim() === '') return null;
 
-        // Handle 24-hour format (HH:MM)
-        const time24Pattern = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        // Handle 24-hour format (HH:MM) with proper regex for hours 00-23
+        const time24Pattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
         if (time24Pattern.test(timeStr)) {
-          return timeStr;
+          return timeStr.padStart(5, '0'); // Ensure HH:MM format
         }
 
         // Handle 12-hour format (HH:MM AM/PM)
-        const time12Pattern = /^([0-1]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
-        const match = time12Pattern.match(time12Pattern);
+        const time12Pattern = /^([01]?[0-9]):[0-5][0-9]\s?(AM|PM)$/i;
+        const match = timeStr.match(time12Pattern);
         if (match) {
           let [, hour, ampm] = match;
           let hourNum = parseInt(hour);
@@ -2108,10 +2486,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hourNum = 0;
           }
 
-          return `${hourNum.toString().padStart(2, '0')}:${timeStr.split(':')[1].split(' ')[0]}`;
+          const minutes = timeStr.split(':')[1].split(' ')[0];
+          return `${hourNum.toString().padStart(2, '0')}:${minutes}`;
         }
 
-        return null;
+        // If it's already in HH:MM:SS format, convert to HH:MM
+        const time24SecPattern = /^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/;
+        if (time24SecPattern.test(timeStr)) {
+          return timeStr.substring(0, 5); // Return just HH:MM part
+        }
+
+        return timeStr; // Return as-is if it doesn't match any pattern but let database handle validation
       };
 
       const convertedCheckInTime = checkInTime ? validateAndConvertTime(checkInTime) : null;
@@ -2125,18 +2510,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid check-out time format. Use HH:MM or HH:MM AM/PM format." });
       }
 
-      const attendance = await storage.recordTrainerAttendance({
-        trainerId,
-        date,
-        status,
-        checkInTime: convertedCheckInTime,
-        checkOutTime: convertedCheckOutTime,
-        notes: notes || null
-      });
+      // Check if attendance already exists for this trainer and date
+      const { rows: existingAttendance } = await pool.query(`
+        SELECT * FROM trainer_attendance 
+        WHERE trainer_id = $1 AND date = $2
+      `, [trainerId, date]);
+
+      let attendance;
+
+      if (existingAttendance.length > 0) {
+        // Update existing attendance record
+        const existing = existingAttendance[0];
+
+        // If updating checkout time, preserve existing check-in time
+        const finalCheckInTime = convertedCheckInTime || existing.check_in_time;
+        const finalCheckOutTime = convertedCheckOutTime || existing.check_out_time;
+
+        const { rows } = await pool.query(`
+          UPDATE trainer_attendance 
+          SET status = $1, check_in_time = $2, check_out_time = $3, notes = $4, updated_at = CURRENT_TIMESTAMP
+          WHERE trainer_id = $5 AND date = $6
+          RETURNING *
+        `, [status, finalCheckInTime, finalCheckOutTime, notes || existing.notes, trainerId, date]);
+        attendance = rows[0];
+      } else {
+        // Create new attendance record
+        const { rows } = await pool.query(`
+          INSERT INTO trainer_attendance (trainer_id, date, status, check_in_time, check_out_time, notes)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `, [trainerId, date, status, convertedCheckInTime, convertedCheckOutTime, notes || null]);
+        attendance = rows[0];
+      }
+
+      console.log(`Trainer attendance recorded: ${status} for trainer ${trainerId} on ${date} - CheckIn: ${attendance.check_in_time}, CheckOut: ${attendance.check_out_time}`);
 
       res.json({
         message: "Attendance recorded successfully",
-        attendance
+        attendance: {
+          ...attendance,
+          _id: attendance.id,
+          trainerId: attendance.trainer_id,
+          checkInTime: attendance.check_in_time,
+          checkOutTime: attendance.check_out_time
+        }
       });
     } catch (error: any) {
       console.error("Error recording attendance:", error);
@@ -2258,6 +2675,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (!memberId || !trainerId) {
         return res.status(400).json({ message: "Missing required fields: memberId, trainerId" });
+      }
+
+      // Validate that the member exists in member_profiles
+      const { rows: memberRows } = await pool.query('SELECT id FROM member_profiles WHERE id = $1', [memberId]);
+      if (memberRows.length === 0) {
+        return res.status(400).json({ message: "Invalid member ID - member not found" });
+      }
+
+      // Validate that the trainer exists in trainer_profiles  
+      const { rows: trainerRows } = await pool.query('SELECT id FROM trainer_profiles WHERE id = $1', [trainerId]);
+      if (trainerRows.length === 0) {
+        return res.status(400).json({ message: "Invalid trainer ID - trainer not found" });
       }
 
       const assignment = await storage.assignTrainerToMember({

@@ -64,7 +64,7 @@ export default function Navigation() {
           </div>
           
           <div className="hidden md:flex items-center space-x-4">
-            {user ? (
+            {user && (
               <Button
                 onClick={logout}
                 variant="outline"
@@ -72,22 +72,6 @@ export default function Navigation() {
               >
                 Logout
               </Button>
-            ) : (
-              <>
-                <Button
-                  onClick={() => window.location.href = '/login'}
-                  variant="ghost"
-                  className="text-white hover:text-gold transition-colors duration-300 text-sm font-medium tracking-widest uppercase"
-                >
-                  Login
-                </Button>
-                <Button
-                  onClick={() => window.location.href = '/login'}
-                  className="bg-gold text-black px-6 py-2 font-medium text-sm tracking-widest uppercase hover:bg-white transition-colors duration-300"
-                >
-                  Join Now
-                </Button>
-              </>
             )}
           </div>
           
@@ -136,19 +120,12 @@ export default function Navigation() {
                 Contact
               </button>
               <div className="mt-4 px-3">
-                {user ? (
+                {user && (
                   <Button
                     onClick={logout}
                     className="w-full border border-gold text-gold hover:bg-gold hover:text-black font-medium text-sm tracking-widest uppercase transition-colors duration-300"
                   >
                     Logout
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => window.location.href = '/login'}
-                    className="w-full bg-gold text-black font-medium text-sm tracking-widest uppercase hover:bg-white transition-colors duration-300"
-                  >
-                    Join Now
                   </Button>
                 )}
               </div>

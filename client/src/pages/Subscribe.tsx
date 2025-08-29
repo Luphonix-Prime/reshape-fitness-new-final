@@ -34,7 +34,8 @@ const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
 
       // Create membership
       const response = await apiRequest("POST", "/api/create-membership", {
-        membershipTierId: selectedTier.id
+        membershipTierId: selectedTier.id,
+        trainingType: selectedTier.trainingType, // Include training type
       });
 
       const data = await response.json();
@@ -44,7 +45,7 @@ const StaticPaymentForm = ({ selectedTier }: { selectedTier: any }) => {
 
       toast({
         title: "Welcome to Reshape Fitness!",
-        description: `Your ${selectedTier.name} membership is now active.`,
+        description: `Your ${selectedTier.name} membership (${selectedTier.trainingType}) is now active.`,
       });
 
       setTimeout(() => {
@@ -200,22 +201,8 @@ export default function Subscribe() {
   });
 
   const handleTierSelect = async (tier: any) => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to subscribe",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
-      return;
-    }
-
-    setSelectedTier(tier);
-    setShowPaymentForm(true);
-    // Store the selected tier in localStorage
-    localStorage.setItem('selectedMembershipTier', JSON.stringify(tier));
+    // Redirect to contact us page
+    setLocation('/contact');
   };
 
   // Effect to load selected tier from localStorage on component mount
@@ -313,12 +300,12 @@ export default function Subscribe() {
                 <CardContent className="p-6">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="text-xl text-gold font-medium">{selectedTier.name} Membership</h3>
-                      <p className="text-gray-300">Premium fitness experience</p>
+                      <h3 className="text-xl text-gold font-medium">{selectedTier.sessions} Sessions Package</h3>
+                      <p className="text-gray-300">{selectedTier.duration} • {selectedTier.trainingType?.replace('_', ' ').toUpperCase()} Training</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-light">${selectedTier.monthlyPrice}</div>
-                      <div className="text-sm text-gray-400">per month</div>
+                      <div className="text-2xl font-light text-gold">Premium</div>
+                      <div className="text-sm text-gray-400">fitness experience</div>
                     </div>
                   </div>
                 </CardContent>
@@ -378,41 +365,84 @@ export default function Subscribe() {
             </p>
           </div>
 
+          {/* Training Session Terms & Conditions */}
+          <div className="mb-16">
+            <Card className="bg-white/5 backdrop-blur-sm border border-gold/20 hover:bg-white/10 transition-all duration-300">
+              <CardHeader>
+                <CardTitle className="text-2xl font-bold text-gold text-center">
+                  TRAINING SESSION TERMS & CONDITIONS
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-gray-300">
+                  <div className="space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Each training session is designed to be <span className="text-gold font-semibold">50 minutes long</span>.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p><span className="text-gold font-semibold">Full payment</span> must be made before the first session begins.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Packages are <span className="text-gold font-semibold">non-refundable and non-transferable</span>.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>All sessions must be used within the <span className="text-gold font-semibold">validity period</span> mentioned in the package. Expired sessions will not be carried.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Clients must inform us at least <span className="text-gold font-semibold">24 hours in advance</span> to reschedule a session. Late cancellations or no-shows will count as a completed session.</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Clients with existing medical conditions must provide a <span className="text-gold font-semibold">doctor's clearance</span> before starting membership.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Clients are expected to <span className="text-gold font-semibold">arrive on time</span> for sessions. Late arrivals will result in shorter sessions without any adjustment in price.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>Inform the trainer immediately of any <span className="text-gold font-semibold">discomfort, pain, or unusual feelings</span> during workouts. Follow the trainer's instructions to avoid injury.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p><span className="text-gold font-semibold">Consistent effort and adherence</span> to the trainer's guidance are essential for achieving results.</p>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
+                      <p>The fitness studio is <span className="text-gold font-semibold">not responsible for injuries</span> resulting from non-compliance with instructions or external activities.</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           <div className="space-y-12 max-w-7xl mx-auto">
             {/* One on One Section */}
             <div className="text-center">
               <h3 className="text-4xl font-bold text-gold mb-8">ONE ON ONE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('ONE_ON_ONE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`one-on-one-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-gold/30 hover:border-gold/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'one_on_one'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        <h4 className="text-3xl font-bold text-white mb-4">
+                          {tier.sessions} Sessions
                         </h4>
-                        <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        <p className="text-lg text-gray-300">
+                          {tier.duration}
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-gold">₹{tier.price?.toLocaleString()}</span>
-                        </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1500' : 
-                              tier.name.includes('_24_') ? '1425' : 
-                              tier.name.includes('_36_') ? '1350' : '1200'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
                       </div>
                     </CardContent>
                   </Card>
@@ -424,36 +454,20 @@ export default function Subscribe() {
             <div className="text-center">
               <h3 className="text-4xl font-bold text-gray-300 mb-8">2 PEOPLE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('TWO_PEOPLE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`two-people-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-gray-400/30 hover:border-gray-400/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gray-400/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'two_people'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        <h4 className="text-3xl font-bold text-white mb-4">
+                          {tier.sessions} Sessions
                         </h4>
-                        <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        <p className="text-lg text-gray-300">
+                          {tier.duration}
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-gray-300">₹{tier.price?.toLocaleString()}</span>
-                        </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1200' : 
-                              tier.name.includes('_24_') ? '1140' : 
-                              tier.name.includes('_36_') ? '1080' : '960'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
                       </div>
                     </CardContent>
                   </Card>
@@ -465,36 +479,20 @@ export default function Subscribe() {
             <div className="text-center">
               <h3 className="text-4xl font-bold text-yellow-600 mb-8">3 PEOPLE TRAINING</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {membershipTiers?.filter((tier: any) => tier.name.includes('THREE_PEOPLE')).map((tier: any, index: number) => (
+                {membershipTiers?.map((tier: any) => (
                   <Card
-                    key={tier.id}
+                    key={`three-people-${tier.id}`}
                     className="bg-white/5 backdrop-blur-sm border border-yellow-600/30 hover:border-yellow-600/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-yellow-600/20"
-                    onClick={() => handleTierSelect(tier)}
+                    onClick={() => handleTierSelect({...tier, trainingType: 'three_people'})}
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-xl font-bold text-white mb-2">
-                          {tier.name.includes('_12_') ? '12 Sessions' : 
-                           tier.name.includes('_24_') ? '24 Sessions' : 
-                           tier.name.includes('_36_') ? '36 Sessions' : '72 Sessions'}
+                        <h4 className="text-3xl font-bold text-white mb-4">
+                          {tier.sessions} Sessions
                         </h4>
-                        <p className="text-sm text-gray-400 mb-4">
-                          {tier.name.includes('_12_') || tier.name.includes('_24_') ? '(1 month)' : 
-                           tier.name.includes('_36_') ? '(3 months)' : '(6 months)'}
+                        <p className="text-lg text-gray-300">
+                          {tier.duration}
                         </p>
-                        <div className="mb-4">
-                          <span className="text-3xl font-bold text-yellow-600">₹{tier.price?.toLocaleString()}</span>
-                        </div>
-                        <div className="text-sm text-gray-300 mb-4">
-                          (₹{tier.name.includes('_12_') ? '1000' : 
-                              tier.name.includes('_24_') ? '950' : 
-                              tier.name.includes('_36_') ? '900' : '800'} per session)
-                        </div>
-                        <ul className="space-y-2 text-sm">
-                          {tier.features?.slice(0, 3).map((feature: string, idx: number) => (
-                            <li key={idx} className="text-gray-300">{feature}</li>
-                          ))}
-                        </ul>
                       </div>
                     </CardContent>
                   </Card>

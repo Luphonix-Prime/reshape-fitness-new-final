@@ -86,6 +86,7 @@ export default function TrainerDashboard() {
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
   const [showAddAssessment, setShowAddAssessment] = useState(false); // State for the new assessment dialog
+  const [showEditWorkoutModal, setShowEditWorkoutModal] = useState(false);
 
 
   // State for New Assessment Form
@@ -683,7 +684,7 @@ export default function TrainerDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pt-20">
       <Navigation />
 
       <div className="container mx-auto px-6 py-8">

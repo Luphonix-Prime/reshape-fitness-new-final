@@ -41,7 +41,7 @@ export default function About() {
       <Navigation />
       
       {/* Hero Section */}
-      <section className="pt-20 pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
+      <section className="pt-40 pb-16 bg-gradient-to-br from-black via-gray-900 to-black">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="text-center mb-16">
             <h1 className="text-5xl md:text-7xl font-light mb-8 tracking-wider">

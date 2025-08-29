@@ -37,7 +37,6 @@ function Router() {
 
   return (
     <Switch>
-      <Route path="/landing" component={Landing} />
       <Route path="/about" component={About} />
       <Route path="/services" component={Services} />
       <Route path="/contact" component={Contact} />
@@ -54,9 +53,9 @@ function Router() {
       <Route path="/admin-dashboard" component={AdminDashboard} />
       <Route path="/debug" component={DatabaseDebug} />
 
-      {/* Default route - redirect based on authentication and user type */}
+      {/* Home route - shows Landing page for unauthenticated users, Home for authenticated users */}
       <Route path="/">
-        {!isAuthenticated ? <Login /> : <Home />}
+        {!isAuthenticated ? <Landing /> : <Home />}
       </Route>
 
       <Route component={NotFound} />

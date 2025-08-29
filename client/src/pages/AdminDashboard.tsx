@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   });
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
-  const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set());
+  const [markedTrainers, setMarkedTrainers] = useState<Set<string>>(new Set()); // This state is not used in the final logic but kept for context.
   const [newAttendance, setNewAttendance] = useState({
     trainerId: "",
     status: "present",
@@ -51,6 +51,7 @@ export default function AdminDashboard() {
     lastName: "",
     email: "",
     membershipTierId: "",
+    trainingType: "", // Added trainingType state
     phone: "",
     emergencyContact: "",
     fitnessGoals: ""
@@ -140,6 +141,23 @@ export default function AdminDashboard() {
 
   const [settingsLoading, setSettingsLoading] = useState(false);
 
+  // Membership Management State
+  const [showAddMembershipModal, setShowAddMembershipModal] = useState(false);
+  const [editingMembership, setEditingMembership] = useState<any>(null);
+  const [newMembership, setNewMembership] = useState({
+    name: "",
+    sessions: 0,
+    duration: "",
+    oneOnOnePrice: 0,
+    oneOnOnePerSession: 0,
+    twoPeoplePrice: 0,
+    twoPeoplePerSession: 0,
+    threePeoplePrice: 0,
+    threePeoplePerSession: 0,
+    features: "",
+    description: ""
+  });
+
   // Trainer Assignment State
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedMemberForAssignment, setSelectedMemberForAssignment] = useState<string>('');
@@ -163,13 +181,18 @@ export default function AdminDashboard() {
     queryKey: ['/api/admin/stats'],
   });
 
-  const { data: membershipTiers } = useQuery({
+  const { data: membershipTiers, refetch: refetchMembershipTiers } = useQuery({
     queryKey: ['/api/membership-tiers'],
   });
 
   const { data: todayAttendance, refetch: refetchAttendance } = useQuery({
     queryKey: ['/api/admin/attendance', selectedDate],
-    queryFn: () => apiRequest('GET', `/api/admin/attendance/${selectedDate}`),
+    queryFn: () => {
+      console.log(`Fetching attendance for date: ${selectedDate}`);
+      return apiRequest('GET', `/api/admin/attendance/${selectedDate}`);
+    },
+    staleTime: 0, // Always refetch when query is called
+    cacheTime: 0, // Don't cache results
   });
 
   const { data: attendanceStats } = useQuery({
@@ -257,9 +280,10 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
     },
     onError: (error: any) => {
+      console.error('Update member error:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to update member",
+        description: error.response?.data?.message || error.message || "Failed to update member",
         variant: "destructive",
       });
     }
@@ -339,6 +363,63 @@ export default function AdminDashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to update pricing",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Membership Tier Mutations
+  const createMembershipMutation = useMutation({
+    mutationFn: (membershipData: any) => apiRequest('POST', '/api/admin/membership-tiers', membershipData),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Added",
+        description: "New membership tier created successfully."
+      });
+      setShowAddMembershipModal(false);
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create membership tier",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const updateMembershipMutation = useMutation({
+    mutationFn: ({ id, membershipData }: { id: string, membershipData: any }) => apiRequest('PUT', `/api/admin/membership-tiers/${id}`, membershipData),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Updated",
+        description: "Membership tier updated successfully."
+      });
+      closeMemershipModal();
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update membership tier",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const deleteMembershipMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/admin/membership-tiers/${id}`, {}),
+    onSuccess: () => {
+      toast({
+        title: "Membership Tier Deleted",
+        description: "Membership tier deleted successfully."
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/membership-tiers'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete membership tier",
         variant: "destructive"
       });
     }
@@ -538,7 +619,7 @@ export default function AdminDashboard() {
 
   const handleScheduleSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newSessionData.memberId || !newSessionData.trainerId || !newSessionData.sessionType || !newSessionData.date || !newSessionData.time) {
       toast({
         title: "Error",
@@ -574,6 +655,7 @@ export default function AdminDashboard() {
       refetchAssessments();
       refetchInquiries();
       refetchTrainerAssignments();
+      refetchMembershipTiers();
     }
   }, [user]);
 
@@ -590,26 +672,44 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Ensure membershipTierId is set
-    const membershipTierId = newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id);
-    if (!membershipTierId) {
-      toast({
-        title: "Error",
-        description: "Please select a membership type",
-        variant: "destructive"
-      });
-      return;
+    // For updates, membershipTierId is optional; for creates, it's required
+    if (!editingMember) {
+      const membershipTierId = newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id);
+      if (!membershipTierId) {
+        toast({
+          title: "Error",
+          description: "Please select a membership type",
+          variant: "destructive"
+        });
+        return;
+      }
     }
 
     const memberData = {
-      ...newMember,
-      membershipTierId
+      firstName: newMember.firstName,
+      lastName: newMember.lastName,
+      email: newMember.email,
+      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id),
+      trainingType: newMember.trainingType || 'one_on_one',
+      phone: newMember.phone || null,
+      emergencyContact: newMember.emergencyContact || null,
+      fitnessGoals: newMember.fitnessGoals || null
     };
 
-    console.log('Creating member with data:', memberData);
+    console.log(editingMember ? 'Updating member with data:' : 'Creating member with data:', memberData);
 
     if (editingMember) {
-      updateMemberMutation.mutate({ id: editingMember.userId, memberData });
+      // Use the correct member ID from the member object
+      const memberId = editingMember.userId || editingMember.id || editingMember.user_id;
+      if (!memberId) {
+        toast({
+          title: "Error",
+          description: "Invalid member ID",
+          variant: "destructive"
+        });
+        return;
+      }
+      updateMemberMutation.mutate({ id: memberId, memberData });
     } else {
       createMemberMutation.mutate(memberData);
     }
@@ -643,16 +743,19 @@ export default function AdminDashboard() {
     }
   };
 
+  // Edit member
   const handleEditMember = (member: any) => {
+    console.log('Editing member:', member);
     setEditingMember(member);
     setNewMember({
-      firstName: member.firstName || "",
-      lastName: member.lastName || "",
-      email: member.email || "",
-      membershipTierId: member.membershipTierId || "",
-      phone: member.phone || "",
-      emergencyContact: member.emergencyContact || "",
-      fitnessGoals: member.fitnessGoals || ""
+      firstName: member.first_name || '',
+      lastName: member.last_name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      membershipTierId: member.membership_tier_id || member.subscription_membership_tier_id || '',
+      emergencyContact: member.emergency_contact || '',
+      fitnessGoals: member.fitness_goals || '',
+      trainingType: member.subscription_training_type || member.training_type || 'one_on_one'
     });
     setShowAddMemberModal(true);
   };
@@ -673,57 +776,101 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteMember = async (member: any) => {
-    if (confirm(`Are you sure you want to delete member ${member.firstName} ${member.lastName}?`)) {
-      try {
-        const response = await apiRequest('DELETE', `/api/admin/delete-member/${member.userId}`, {});
+    try {
+      // First, get details about what will be deleted
+      const response = await apiRequest('GET', `/api/admin/member-deletion-details/${member.id}`);
+      const details = response || {};
 
-        if (response) {
+      const detailsMessage = `This will permanently delete the following data:
+
+• Member Profile: ${member.first_name} ${member.last_name} (${member.email})
+• User Account: Basic account information
+• Subscriptions: ${details.subscriptions || 0} subscription record(s)
+• Training Sessions: ${details.sessions || 0} session record(s)
+• Body Assessments: ${details.assessments || 0} assessment record(s)
+• Workout Plans: ${details.workoutPlans || 0} workout plan(s)
+• Nutrition Plans: ${details.nutritionPlans || 0} nutrition plan(s)
+• Trainer Assignments: ${details.trainerAssignments || 0} assignment record(s)
+• Member Session Attendance: ${details.sessionAttendance || 0} attendance record(s)
+
+This action cannot be undone. Are you sure you want to continue?`;
+
+      if (confirm(detailsMessage)) {
+        const deleteResponse = await apiRequest('DELETE', `/api/admin/delete-member/${member.id}`);
+
+        if (deleteResponse) {
           // Refresh all related data
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['/api/admin/members'] }),
-            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/member-sessions'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/body-assessments'] })
           ]);
           toast({
             title: "Success",
-            description: "Member deleted successfully!",
+            description: "Member and all related data deleted successfully!",
           });
         }
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to delete member",
-          variant: "destructive",
-        });
       }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete member",
+        variant: "destructive",
+      });
     }
   };
 
   const handleDeleteTrainer = async (trainer: any) => {
-    if (confirm(`Are you sure you want to delete trainer ${trainer.firstName} ${trainer.lastName}?`)) {
-      try {
-        const response = await apiRequest('DELETE', `/api/admin/delete-trainer/${trainer.userId}`, {});
+    try {
+      // First, get details about what will be deleted
+      const response = await apiRequest('GET', `/api/admin/trainer-deletion-details/${trainer.userId}`);
+      const details = response || {};
 
-        if (response) {
+      const detailsMessage = `This will permanently delete the following data:
+
+• Trainer Profile: ${trainer.firstName} ${trainer.lastName} (${trainer.email})
+• User Account: Basic account information
+• Training Sessions: ${details.sessions || 0} session record(s)
+• Body Assessments: ${details.assessments || 0} assessment record(s)
+• Workout Plans: ${details.workoutPlans || 0} workout plan(s)
+• Nutrition Plans: ${details.nutritionPlans || 0} nutrition plan(s)
+• Trainer Assignments: ${details.trainerAssignments || 0} assignment record(s)
+• Trainer Attendance: ${details.attendance || 0} attendance record(s)
+• Member Session Attendance: ${details.sessionAttendance || 0} attendance record(s)
+
+This action cannot be undone. Are you sure you want to continue?`;
+
+      if (confirm(detailsMessage)) {
+        const deleteResponse = await apiRequest('DELETE', `/api/admin/delete-trainer/${trainer.userId}`);
+
+        if (deleteResponse) {
           // Refresh all related data
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['/api/admin/trainers'] }),
-            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] })
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/trainer-assignments'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/member-sessions'] }),
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/body-assessments'] })
           ]);
           toast({
             title: "Success",
-            description: "Trainer deleted successfully!",
+            description: "Trainer and all related data deleted successfully!",
           });
         }
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to delete trainer",
-          variant: "destructive",
-        });
       }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete trainer",
+        variant: "destructive",
+      });
     }
   };
 
+
+  // Close all member and trainer modals and reset their states
   const closeModals = () => {
     setShowAddMemberModal(false);
     setShowAddTrainerModal(false);
@@ -734,6 +881,7 @@ export default function AdminDashboard() {
       lastName: "",
       email: "",
       membershipTierId: "",
+      trainingType: "", // Reset trainingType
       phone: "",
       emergencyContact: "",
       fitnessGoals: ""
@@ -758,9 +906,10 @@ export default function AdminDashboard() {
 
   const handleUpdatePricing = (e: React.FormEvent) => {
     e.preventDefault();
+    // Convert string prices back to numbers for submission
     const pricingData = Object.keys(membershipPricing).map(tierId => ({
       tierId,
-      monthlyPrice: membershipPricing[tierId]
+      monthlyPrice: parseFloat(membershipPricing[tierId])
     }));
     updateMembershipPricingMutation.mutate({ pricing: pricingData });
   };
@@ -776,6 +925,58 @@ export default function AdminDashboard() {
       setMembershipPricing(pricing);
     }
   }, [membershipTiers]);
+
+  // Membership Management Handlers
+  const handleAddMembership = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingMembership) {
+      updateMembershipMutation.mutate({ id: editingMembership.id || editingMembership._id, membershipData: newMembership });
+    } else {
+      createMembershipMutation.mutate(newMembership);
+    }
+  };
+
+  const handleEditMembership = (tier: any) => {
+    setEditingMembership(tier);
+    setNewMembership({
+      name: tier.name || "",
+      sessions: tier.sessions || 0,
+      duration: tier.duration || "",
+      oneOnOnePrice: tier.one_on_one_price || tier.oneOnOnePrice || 0,
+      oneOnOnePerSession: tier.one_on_one_per_session || tier.oneOnOnePerSession || 0,
+      twoPeoplePrice: tier.two_people_price || tier.twoPeoplePrice || 0,
+      twoPeoplePerSession: tier.two_people_per_session || tier.twoPeoplePerSession || 0,
+      threePeoplePrice: tier.three_people_price || tier.threePeoplePrice || 0,
+      threePeoplePerSession: tier.three_people_per_session || tier.threePeoplePerSession || 0,
+      features: Array.isArray(tier.features) ? tier.features.join(', ') : tier.features || "",
+      description: tier.description || ""
+    });
+    setShowAddMembershipModal(true);
+  };
+
+  const handleDeleteMembership = async (tier: any) => {
+    if (confirm(`Are you sure you want to delete membership tier "${tier.name}"?`)) {
+      await deleteMembershipMutation.mutateAsync(tier.id || tier._id);
+    }
+  };
+
+  const closeMemershipModal = () => {
+    setShowAddMembershipModal(false);
+    setEditingMembership(null);
+    setNewMembership({
+      name: "",
+      sessions: 0,
+      duration: "",
+      oneOnOnePrice: 0,
+      oneOnOnePerSession: 0,
+      twoPeoplePrice: 0,
+      twoPeoplePerSession: 0,
+      threePeoplePrice: 0,
+      threePeoplePerSession: 0,
+      features: "",
+      description: ""
+    });
+  };
 
   // Handler for changing trainer password
   const handleSubmitPasswordChange = async (e: React.FormEvent) => {
@@ -865,7 +1066,11 @@ export default function AdminDashboard() {
 
   const handleQuickAttendance = async (trainerId: string, status: string) => {
     try {
-      const currentTime = new Date().toTimeString().slice(0, 5);
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
+
       const attendanceData = {
         trainerId,
         status,
@@ -875,14 +1080,64 @@ export default function AdminDashboard() {
         notes: ""
       };
 
+      console.log('Recording attendance:', attendanceData);
       await recordAttendanceMutation.mutateAsync(attendanceData);
 
-      // Add trainer to marked set to disable buttons
-      setMarkedTrainers(prev => new Set(prev).add(trainerId));
+      // Force refresh attendance data
+      queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
+        refetchAttendance()
+      ]);
+
+      console.log('Attendance data refreshed');
     } catch (error: any) {
+      console.error('Error recording quick attendance:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to record attendance",
+        description: error.response?.data?.message || error.message || "Failed to record attendance",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleCheckOut = async (trainerId: string) => {
+    try {
+      const now = new Date();
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
+
+      // Find existing attendance record
+      const existingAttendance = todayAttendance?.find(att => att.trainerId?.toString() === trainerId);
+
+      if (existingAttendance) {
+        const attendanceData = {
+          trainerId,
+          status: "present",
+          date: selectedDate,
+          checkInTime: existingAttendance.checkInTime,
+          checkOutTime: currentTime,
+          notes: existingAttendance.notes || ""
+        };
+
+        console.log('Recording checkout:', attendanceData);
+        await recordAttendanceMutation.mutateAsync(attendanceData);
+
+        // Force refresh attendance data
+        queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['/api/admin/attendance-stats'] }),
+          refetchAttendance()
+        ]);
+
+        console.log('Checkout recorded and data refreshed');
+      }
+    } catch (error: any) {
+      console.error('Error recording checkout:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to record checkout",
         variant: "destructive"
       });
     }
@@ -1034,6 +1289,17 @@ export default function AdminDashboard() {
 
   const handleConvertInquiry = (inquiry: any) => {
     setSelectedInquiry(inquiry);
+    // Reset member form data for conversion
+    setNewMember({
+      firstName: inquiry.firstName || "",
+      lastName: inquiry.lastName || "",
+      email: inquiry.email || "",
+      phone: inquiry.phone || "",
+      membershipTierId: membershipTiers?.[0]?._id || membershipTiers?.[0]?.id || "",
+      emergencyContact: inquiry.phone || inquiry.email || "",
+      fitnessGoals: inquiry.interest || "General fitness improvement",
+      trainingType: "one_on_one"
+    });
     setShowConvertModal(true);
   };
 
@@ -1069,7 +1335,8 @@ export default function AdminDashboard() {
     if (!selectedInquiry) return;
 
     const memberData = {
-      membershipTierId: membershipTiers?.[0]?._id || ""
+      membershipTierId: newMember.membershipTierId || (membershipTiers?.[0]?._id || membershipTiers?.[0]?.id) || "",
+      trainingType: newMember.trainingType || 'one_on_one'
     };
 
     convertInquiryMutation.mutate({
@@ -1176,12 +1443,22 @@ export default function AdminDashboard() {
   // Handler for submitting trainer assignment
   const handleSubmitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!selectedMemberForAssignment || !selectedTrainerForAssignment) {
+      toast({
+        title: "Error",
+        description: "Please select both a member and a trainer",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const response = await apiRequest('POST', '/api/admin/assign-trainer', {
         memberId: selectedMemberForAssignment,
         trainerId: selectedTrainerForAssignment,
-        assignedDate: assignmentData.assignedDate, // Use state for date
-        notes: assignmentData.notes // Use state for notes
+        assignedDate: assignmentData.assignedDate,
+        notes: assignmentData.notes
       });
 
       toast({
@@ -1220,7 +1497,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-black text-white pt-20">
       <Navigation />
 
       <div className="container mx-auto px-6 py-8">
@@ -1389,12 +1666,40 @@ export default function AdminDashboard() {
                           <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
                             <SelectValue placeholder="Select membership type" />
                           </SelectTrigger>
-                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                            {membershipTiers?.map((tier: any) => (
-                              <SelectItem key={`member-tier-${tier._id || tier.id}`} value={tier._id || tier.id} className="focus:bg-gold focus:text-black">
-                                {tier.name}
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
+                            {membershipTiers && membershipTiers.length > 0 ? membershipTiers.map((tier: any) => (
+                              <SelectItem key={`member-tier-${tier._id || tier.id}`} value={(tier._id || tier.id).toString()} className="focus:bg-gold focus:text-black hover:bg-gold hover:text-black">
+                                {tier.name || `${tier.sessions} Sessions`}
                               </SelectItem>
-                            ))}
+                            )) : (
+                              <SelectItem value="no-tiers" disabled className="text-gray-500">
+                                No membership tiers available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {/* Added Training Type Dropdown */}
+                      <div>
+                        <Label htmlFor="trainingType">Training Type</Label>
+                        <Select
+                          name="trainingType"
+                          value={newMember.trainingType}
+                          onValueChange={(value) => setNewMember({...newMember, trainingType: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select training type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            <SelectItem value="one_on_one" className="focus:bg-gold focus:text-black">
+                              1 on 1 Training
+                            </SelectItem>
+                            <SelectItem value="two_people" className="focus:bg-gold focus:text-black">
+                              2 People Training
+                            </SelectItem>
+                            <SelectItem value="three_people" className="focus:bg-gold focus:text-black">
+                              3 People Training
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1544,12 +1849,7 @@ export default function AdminDashboard() {
                       variant="outline"
                       className="border-gold text-gold hover:bg-gold hover:text-black"
                       onClick={() => {
-                        // If a member is selected, open modal to assign a trainer
-                        if (selectedMemberForAssignment) {
-                          setShowAssignModal(true);
-                        } else {
-                          toast({ title: "Please select a member first" });
-                        }
+                        setShowAssignModal(true);
                       }}
                     >
                       <Plus className="h-4 w-4 mr-2" />
@@ -1559,7 +1859,7 @@ export default function AdminDashboard() {
                   <DialogContent className="bg-gray-900 border-gray-800 text-white">
                     <DialogHeader>
                       <DialogTitle className="text-gold">
-                        Assign Trainer to {selectedMemberForAssignment ? members?.find(m => m.userId === selectedMemberForAssignment)?.firstName + " " + members?.find(m => m.userId === selectedMemberForAssignment)?.lastName : 'Member'}
+                        Assign Trainer to Member
                       </DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmitAssignment} className="space-y-4">
@@ -1574,11 +1874,15 @@ export default function AdminDashboard() {
                             <SelectValue placeholder="Select a member" />
                           </SelectTrigger>
                           <SelectContent className="bg-gray-900 border-gray-800 text-white">
-                            {members?.map((member: any) => (
-                              <SelectItem key={`assign-member-${member.userId}`} value={member.userId} className="focus:bg-gold focus:text-black">
-                                {member.firstName} {member.lastName}
-                              </SelectItem>
-                            ))}
+                            {members && members.length > 0 ? (
+                              members.map((member) => (
+                                <SelectItem key={member.id} value={member.id.toString()}>
+                                  {member.first_name} {member.last_name} ({member.email})
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="" disabled>No members available</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -1635,16 +1939,9 @@ export default function AdminDashboard() {
                   variant="outline"
                   className="border-yellow-500 text-yellow-500 hover:bg-yellow-500 hover:text-black"
                   onClick={() => {
-                    // This button should probably be within the trainer list, but for now,
-                    // we'll open it if any trainer is selected or prompt the user.
-                    // A more robust solution would be a button next to each trainer row.
-                    if (trainers && trainers.length > 0) {
-                      // For demonstration, we'll just open the modal.
-                      // In a real app, you'd select a trainer first.
-                      toast({ title: "Select a trainer to change their password", description: "You can do this from the 'MANAGE MEMBERS' tab." });
-                    } else {
-                      toast({ title: "No trainers available", description: "Please add trainers first." });
-                    }
+                    // For demonstration, we'll just open the modal.
+                    // In a real app, you'd select a trainer first.
+                    toast({ title: "Select a trainer to change their password", description: "You can do this from the 'MANAGE MEMBERS' tab." });
                   }}
                 >
                   <Key className="h-4 w-4 mr-2" />
@@ -1743,34 +2040,52 @@ export default function AdminDashboard() {
                       <TableHead className="text-gray-400">Email</TableHead>
                       <TableHead className="text-gray-400">Phone</TableHead>
                       <TableHead className="text-gray-400">Membership</TableHead>
+                      <TableHead className="text-gray-400">Training Type</TableHead>
+                      <TableHead className="text-gray-400">Plan Type</TableHead>
+                      <TableHead className="text-gray-400">Sessions</TableHead>
+                      <TableHead className="text-gray-400">Price Paid</TableHead>
                       <TableHead className="text-gray-400">Join Date</TableHead>
-                      <TableHead className="text-gray-400">Trainer</TableHead> {/* Added for Trainer Assignment */}
                       <TableHead className="text-gray-400">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {members?.map((member: any) => {
-                      // Find the assigned trainer for this member
-                      const assignment = Array.isArray(trainerAssignments)
-                        ? trainerAssignments.find((ta: any) => ta.member_id === member.userId)
-                        : null;
+                    {members?.map((member: any, index: number) => {
+                        const assignment = trainerAssignments
+                          ? trainerAssignments.find((ta: any) => ta.member_id && ta.member_id.toString() === member.id.toString())
+                          : null;
                       const assignedTrainerName = assignment ? assignment.trainer_name : 'Not Assigned';
 
                       return (
-                        <TableRow key={member.userId} className="border-gray-800">
-                          <TableCell className="text-white">{member.firstName} {member.lastName}</TableCell>
+                        <TableRow key={member.id || index} className="border-gray-800">
+                          <TableCell className="text-white">{member.first_name} {member.last_name}</TableCell>
                           <TableCell className="text-gray-400">{member.email}</TableCell>
                           <TableCell className="text-gray-400">{member.phone || 'N/A'}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className="border-gold text-gold">
-                              {member.membershipTier || 'N/A'}
+                              {member.membership_tier_name || 'N/A'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-gray-400">
-                            {member.joinDate ? new Date(member.joinDate).toLocaleDateString() : 'N/A'}
+                          <TableCell className="text-white">
+                          {(member.subscription_training_type || member.training_type) ? (
+                            (member.subscription_training_type || member.training_type) === 'one_on_one' ? 'One-on-One' :
+                            (member.subscription_training_type || member.training_type) === 'two_people' ? '2 People' :
+                            (member.subscription_training_type || member.training_type) === 'three_people' ? '3 People' :
+                            (member.subscription_training_type || member.training_type)
+                          ) : 'Not Set'}
+                        </TableCell>
+                          <TableCell className="text-white">
+                          {member.plan_type || 'No Plan'}</TableCell>
+                          <TableCell className="text-white">
+                            {member.sessions_used !== undefined && member.sessions_total !== undefined
+                              ? `${member.sessions_used || 0}/${member.sessions_total || 0}`
+                              : member.membership_sessions || 'N/A'}
                           </TableCell>
-                          <TableCell className="text-white"> {/* Display assigned trainer */}
-                            {assignedTrainerName}
+                          <TableCell className="text-green-400">
+                            ₹{member.price_paid ? member.price_paid.toLocaleString() : '0'}
+                          </TableCell>
+                          <TableCell className="text-gray-400">
+                            {member.subscription_start_date ? new Date(member.subscription_start_date).toLocaleDateString() :
+                             member.created_at ? new Date(member.created_at).toLocaleDateString() : 'N/A'}
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
@@ -1796,8 +2111,8 @@ export default function AdminDashboard() {
                                 variant="ghost"
                                 className="text-blue-500 hover:text-blue-700"
                                 onClick={() => {
-                                  setSelectedMemberForAssignment(member.userId);
-                                  const assignment = Array.isArray(trainerAssignments) ? trainerAssignments.find((ta: any) => ta.member_id === member.userId) : null;
+                                  setSelectedMemberForAssignment(member.id.toString());
+                                  const assignment = Array.isArray(trainerAssignments) ? trainerAssignments.find((ta: any) => ta.member_id.toString() === member.id.toString()) : null;
                                   setAssignmentData({
                                     trainerId: assignment ? assignment.trainer_id : "",
                                     assignedDate: assignment ? new Date(assignment.assigned_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
@@ -2144,7 +2459,23 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Convert Inquiry Modal */}
-            <Dialog open={showConvertModal} onOpenChange={setShowConvertModal}>
+            <Dialog open={showConvertModal} onOpenChange={(open) => {
+              setShowConvertModal(open);
+              if (!open) {
+                // Reset form when modal closes
+                setNewMember({
+                  firstName: "",
+                  lastName: "",
+                  email: "",
+                  membershipTierId: "",
+                  trainingType: "one_on_one",
+                  phone: "",
+                  emergencyContact: "",
+                  fitnessGoals: ""
+                });
+                setSelectedInquiry(null);
+              }
+            }}>
               <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="text-gold">
@@ -2175,6 +2506,59 @@ export default function AdminDashboard() {
                       <div className="col-span-2">
                         <span className="text-gray-400">Message:</span>
                         <span className="text-white ml-2">{selectedInquiry?.message}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Membership Selection */}
+                  <div className="space-y-4 p-4 bg-black rounded-lg">
+                    <h3 className="text-lg font-semibold text-gold">Membership Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="membershipTierId">Membership Type</Label>
+                        <Select
+                          name="membershipTierId"
+                          value={newMember.membershipTierId}
+                          onValueChange={(value) => setNewMember({...newMember, membershipTierId: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select membership type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white max-h-60 overflow-y-auto">
+                            {membershipTiers && membershipTiers.length > 0 ? membershipTiers.map((tier: any) => (
+                              <SelectItem key={`convert-tier-${tier._id || tier.id}`} value={(tier._id || tier.id).toString()} className="focus:bg-gold focus:text-black hover:bg-gold hover:text-black">
+                                {tier.name || `${tier.sessions} Sessions`}
+                              </SelectItem>
+                            )) : (
+                              <SelectItem value="no-tiers" disabled className="text-gray-500">
+                                No membership tiers available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="trainingType">Training Type</Label>
+                        <Select
+                          name="trainingType"
+                          value={newMember.trainingType}
+                          onValueChange={(value) => setNewMember({...newMember, trainingType: value})}
+                        >
+                          <SelectTrigger className="bg-black border-gray-700 text-white focus:ring-gold">
+                            <SelectValue placeholder="Select training type" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-gray-900 border-gray-800 text-white">
+                            <SelectItem value="one_on_one" className="focus:bg-gold focus:text-black">
+                              1 on 1 Training
+                            </SelectItem>
+                            <SelectItem value="two_people" className="focus:bg-gold focus:text-black">
+                              2 People Training
+                            </SelectItem>
+                            <SelectItem value="three_people" className="focus:bg-gold focus:text-black">
+                              3 People Training
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   </div>
@@ -2507,16 +2891,13 @@ export default function AdminDashboard() {
                     {/* Advice */}
                     <div className="space-y-4 p-4 bg-black rounded-lg">
                       <h4 className="text-md font-semibold text-gold">Professional Advice</h4>
-                      <div>
-                        <Label htmlFor="advice">Recommendations and Advice</Label>
-                        <Textarea
-                          value={newAssessment.advice}
-                          onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
-                          className="bg-black border-gray-700 text-white"
-                          rows={4}
-                          placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
-                        />
-                      </div>
+                      <Textarea
+                        value={newAssessment.advice}
+                        onChange={(e) => setNewAssessment({...newAssessment, advice: e.target.value})}
+                        className="bg-black border-gray-700 text-white"
+                        rows={4}
+                        placeholder="Lower body mobility exercises, deep breathing exercises, core strengthening..."
+                      />
                     </div>
                   </div>
 
@@ -2830,10 +3211,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.neck}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, neck: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2843,10 +3221,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.shoulders}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, shoulders: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2856,10 +3231,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.chest}
-                              onChange={(e) => setNewAssessment({
-                                ...newAssessment,
-                                circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}
-                              })}
+                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, chest: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -2869,7 +3241,7 @@ export default function AdminDashboard() {
                               type="number"
                               step="0.1"
                               value={newAssessment.circumferenceMeasurements.waist}
-                              onChange={(e) => setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
+                              onChange={(e)=> setNewAssessment({...newAssessment, circumferenceMeasurements: {...newAssessment.circumferenceMeasurements, waist: e.target.value}})}
                               className="bg-black border-gray-700 text-white"
                             />
                           </div>
@@ -3040,15 +3412,26 @@ export default function AdminDashboard() {
                   type="date"
                   value={selectedDate}
                   onChange={(e) => {
-                    setSelectedDate(e.target.value);
-                    setMarkedTrainers(new Set()); // Reset marked trainers when date changes
+                    const newDate = e.target.value;
+                    console.log(`Changing date to: ${newDate}`);
+                    setSelectedDate(newDate);
+                    // Force refresh attendance data when the date changes
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance', selectedDate] });
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance', newDate] });
+                    setTimeout(() => refetchAttendance(), 100);
                   }}
                   className="bg-black border-gray-700 text-white"
                 />
                 <Button
                   variant="outline"
                   className="border-gold text-gold hover:bg-gold hover:text-black"
-                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    console.log(`Setting date to today: ${today}`);
+                    setSelectedDate(today);
+                    queryClient.removeQueries({ queryKey: ['/api/admin/attendance'] });
+                    setTimeout(() => refetchAttendance(), 100);
+                  }}
                 >
                   Today
                 </Button>
@@ -3146,14 +3529,30 @@ export default function AdminDashboard() {
             {/* Attendance Statistics */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="bg-gray-900 border-gray-800">
-                <CardHeader>
-                  <CardTitle className="text-gold">Today's Attendance</CardTitle>
-                </CardHeader>
                 <CardContent className="p-6">
-                  <div className="text-2xl font-bold text-white">
-                    {Array.isArray(todayAttendance) ? todayAttendance.filter((a: any) => a.status === 'present').length : 0} / {Array.isArray(todayAttendance) ? todayAttendance.length : 0}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gold">Today's Attendance</h3>
                   </div>
-                  <p className="text-gray-400">Present / Total</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Present / Total</span>
+                      <span className="text-white font-bold">
+                        {todayAttendance?.filter(att => att.status === 'present').length || 0} / {trainers?.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Absent</span>
+                      <span className="text-red-400 font-bold">
+                        {todayAttendance?.filter(att => att.status === 'absent').length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Not Marked</span>
+                      <span className="text-yellow-400 font-bold">
+                        {(trainers?.length || 0) - (todayAttendance?.length || 0)}
+                      </span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -3191,46 +3590,86 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {trainers?.map((trainer: any) => {
-                      const hasAttendance = Array.isArray(todayAttendance) && todayAttendance.find((a: any) => a.trainerId === trainer.userId);
-                      const isMarked = markedTrainers.has(trainer.userId);
-                      const showButtons = !hasAttendance && !isMarked;
+                      const hasAttendance = todayAttendance?.find(attendance => attendance.trainerId?.toString() === trainer.userId);
 
                       return (
-                        <div key={`quick-attendance-${trainer.userId}`} className="flex items-center justify-between p-4 bg-black rounded-lg border border-gray-800">
-                          <div>
-                            <p className="text-white font-medium">{trainer.firstName} {trainer.lastName}</p>
-                            <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ')}</p>
-                          </div>
-                          <div className="flex space-x-2">
-                            {showButtons ? (
-                              <>
-                                <Button
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                  onClick={() => handleQuickAttendance(trainer.userId, "present")}
-                                  disabled={recordAttendanceMutation.isPending}
-                                >
-                                  Present
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="bg-red-600 hover:bg-red-700 text-white"
-                                  onClick={() => handleQuickAttendance(trainer.userId, "absent")}
-                                  disabled={recordAttendanceMutation.isPending}
-                                >
-                                  Absent
-                                </Button>
-                              </>
-                            ) : hasAttendance ? (
-                              <div className="flex items-center space-x-2">
-                                {getAttendanceStatusBadge(hasAttendance.status)}
-                                <span className="text-xs text-gray-400">{hasAttendance.checkInTime}</span>
+                        <div key={trainer.userId} className="bg-black rounded-lg p-4 border border-gray-800">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center">
+                                <span className="text-black font-bold text-sm">
+                                  {trainer.firstName?.charAt(0)}{trainer.lastName?.charAt(0)}
+                                </span>
                               </div>
-                            ) : (
-                              <div className="flex items-center space-x-2">
-                                <Badge className="bg-gray-600 text-white">Marked</Badge>
+                              <div>
+                                <h3 className="text-white font-semibold">{trainer.firstName} {trainer.lastName}</h3>
+                                <p className="text-gray-400 text-sm">{trainer.specializations?.join(', ') || 'General Training'}</p>
                               </div>
-                            )}
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              {!hasAttendance ? (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "present")}
+                                  >
+                                    Check In
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "absent")}
+                                  >
+                                    Mark Absent
+                                  </Button>
+                                </>
+                              ) : hasAttendance.status === "present" && !hasAttendance.checkOutTime ? (
+                                <div className="flex flex-col items-end space-y-1">
+                                  <div className="flex items-center space-x-2">
+                                    <Badge className="bg-green-600 text-white">Checked In</Badge>
+                                    <span className="text-xs text-gray-400">In: {hasAttendance.checkInTime}</span>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                    onClick={() => handleCheckOut(trainer.userId)}
+                                  >
+                                    Check Out
+                                  </Button>
+                                </div>
+                              ) : hasAttendance.status === "present" && hasAttendance.checkOutTime ? (
+                                <div className="flex flex-col items-end space-y-1">
+                                  <Badge className="bg-green-600 text-white">Completed</Badge>
+                                  <div className="text-xs text-gray-400">
+                                    <div>In: {hasAttendance.checkInTime}</div>
+                                    <div>Out: {hasAttendance.checkOutTime}</div>
+                                  </div>
+                                </div>
+                              ) : hasAttendance.status === "absent" ? (
+                                <div className="flex flex-col items-end space-y-1">
+                                  <Badge className="bg-red-600 text-white">Absent</Badge>
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white"
+                                    onClick={() => handleQuickAttendance(trainer.userId, "present")}
+                                  >
+                                    Mark Present
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-2">
+                                  {getAttendanceStatusBadge(hasAttendance.status)}
+                                  {hasAttendance.checkInTime && (
+                                    <span className="text-xs text-gray-400">In: {hasAttendance.checkInTime}</span>
+                                  )}
+                                  {hasAttendance.checkOutTime && (
+                                    <span className="text-xs text-gray-400">Out: {hasAttendance.checkOutTime}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -3401,9 +3840,12 @@ export default function AdminDashboard() {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
-            <h2 className="text-2xl font-bold text-gold">System Settings</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gold">System Settings</h2>
+            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              {/* Gym Configuration */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
                   <CardTitle className="text-gold">Gym Configuration</CardTitle>
@@ -3411,8 +3853,7 @@ export default function AdminDashboard() {
                 <CardContent>
                   <form onSubmit={handleSaveGymConfiguration} className="space-y-4">
                     <div>
-                      <Label htmlFor="gymName">Gym Name</Label>
-                      <Input
+                      <Label htmlFor="gymName">Gym Name</Label><Input
                         id="gymName"
                         value={gymSettings.gymName}
                         onChange={(e) => setGymSettings({...gymSettings, gymName: e.target.value})}
@@ -3421,7 +3862,7 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <Label htmlFor="address">Address</Label>
-                      <Textarea
+                      <Input
                         id="address"
                         value={gymSettings.address}
                         onChange={(e) => setGymSettings({...gymSettings, address: e.target.value})}
@@ -3429,9 +3870,9 @@ export default function AdminDashboard() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="hours">Operating Hours</Label>
+                      <Label htmlFor="operatingHours">Operating Hours</Label>
                       <Input
-                        id="hours"
+                        id="operatingHours"
                         value={gymSettings.operatingHours}
                         onChange={(e) => setGymSettings({...gymSettings, operatingHours: e.target.value})}
                         className="bg-black border-gray-700 text-white focus:ring-gold"
@@ -3448,9 +3889,10 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
 
+              {/* Membership Pricing */}
               <Card className="bg-gray-900 border-gray-800">
                 <CardHeader>
-                  <CardTitle className="text-gold">Membership Settings</CardTitle>
+                  <CardTitle className="text-gold">Membership Pricing</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleUpdatePricing} className="space-y-4">
@@ -3471,7 +3913,7 @@ export default function AdminDashboard() {
                               value={membershipPricing[tierId] || ''}
                               onChange={(e) => setMembershipPricing({
                                 ...membershipPricing,
-                                [tierId]: e.target.value
+                                [tierId]: e.target.value // Keep as string for input, parse on submit
                               })}
                               className="bg-black border-gray-700 text-white focus:ring-gold pl-8"
                               placeholder="0.00"
@@ -3492,6 +3934,272 @@ export default function AdminDashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Membership Subscription Management */}
+            <Card className="bg-gray-900 border-gray-800">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-gold">Membership Subscription Management</CardTitle>
+                  <Dialog open={showAddMembershipModal} onOpenChange={(open) => {
+                    if (!open) closeMemershipModal();
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button
+                        className="bg-gold text-black hover:bg-white"
+                        onClick={() => setShowAddMembershipModal(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Membership
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-4xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="text-gold">
+                          {editingMembership ? 'Edit Membership Tier' : 'Add New Membership Tier'}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <form onSubmit={handleAddMembership} className="space-y-6">
+                        {/* Basic Info */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="name">Name</Label>
+                            <Input
+                              id="name"
+                              required
+                              value={newMembership.name}
+                              onChange={(e) => setNewMembership({...newMembership, name: e.target.value})}
+                              className="bg-black border-gray-700 text-white"
+                              placeholder="e.g., ONE_ON_ONE_12_SESSIONS"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="sessions">Sessions</Label>
+                            <Input
+                              id="sessions"
+                              type="number"
+                              required
+                              value={newMembership.sessions}
+                              onChange={(e) => {
+                                const sessions = parseInt(e.target.value) || 0;
+                                setNewMembership({
+                                  ...newMembership,
+                                  sessions,
+                                  oneOnOnePerSession: sessions > 0 ? Math.round((newMembership.oneOnOnePrice / sessions) * 100) / 100 : 0,
+                                  twoPeoplePerSession: sessions > 0 ? Math.round((newMembership.twoPeoplePrice / sessions) * 100) / 100 : 0,
+                                  threePeoplePerSession: sessions > 0 ? Math.round((newMembership.threePeoplePrice / sessions) * 100) / 100 : 0
+                                });
+                              }}
+                              className="bg-black border-gray-700 text-white"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="duration">Duration</Label>
+                          <Input
+                            id="duration"
+                            required
+                            value={newMembership.duration}
+                            onChange={(e) => setNewMembership({...newMembership, duration: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="e.g., 1 month, 3 months, 6 months"
+                          />
+                        </div>
+
+                        {/* Pricing Section */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold text-gold">Pricing Structure</h3>
+
+                          {/* One-on-One */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="oneOnOnePrice">One-on-One Total Price</Label>
+                              <Input
+                                id="oneOnOnePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.oneOnOnePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    oneOnOnePrice: price,
+                                    oneOnOnePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="oneOnOnePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="oneOnOnePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.oneOnOnePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Two People */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="twoPeoplePrice">Two People Total Price</Label>
+                              <Input
+                                id="twoPeoplePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.twoPeoplePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    twoPeoplePrice: price,
+                                    twoPeoplePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="twoPeoplePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="twoPeoplePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.twoPeoplePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Three People */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="threePeoplePrice">Three People Total Price</Label>
+                              <Input
+                                id="threePeoplePrice"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.threePeoplePrice}
+                                onChange={(e) => {
+                                  const price = parseFloat(e.target.value) || 0;
+                                  const perSession = newMembership.sessions > 0 ? price / newMembership.sessions : 0;
+                                  setNewMembership({
+                                    ...newMembership,
+                                    threePeoplePrice: price,
+                                    threePeoplePerSession: Math.round(perSession * 100) / 100
+                                  });
+                                }}
+                                className="bg-black border-gray-700 text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="threePeoplePerSession">Per Session Rate (Auto-calculated)</Label>
+                              <Input
+                                id="threePeoplePerSession"
+                                type="number"
+                                step="0.01"
+                                value={newMembership.threePeoplePerSession}
+                                readOnly
+                                className="bg-gray-800 border-gray-700 text-gray-400"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="features">Features (comma separated)</Label>
+                          <Textarea
+                            id="features"
+                            value={newMembership.features}
+                            onChange={(e) => setNewMembership({...newMembership, features: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="Personal Training Sessions, Body Analysis, Workout Plans, etc."
+                            rows={3}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="description">Description</Label>
+                          <Textarea
+                            id="description"
+                            value={newMembership.description}
+                            onChange={(e) => setNewMember({...newMember, description: e.target.value})}
+                            className="bg-black border-gray-700 text-white"
+                            placeholder="Brief description of this membership tier"
+                            rows={2}
+                          />
+                        </div>
+
+                        <Button type="submit" className="w-full bg-gold text-black hover:bg-white" disabled={createMembershipMutation.isPending || updateMembershipMutation.isPending}>
+                          {editingMembership ? (updateMembershipMutation.isPending ? "Updating..." : "Update Membership") : (createMembershipMutation.isPending ? "Creating..." : "Create Membership")}
+                        </Button>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-gray-800">
+                      <TableHead className="text-gray-400">Name</TableHead>
+                      <TableHead className="text-gray-400">Sessions</TableHead>
+                      <TableHead className="text-gray-400">Duration</TableHead>
+                      <TableHead className="text-gray-400">One-on-One Price</TableHead>
+                      <TableHead className="text-gray-400">Two People Price</TableHead>
+                      <TableHead className="text-gray-400">Three People Price</TableHead>
+                      <TableHead className="text-gray-400">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {membershipTiers?.map((tier: any) => (
+                      <TableRow key={tier.id} className="border-gray-800">
+                        <TableCell className="text-white">{tier.name}</TableCell>
+                        <TableCell className="text-gray-400">{tier.sessions}</TableCell>
+                        <TableCell className="text-gray-400">{tier.duration}</TableCell>
+                        <TableCell className="text-gray-400">${tier.one_on_one_price || tier.oneOnOnePrice}</TableCell>
+                        <TableCell className="text-gray-400">${tier.two_people_price || tier.twoPeoplePrice}</TableCell>
+                        <TableCell className="text-gray-400">${tier.three_people_price || tier.threePeoplePrice}</TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-gold hover:bg-gold hover:text-black"
+                              onClick={() => handleEditMembership(tier)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-400 hover:bg-red-400 hover:text-white"
+                              onClick={() => handleDeleteMembership(tier)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!membershipTiers || membershipTiers.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-gray-400">
+                          No membership tiers found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
