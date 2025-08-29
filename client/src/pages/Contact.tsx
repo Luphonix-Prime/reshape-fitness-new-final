@@ -89,40 +89,40 @@ export default function Contact() {
 
   const locations = [
     {
-      name: "Manhattan Flagship",
-      address: "432 Park Avenue, New York, NY 10016",
-      phone: "(212) 555-0123",
-      email: "manhattan@reshape.fitness",
-      hours: "24/7 for Executive Members",
-      parking: "Valet parking available",
-      amenities: ["Spa", "Nutrition Bar", "Business Center", "Childcare"]
+      name: "Beckenham Studio",
+      address: "84A High Street, New Beckenham, BR3 1ED, United Kingdom",
+      phone: "01582 958879",
+      email: "info@reshape.fitness",
+      hours: "6:00 AM - 9:00 PM Mon-Fri, 8:00 AM - 6:00 PM Weekends",
+      parking: "Street parking available",
+      amenities: ["Personal Training", "Group Classes", "Functional Training", "Nutritional Guidance"]
     },
     {
-      name: "Beverly Hills",
-      address: "9641 Sunset Boulevard, Beverly Hills, CA 90210",
-      phone: "(310) 555-0124",
-      email: "beverlyhills@reshape.fitness",
-      hours: "5:00 AM - 11:00 PM",
-      parking: "Complimentary valet",
-      amenities: ["Outdoor Pool", "Spa", "Juice Bar", "Member Lounge"]
+      name: "Cyprus Studio",
+      address: "Καρπάθου 21, Zακάκι, 3048, Λεμεσός, Cyprus",
+      phone: "+357 96605774",
+      email: "info@reshapefitnessstudios.com",
+      hours: "6:00 AM - 10:00 PM Daily",
+      parking: "Free parking available",
+      amenities: ["Strength Training", "Cardio Equipment", "Group Fitness", "Recovery Zone"]
     },
     {
-      name: "Miami Beach",
-      address: "1200 Ocean Drive, Miami Beach, FL 33139",
-      phone: "(305) 555-0125",
-      email: "miamibeach@reshape.fitness",
-      hours: "5:30 AM - 10:00 PM",
-      parking: "Covered parking garage",
-      amenities: ["Beach Access", "Rooftop Deck", "Spa", "Smoothie Bar"]
+      name: "Panora Studio",
+      address: "East of town off Highway 44, Panora, IA",
+      phone: "(515) 555-0127",
+      email: "panora@reshape.fitness",
+      hours: "24/7 Studio Access for Members",
+      parking: "Free parking lot",
+      amenities: ["Spin Bikes", "Sauna", "Yoga Room", "Infrared Heaters"]
     },
     {
-      name: "Chicago Loop",
-      address: "233 S Wacker Drive, Chicago, IL 60606",
-      phone: "(312) 555-0126",
-      email: "chicago@reshape.fitness",
-      hours: "5:00 AM - 11:00 PM",
-      parking: "Underground parking",
-      amenities: ["Executive Lounge", "Spa", "Café", "Recovery Suite"]
+      name: "Hyderabad Studio",
+      address: "3rd Floor, Rajpurohit Tower, Opp. Nanakramguda Circle, Hyderabad - 500032",
+      phone: "+91 40 555 0128",
+      email: "hyderabad@reshape.fitness",
+      hours: "10:00 AM - 8:00 PM Mon-Sat, 10:00 AM - 8:00 PM Sun",
+      parking: "Covered parking available",
+      amenities: ["Modern Equipment", "Personal Training", "Group Classes", "Air Conditioning"]
     }
   ];
 
@@ -130,14 +130,14 @@ export default function Contact() {
     {
       icon: Phone,
       title: "Call Us",
-      details: "1-800-RESHAPE",
-      subtext: "Available 24/7 for members"
+      details: "01582 958879",
+      subtext: "Business hours support"
     },
     {
       icon: Mail,
       title: "Email Us",
       details: "info@reshape.fitness",
-      subtext: "We'll respond within 2 hours"
+      subtext: "We'll respond within 24 hours"
     },
     {
       icon: Users,
@@ -147,9 +147,9 @@ export default function Contact() {
     },
     {
       icon: Shield,
-      title: "Concierge",
-      details: "concierge@reshape.fitness",
-      subtext: "Premium member services"
+      title: "Follow Us",
+      details: "@reshapefitnessstudio_56",
+      subtext: "Instagram updates & tips"
     }
   ];
 
@@ -165,8 +165,8 @@ export default function Contact() {
               CONTACT <span className="text-gold font-medium">US</span>
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed px-4">
-              Ready to begin your transformation? Our team is here to guide you 
-              every step of the way.
+              Ready to start your fitness journey? Contact us to learn more about 
+              our programs and find the perfect fit for your goals.
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Sparkles, Trophy, Zap, ArrowRight } from "lucide-react";
+import { ChevronDown, Sparkles, Trophy, Play, Zap, ArrowRight } from "lucide-react";
 import { cardVariants, buttonVariants, textVariants, animationVariants } from "@/lib/styles";
 
 export default function HeroSection() {
@@ -57,15 +57,23 @@ export default function HeroSection() {
           </p>
         </div>
 
-        <div className="opacity-0 animate-fade-in flex justify-center items-center mb-20" style={{ animationDelay: '0.6s' }}>
+        <div className="opacity-0 animate-fade-in flex flex-col sm:flex-row gap-6 justify-center items-center mb-20" style={{ animationDelay: '0.6s' }}>
           <Button 
             size="lg" 
-            onClick={() => window.location.href = '/contact'}
+            onClick={() => window.location.href = '/login'}
             className={`${buttonVariants.primary} px-12 py-6 text-lg font-bold tracking-wide`}
           >
             <Sparkles className="mr-3 h-6 w-6" />
             Start Your Journey
             <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform duration-300" />
+          </Button>
+
+          <Button 
+            size="lg" 
+            className={`${buttonVariants.outline} px-12 py-6 text-lg font-semibold tracking-wide`}
+          >
+            <Play className="mr-3 h-6 w-6 group-hover:scale-125 transition-transform duration-300" />
+            Watch Our Story
           </Button>
         </div>
 

@@ -201,8 +201,22 @@ export default function Subscribe() {
   });
 
   const handleTierSelect = async (tier: any) => {
-    // Redirect to contact us page
-    setLocation('/contact');
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to subscribe",
+        variant: "destructive",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 500);
+      return;
+    }
+
+    setSelectedTier(tier);
+    setShowPaymentForm(true);
+    // Store the selected tier in localStorage
+    localStorage.setItem('selectedMembershipTier', JSON.stringify(tier));
   };
 
   // Effect to load selected tier from localStorage on component mount
@@ -300,12 +314,12 @@ export default function Subscribe() {
                 <CardContent className="p-6">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="text-xl text-gold font-medium">{selectedTier.sessions} Sessions Package</h3>
-                      <p className="text-gray-300">{selectedTier.duration} • {selectedTier.trainingType?.replace('_', ' ').toUpperCase()} Training</p>
+                      <h3 className="text-xl text-gold font-medium">{selectedTier.name} Membership</h3>
+                      <p className="text-gray-300">Premium fitness experience</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-light text-gold">Premium</div>
-                      <div className="text-sm text-gray-400">fitness experience</div>
+                      <div className="text-2xl font-light">${selectedTier.price?.toLocaleString()}</div>
+                      <div className="text-sm text-gray-400">per month</div>
                     </div>
                   </div>
                 </CardContent>
@@ -365,65 +379,6 @@ export default function Subscribe() {
             </p>
           </div>
 
-          {/* Training Session Terms & Conditions */}
-          <div className="mb-16">
-            <Card className="bg-white/5 backdrop-blur-sm border border-gold/20 hover:bg-white/10 transition-all duration-300">
-              <CardHeader>
-                <CardTitle className="text-2xl font-bold text-gold text-center">
-                  TRAINING SESSION TERMS & CONDITIONS
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-gray-300">
-                  <div className="space-y-4">
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Each training session is designed to be <span className="text-gold font-semibold">50 minutes long</span>.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p><span className="text-gold font-semibold">Full payment</span> must be made before the first session begins.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Packages are <span className="text-gold font-semibold">non-refundable and non-transferable</span>.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>All sessions must be used within the <span className="text-gold font-semibold">validity period</span> mentioned in the package. Expired sessions will not be carried.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Clients must inform us at least <span className="text-gold font-semibold">24 hours in advance</span> to reschedule a session. Late cancellations or no-shows will count as a completed session.</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Clients with existing medical conditions must provide a <span className="text-gold font-semibold">doctor's clearance</span> before starting membership.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Clients are expected to <span className="text-gold font-semibold">arrive on time</span> for sessions. Late arrivals will result in shorter sessions without any adjustment in price.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>Inform the trainer immediately of any <span className="text-gold font-semibold">discomfort, pain, or unusual feelings</span> during workouts. Follow the trainer's instructions to avoid injury.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p><span className="text-gold font-semibold">Consistent effort and adherence</span> to the trainer's guidance are essential for achieving results.</p>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <CheckCircle className="w-5 h-5 text-gold mt-0.5 flex-shrink-0" />
-                      <p>The fitness studio is <span className="text-gold font-semibold">not responsible for injuries</span> resulting from non-compliance with instructions or external activities.</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           <div className="space-y-12 max-w-7xl mx-auto">
             {/* One on One Section */}
             <div className="text-center">
@@ -437,11 +392,17 @@ export default function Subscribe() {
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-3xl font-bold text-white mb-4">
+                        <h4 className="text-xl font-bold text-white mb-2">
                           {tier.sessions} Sessions
                         </h4>
-                        <p className="text-lg text-gray-300">
-                          {tier.duration}
+                        <p className="text-sm text-gray-400 mb-4">
+                          ({tier.duration})
+                        </p>
+                        <div className="text-3xl font-bold text-gold mb-2">
+                          ₹{tier.one_on_one_price?.toLocaleString() || '0'}/-
+                        </div>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.one_on_one_per_session || '0'} per session)
                         </p>
                       </div>
                     </CardContent>
@@ -462,11 +423,17 @@ export default function Subscribe() {
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-3xl font-bold text-white mb-4">
+                        <h4 className="text-xl font-bold text-white mb-2">
                           {tier.sessions} Sessions
                         </h4>
-                        <p className="text-lg text-gray-300">
-                          {tier.duration}
+                        <p className="text-sm text-gray-400 mb-4">
+                          ({tier.duration})
+                        </p>
+                        <div className="text-3xl font-bold text-gray-300 mb-2">
+                          ₹{tier.two_people_price?.toLocaleString() || '0'}/-
+                        </div>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.two_people_per_session || '0'} per session)
                         </p>
                       </div>
                     </CardContent>
@@ -487,11 +454,17 @@ export default function Subscribe() {
                   >
                     <CardContent className="p-6 relative">
                       <div className="text-center">
-                        <h4 className="text-3xl font-bold text-white mb-4">
+                        <h4 className="text-xl font-bold text-white mb-2">
                           {tier.sessions} Sessions
                         </h4>
-                        <p className="text-lg text-gray-300">
-                          {tier.duration}
+                        <p className="text-sm text-gray-400 mb-4">
+                          ({tier.duration})
+                        </p>
+                        <div className="text-3xl font-bold text-yellow-600 mb-2">
+                          ₹{tier.three_people_price?.toLocaleString() || '0'}/-
+                        </div>
+                        <p className="text-sm text-gray-300">
+                          (₹{tier.three_people_per_session || '0'} per session)
                         </p>
                       </div>
                     </CardContent>

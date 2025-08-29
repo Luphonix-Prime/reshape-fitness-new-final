@@ -23,57 +23,57 @@ export default function Services() {
     {
       icon: Dumbbell,
       title: "PERSONAL TRAINING",
-      description: "One-on-one sessions with certified elite trainers",
+      description: "One-on-one sessions with certified trainers",
       features: [
         "Customized workout programs",
-        "Nutritional guidance",
-        "Progress tracking & analysis",
+        "Goal-specific training",
+        "Form correction & technique",
         "Flexible scheduling",
-        "Equipment orientation"
+        "Progress tracking"
       ],
-      price: "From $150/session",
+      price: "From £45/session",
       image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600"
     },
     {
       icon: Users,
       title: "GROUP CLASSES",
-      description: "Premium small-group fitness experiences",
+      description: "Motivating small-group fitness sessions",
       features: [
-        "Maximum 8 participants",
-        "Variety of class formats",
-        "All skill levels welcome",
-        "Premium equipment included",
-        "Expert instruction"
+        "Maximum 12 participants",
+        "HIIT, strength & conditioning",
+        "All fitness levels welcome",
+        "Equipment provided",
+        "Experienced instructors"
       ],
-      price: "From $45/class",
+      price: "From £15/class",
       image: "https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600"
     },
     {
       icon: Sparkles,
-      title: "SPA & WELLNESS",
-      description: "Luxury recovery and wellness services",
+      title: "WELLNESS PROGRAMS",
+      description: "Holistic health and recovery services",
       features: [
-        "Therapeutic massage",
-        "Cryotherapy sessions",
-        "Infrared sauna",
-        "Recovery lounges",
-        "Meditation spaces"
+        "Mobility & stretching sessions",
+        "Stress management workshops",
+        "Recovery guidance",
+        "Wellness consultations",
+        "Mindfulness training"
       ],
-      price: "From $120/service",
+      price: "From £25/session",
       image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600"
     },
     {
       icon: Apple,
       title: "NUTRITION COACHING",
-      description: "Personalized nutrition and meal planning",
+      description: "Practical nutrition guidance and meal planning",
       features: [
-        "Custom meal plans",
-        "Supplement guidance",
-        "Grocery shopping tours",
-        "Cooking classes",
-        "Regular check-ins"
+        "Personalized meal plans",
+        "Healthy eating education",
+        "Weekly check-ins",
+        "Recipe suggestions",
+        "Lifestyle integration"
       ],
-      price: "From $200/month",
+      price: "From £80/month",
       image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600"
     }
   ];
@@ -126,8 +126,8 @@ export default function Services() {
               OUR <span className="text-gold font-medium">SERVICES</span>
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed px-4">
-              Comprehensive wellness solutions designed for the discerning individual 
-              who demands excellence in every aspect of their fitness journey.
+              Professional fitness programs designed to help you reach your goals, 
+              whether you're just starting out or looking to take your training to the next level.
             </p>
           </div>
         </div>

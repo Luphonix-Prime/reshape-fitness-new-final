@@ -22,7 +22,13 @@ export default function MembershipTiers() {
   const handleSelectPlan = (tier: any, trainingType: string) => {
     const selectedPlan = {
       ...tier,
-      trainingType
+      trainingType,
+      price: trainingType === 'one_on_one' ? tier.one_on_one_price :
+             trainingType === 'two_people' ? tier.two_people_price :
+             tier.three_people_price,
+      perSessionRate: trainingType === 'one_on_one' ? tier.one_on_one_per_session :
+                     trainingType === 'two_people' ? tier.two_people_per_session :
+                     tier.three_people_per_session
     };
     localStorage.setItem('selectedTier', JSON.stringify(selectedPlan));
     setLocation('/subscribe');
@@ -64,17 +70,23 @@ export default function MembershipTiers() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
           {/* One on One Training */}
           <div className="space-y-8">
-            <h3 className="text-3xl font-bold text-gold text-center">ONE ON ONE TRAINING</h3>
+            <h3 className="text-3xl font-bold text-gold text-center">One on One</h3>
             {membershipTiers.map((tier: any) => (
               <Card
                 key={`one-on-one-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-gold/30 hover:border-gold/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gold/20"
                 onClick={() => handleSelectPlan(tier, 'one_on_one')}
               >
-                <CardContent className="p-8">
+                <CardContent className="p-6">
                   <div className="text-center">
-                    <h4 className="text-2xl font-bold text-white mb-4">{tier.sessions} Sessions</h4>
-                    <p className="text-lg text-gray-400">({tier.duration})</p>
+                    <h4 className="text-xl font-bold text-white mb-2">{tier.sessions} Sessions</h4>
+                    <p className="text-sm text-gray-400 mb-4">({tier.duration})</p>
+                    <div className="text-3xl font-bold text-gold mb-2">
+                      ₹{tier.one_on_one_price?.toLocaleString() || '0'}/-
+                    </div>
+                    <p className="text-sm text-gray-300">
+                      (₹{tier.one_on_one_per_session || '0'} per session)
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -83,17 +95,23 @@ export default function MembershipTiers() {
 
           {/* 2 People Training */}
           <div className="space-y-8">
-            <h3 className="text-3xl font-bold text-gray-300 text-center">2 PEOPLE TRAINING</h3>
+            <h3 className="text-3xl font-bold text-gray-300 text-center">2 People</h3>
             {membershipTiers.map((tier: any) => (
               <Card
                 key={`two-people-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-gray-400/30 hover:border-gray-400/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-gray-400/20"
                 onClick={() => handleSelectPlan(tier, 'two_people')}
               >
-                <CardContent className="p-8">
+                <CardContent className="p-6">
                   <div className="text-center">
-                    <h4 className="text-2xl font-bold text-white mb-4">{tier.sessions} Sessions</h4>
-                    <p className="text-lg text-gray-400">({tier.duration})</p>
+                    <h4 className="text-xl font-bold text-white mb-2">{tier.sessions} Sessions</h4>
+                    <p className="text-sm text-gray-400 mb-4">({tier.duration})</p>
+                    <div className="text-3xl font-bold text-gray-300 mb-2">
+                      ₹{tier.two_people_price?.toLocaleString() || '0'}/-
+                    </div>
+                    <p className="text-sm text-gray-300">
+                      (₹{tier.two_people_per_session || '0'} per session)
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -102,70 +120,27 @@ export default function MembershipTiers() {
 
           {/* 3 People Training */}
           <div className="space-y-8">
-            <h3 className="text-3xl font-bold text-yellow-600 text-center">3 PEOPLE TRAINING</h3>
+            <h3 className="text-3xl font-bold text-yellow-600 text-center">3 People</h3>
             {membershipTiers.map((tier: any) => (
               <Card
                 key={`three-people-${tier.id}`}
                 className="bg-white/5 backdrop-blur-sm border border-yellow-600/30 hover:border-yellow-600/70 hover:bg-white/10 transition-all duration-500 cursor-pointer hover:scale-105 hover:shadow-2xl hover:shadow-yellow-600/20"
                 onClick={() => handleSelectPlan(tier, 'three_people')}
               >
-                <CardContent className="p-8">
+                <CardContent className="p-6">
                   <div className="text-center">
-                    <h4 className="text-2xl font-bold text-white mb-4">{tier.sessions} Sessions</h4>
-                    <p className="text-lg text-gray-400">({tier.duration})</p>
+                    <h4 className="text-xl font-bold text-white mb-2">{tier.sessions} Sessions</h4>
+                    <p className="text-sm text-gray-400 mb-4">({tier.duration})</p>
+                    <div className="text-3xl font-bold text-yellow-600 mb-2">
+                      ₹{tier.three_people_price?.toLocaleString() || '0'}/-
+                    </div>
+                    <p className="text-sm text-gray-300">
+                      (₹{tier.three_people_per_session || '0'} per session)
+                    </p>
                   </div>
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </div>
-
-        {/* Instructions Section */}
-        <div className="mt-24 max-w-4xl mx-auto">
-          <div className="bg-white/5 backdrop-blur-sm border border-gold/30 rounded-lg p-8">
-            <h3 className="text-2xl font-bold text-gold mb-6 text-center">TRAINING SESSION GUIDELINES</h3>
-            <div className="space-y-4 text-gray-300">
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Each training session is designed to be 50 minutes long.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Full payment must be made before the first session begins.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Packages are non-refundable and non-transferable.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>All sessions must be used within the validity period mentioned in the package. Expired sessions will not be carried forward.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Clients must inform us at least 24 hours in advance to reschedule a session. Late cancellations or no-shows will count as a completed session.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Clients with existing medical conditions must provide a doctor's clearance before starting membership.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Clients are expected to arrive on time for sessions. Late arrivals will result in shorter sessions without any adjustment in price.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Inform the trainer immediately of any discomfort, pain, or unusual feelings during workouts. Follow the trainer's instructions to avoid injury.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>Consistent effort and adherence to the trainer's guidance are essential for achieving results.</p>
-              </div>
-              <div className="flex items-start space-x-3">
-                <Check className="h-5 w-5 text-gold mt-0.5 flex-shrink-0" />
-                <p>The fitness studio is not responsible for injuries resulting from non-compliance with instructions or external activities.</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>

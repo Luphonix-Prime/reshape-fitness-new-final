@@ -8,17 +8,17 @@ export default function Footer() {
           <div>
             <h3 className="text-2xl font-bold tracking-wider text-gold mb-6">RESHAPE</h3>
             <p className="text-gray-400 leading-relaxed">
-              Redefining luxury fitness experiences for the discerning individual who demands excellence.
+              Your local fitness studio committed to helping you achieve your health and fitness goals.
             </p>
           </div>
           
           <div>
             <h4 className="text-lg font-medium mb-6 tracking-wider">LOCATIONS</h4>
             <ul className="space-y-3 text-gray-400">
-              <li>Manhattan</li>
-              <li>Beverly Hills</li>
-              <li>Miami Beach</li>
-              <li>Chicago</li>
+              <li>New Beckenham, UK</li>
+              <li>Cyprus</li>
+              <li>Panora, Iowa</li>
+              <li>Hyderabad, India</li>
             </ul>
           </div>
           
@@ -35,7 +35,7 @@ export default function Footer() {
           <div>
             <h4 className="text-lg font-medium mb-6 tracking-wider">CONNECT</h4>
             <div className="flex space-x-4 mb-6">
-              <a href="#" className="text-gray-400 hover:text-gold transition-colors duration-300">
+              <a href="https://www.instagram.com/reshapefitnessstudio_56/" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-gold transition-colors duration-300">
                 <Instagram className="w-6 h-6" />
               </a>
               <a href="#" className="text-gray-400 hover:text-gold transition-colors duration-300">
@@ -46,7 +46,7 @@ export default function Footer() {
               </a>
             </div>
             <p className="text-gray-400 text-sm">
-              1-800-RESHAPE<br/>
+              01582 958879<br/>
               info@reshape.fitness
             </p>
           </div>
