@@ -60,7 +60,7 @@ export default function HeroSection() {
         <div className="opacity-0 animate-fade-in flex flex-col sm:flex-row gap-6 justify-center items-center mb-20" style={{ animationDelay: '0.6s' }}>
           <Button 
             size="lg" 
-            onClick={() => window.location.href = '/login'}
+            onClick={() => window.location.href = '/contact'}
             className={`${buttonVariants.primary} px-12 py-6 text-lg font-bold tracking-wide`}
           >
             <Sparkles className="mr-3 h-6 w-6" />
